@@ -1,17 +1,35 @@
 schema_version: '1'
 dependencies:
-  # The language this engine implements. Declared so provenance is checkable
-  # from day one: cic-primitives ships tools/check_provenance.py, and a
-  # dependency with no declared origin is exactly the state five repositories
-  # were found in.
+  # The language this engine implements.
   #
-  # No imported_paths yet: nothing is vendored from cic-primitives into this
-  # tree. The grammar is consumed as a specification, not copied as files. If
-  # that ever changes, the paths belong here and the provenance gate becomes
-  # enforceable with --require cic-primitives.
+  # TEMPORARILY UNPINNED — tracking `main`, not a tag.
+  #
+  # Why: the grammar this engine is being written against is the current one —
+  # the three-axis Role, the reference annotation, the closed structural
+  # positions. None of that is in `primitives/@v0.1.5`, the newest tag. Pinning
+  # to v0.1.5 would declare an origin that does not contain what is actually
+  # being implemented, which is the same false-provenance defect that
+  # cic-primitives' own provenance gate exists to catch.
+  #
+  # An unpinned dependency is a known, stated weakness, not an oversight. It is
+  # recorded here rather than hidden behind a tag that would look tidier and be
+  # wrong.
+  #
+  # MUST BE CLOSED once cic-primitives is formalized:
+  #   1. cic-primitives releases the current grammar (v0.1.6 or later)
+  #   2. `tag:` here becomes that release tag
+  #   3. `pinned:` becomes true
+  #   4. if any file is ever vendored from cic-primitives into this tree, it
+  #      goes in `imported_paths` and the provenance gate becomes enforceable
+  #      with `--require cic-primitives`
+  #
+  # Until step 2, nothing downstream may treat this engine's behaviour as bound
+  # to a released grammar version.
   - name: cic-primitives
     source: github.com/CentralInfraCore/cic-primitives
-    tag: primitives/@v0.1.5
+    tag: main
+    pinned: false
+    pin_when: cic-primitives releases the current grammar
     mode: specification-reference
     purpose: primitive-language
     imported_paths: []

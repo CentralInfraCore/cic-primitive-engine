@@ -89,6 +89,20 @@ reinstated the rejected model through the one file measured as free of it. Codes
 are added as the stage that raises them is implemented, never in advance: a code
 with no raiser and no vector is a claim, not a check.
 
+## Open obligation: the dependency is not pinned
+
+`dependency.yaml` tracks `cic-primitives` at `main`, not at a tag. The grammar
+this engine implements — the three-axis Role, the reference annotation, the
+closed structural positions — is not in `primitives/@v0.1.5`, the newest tag.
+Pinning there would declare an origin that does not contain what is being
+implemented.
+
+**This must be closed** when `cic-primitives` releases the current grammar: the
+tag replaces `main`, `pinned` becomes true, and if anything is ever vendored,
+`imported_paths` makes the provenance gate enforceable. Until then, nothing
+downstream may treat this engine's behaviour as bound to a released grammar
+version.
+
 ## Conformance
 
 `conformance/` holds language-independent vectors — `input.yaml` plus
