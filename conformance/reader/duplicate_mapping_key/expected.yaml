@@ -1,0 +1,4 @@
+outcome: rejected
+code: E_MALFORMED_DOCUMENT
+stage: read
+why: Go rejected this and Rust silently took the last value; no vector contained it. Became INV-041 in the archived model.

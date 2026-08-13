@@ -1,0 +1,4 @@
+outcome: rejected
+code: E_MALFORMED_DOCUMENT
+stage: read
+why: An alias is refused before a tree exists: 393 bytes of nested aliases expand to 12,345,678 nodes in 2.7s.

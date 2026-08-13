@@ -1,0 +1,2 @@
+outcome: accepted
+why: The baseline. Without an accepted vector the corpus could pass by rejecting everything.

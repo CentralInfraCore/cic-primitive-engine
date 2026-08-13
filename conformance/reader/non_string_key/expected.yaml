@@ -1,0 +1,4 @@
+outcome: rejected
+code: E_MALFORMED_DOCUMENT
+stage: read
+why: Mapping keys are strings. A YAML integer key has no address in the object path grammar.

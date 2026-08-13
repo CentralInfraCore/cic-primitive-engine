@@ -1,0 +1,4 @@
+outcome: rejected
+code: E_MALFORMED_DOCUMENT
+stage: read
+why: One file is one composition. A second document would be silently ignored by most readers.

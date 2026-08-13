@@ -1,0 +1,17 @@
+schema_version: '1'
+dependencies:
+  # The language this engine implements. Declared so provenance is checkable
+  # from day one: cic-primitives ships tools/check_provenance.py, and a
+  # dependency with no declared origin is exactly the state five repositories
+  # were found in.
+  #
+  # No imported_paths yet: nothing is vendored from cic-primitives into this
+  # tree. The grammar is consumed as a specification, not copied as files. If
+  # that ever changes, the paths belong here and the provenance gate becomes
+  # enforceable with --require cic-primitives.
+  - name: cic-primitives
+    source: github.com/CentralInfraCore/cic-primitives
+    tag: primitives/@v0.1.5
+    mode: specification-reference
+    purpose: primitive-language
+    imported_paths: []
