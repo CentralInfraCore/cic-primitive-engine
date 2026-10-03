@@ -65,20 +65,27 @@ Go and Rust implementations produced "the same" output.
 
 ### A0. Existing implementation convergence
 
-**Status:** DECIDED (meta-question) / OPEN (the inventory itself)
+**Status:** DECIDED (meta-question) / **findings complete, decisions not
+made** (the inventory itself — see `docs/A0-INVENTORY.md`)
 **Blocks:** A — picking a canonical format from scratch would be a mistake if
 a tested one already exists for most of this
-**Decision ref:** this section
+**Decision ref:** `docs/A0-INVENTORY.md`
 
-CIC-Relay already has a landed, tested implementation of almost this exact
+CIC-Relay already has a landed, tested implementation of a good part of this
 problem, under different vocabulary, in `core/nexus/iac`
 (`features/feature-011-oci-provider/iac-object-model.md`):
 
-- `key: VALUE ≡ key: {$value: VALUE, $cic: {...}}` (`field.go`, `ExpandField`)
-  — the short/long form expansion this file's whole premise is about, just
-  named `$cic.behavior.mode: {read, write, implemented, visible}` instead of
-  the Access atom's `access`/`modify`/`inherit`/`default_injection`/
-  `conformance`. **Landed, tested.**
+- `key: VALUE ≡ key: {value, default, mode: {read, write, implemented,
+  visible}}` (`field.go`, `ExpandField`) — the short/long form expansion
+  this file's whole premise is about. **Simpler than the Access atom's**
+  `key: value ≡ key: {value, access, modify, inherit, default_injection,
+  conformance}` — no embedded ACL, no `default_injection`, no `inherit`.
+  `mode.implemented` partially covers `conformance` but is boolean where
+  `conformance` is tri-state (see A0-INVENTORY.md's A0.4 #1). **Landed,
+  tested.** The fuller `$cic`-layered model (`schema`/`behavior`/`access`/
+  `collection`) is itself still a *deferred* target in that repo's own docs
+  — only `node.go`'s `Meta{FieldID, Mode, Compare, Sensitive, ACL}` partially
+  realizes it today.
 - **spec #1, Canonical Object Encoding** — number normalization
   (`number.go` ↔ the `cic-canonical` Rust crate, byte-identical vectors,
   proven) plus map-key order / null-vs-absent (`canonicaljson.go`, Go only,
@@ -131,37 +138,47 @@ Agreed roadmap:
 7. Remove the superseded core/nexus/iac logic
 ```
 
-**Still open — the inventory itself (step 1 above):**
+**The inventory (step 1 above) is done — see `docs/A0-INVENTORY.md`.**
+Every non-test file in `core/nexus/iac` (10 files) was read in full and
+cross-checked against all 8 `cic-primitives` atomic schemas. Summary:
 
-1. **A0.1** — which `core/nexus/iac` elements already encode primitive
-   semantics (belong in the lib, need mapping to the Access/Role vocabulary)?
-2. **A0.2** — which are pure runtime mechanism (stay in Relay, the lib has no
-   opinion — e.g. anything specific to the drift engine's own bookkeeping)?
-3. **A0.3** — which carry semantics that have no counterpart in
-   `cic-primitives` at all today (a real gap on the primitives side, not
-   just a naming difference)?
-4. **A0.4** — where is there an actual conflict (the same concept, modeled
-   two incompatible ways), not just a naming difference?
+1. **A0.1 (migrate candidates)** — `field.go`'s short/long expansion,
+   `digest.go`/`number.go`/`canonicaljson.go`'s canonical pipeline,
+   `collection.go`'s topology (maps cleanly to `shape.collection_variant`/
+   `item_key`), `node.go`'s `Value` type (constructor-gated, internally
+   consistent — partial Go prior art for section E; `Node` itself still has
+   exported fields and an opt-in `Validate()`, so the full "unvalidated
+   object cannot reach a module" guarantee is not yet answered by it),
+   `reference.go`'s `FieldRef` (partial match only — instance-level, not
+   schema-structural like `atomic_ref`).
+2. **A0.2 (stays in Relay)** — `loader.go`, the three `IaCSource`
+   implementations (`source_file.go`/`source_git.go`/`source_upstream.go`),
+   `validator.go` (Cabinet-registry graph resolution), and `core/nexus/drift`
+   (a consumer of `iac.Evaluate`, not part of the semantics itself).
+3. **A0.3 (real gaps, no `cic-primitives` counterpart)** — `sensitive.go`'s
+   secret custody/placement policy (checked all 8 atoms: none model this),
+   `observation.go`/`compare.go`'s coverage-and-comparison algorithm
+   (section F territory, zero primitives-side vocabulary today), and
+   `field_id.go`'s rename-survival guarantee (neither `identity.yaml`, which
+   is type-level, nor `address.yaml`'s `logical_id`, which is instance-level,
+   covers field-level addressing).
+4. **A0.4 (actual conflicts, not just naming)** — conformance is tri-state
+   in `cic-primitives` (`implemented`/`not_implemented`/`deprecated`) but
+   boolean in Relay's `FieldMode.Implemented`, with **no representation of
+   `deprecated` at all today**; `acl.go`'s POSIX-class algorithm is
+   materially richer than the Access atom's flat OR-only `access`/`modify`
+   lists; `behavior` names two unrelated things (Relay's `$cic.behavior`
+   layer vs. the `Behavior` atom's rpc/action/operation definitions); and
+   `default_injection` (Access atom) has no Relay counterpart at all — a
+   denied read has no defined substitution mechanism in the Go model.
 
-Starting sketch for the A0.1 mapping — intentionally incomplete, the real
-answer is the inventory pass, not this table:
-
-```text
-Relay IAC                         cic-primitives
---------------------------------------------------------------
-$cic.behavior.mode.read           Access ?
-$cic.behavior.mode.write          Access ?
-$cic.behavior.mode.implemented    Access.conformance
-$cic.behavior.mode.visible        Access.default_injection ?
-observed                          state / observation semantics
-authoritative_absent              ?
-unobserved                        not_observed
-field_id                          Address / Identity ?
-proof.schema_digest               receipt.schema_digest (section C)
-```
-
-Every `?` and every row with no right-hand side at all is where A0.3/A0.4
-actually live — not guessed here, found by reading the code on both sides.
+None of A–G are closed by this inventory. It replaces guessing with a
+grounded starting point — in particular, section B cannot close without
+resolving the tri-state/boolean conformance conflict, and section E has
+partial Go prior art (`node.go`'s `Value`) worth reusing, but not yet a
+full answer: `Node` itself is still an exported-field struct with an
+opt-in `Validate()`, not a type that makes an unvalidated object
+unrepresentable.
 
 ---
 
