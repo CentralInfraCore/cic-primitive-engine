@@ -572,14 +572,23 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          produced inline by the same step that applies a default or
          runs a derivation, never folded into B3's closed provenance
          enum; inputs is what THIS invocation actually read, not a
-         static rule-definition property).
-Open:    C3's remaining rows (signature; unresolved/unknown markers,
-         blocked on F's coverage-projection decision, not B2 or C5;
-         conformance_plan_digest/observation_digest, F's territory),
-         and C4 (schema location, still deferred until C3's remaining
-         rows close). Does not block C1/C2/C3-version/C5 from being
-         used, but the receipt is not a finished, implementable
-         artifact until C3/C4 close.
+         static rule-definition property), and C3's `signature` row AS
+         TO WHETHER THIS ENGINE SIGNS (CLOSED -- it does not, and does
+         not decide signer authority; this engine's own README
+         excludes Vault access/counter-signature policy from its
+         scope).
+Open:    C3's remaining rows (unresolved/unknown markers, blocked on
+         F's coverage-projection decision, not B2 or C5;
+         conformance_plan_digest/observation_digest, F's territory;
+         WHETHER the receipt schema itself ever carries a
+         signature-related field populated by an external authority,
+         same pattern as cic-primitives' own release.sign/pledge.sign
+         -- C4's call, a schema-layout question, not decided by this
+         engine-doesn't-sign closure), and C4 (schema location, still
+         deferred until C3's remaining rows close). Does not block
+         C1/C2/C3-version/C5/C3-signing from being used, but the
+         receipt is not a finished, implementable artifact until
+         C3/C4 close.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -655,18 +664,22 @@ version-identity fields        D1 (four identifier         decided -- see
  validator/engine identity                                reserved. C4
  -- as logical facts,                                     still owns
  NOT a wire layout)                                        nesting/shape
-signature                    none (not BOUNDARY.md's      OPEN -- no
-                              sketch, not landed Relay     landed or
-                              code -- the sketched `proof` sketched
-                              index that would carry this  precedent
-                              is itself deferred, per       exists for
-                              iac-object-model.md)          this field;
-                                                             a future
-                                                             decision,
-                                                             not
-                                                             recovered
-                                                             from
-                                                             anywhere
+signature                    this engine's own README      CLOSED, NARROWER
+                              ("what does not belong        than first drafted
+                              here": Vault access,          -- engine never
+                              counter-signature policy)     signs/decides
+                              + cic-primitives D-015        signer authority;
+                              (release.sign IS a            whether the
+                              schema field, populated       schema ever
+                              by an external                reserves a slot
+                              _vault_sign() call, not       for an
+                              the compiler's own build      externally-
+                              logic -- schema ownership     produced
+                              != producer ownership)        signature is
+                                                             C4's open
+                                                             question, not
+                                                             decided here;
+                                                             see prose below
 unresolved/unknown markers   B1/B2 (coverage axis)        OPEN -- B2
                                                              closed
                                                              (missing ≡
@@ -741,13 +754,58 @@ same category of boundary violation this file has caught and corrected
 several times already (F1 regressing B3, F3 re-asserting coverage in
 the receipt). Left for F.
 
+**The `signature` row is now CLOSED, but narrower than a first pass
+over this claimed.** This repo's own `README.md`, under "What does not
+belong here," names *"Vault access · counter-signature policy · git
+and release workflow..."* as explicitly out of scope for this engine.
+**Decision: this engine does not perform signing, and does not decide
+signer authority.** If a receipt is ever signed, Vault access and the
+decision of who may sign both happen entirely outside this engine,
+performed by an external authority.
+
+**Correction (review-caught on PR #14): that does not also mean "the
+receipt schema may never define a signature-related field."** A first
+pass claimed exactly that, citing `cic-primitives`' D-015 as support —
+but re-read directly, D-015 argues the opposite. The release bundle's
+own schema **does** define a `release.sign` field (and
+`tools/compiler.py`'s `run_pledge()` writes an analogous `pledge.sign`
+field into `commitment.yaml`'s own schema the same way) — it is simply
+*populated* by a
+separate `_vault_sign()` call, made by an external authority, never by
+the compiler's own build logic. **Schema ownership and producer
+ownership are different facts**, and D-015 is a working example of a
+schema reserving a slot for a signature it does not itself compute —
+the exact opposite of "a schema that can't carry one."
+
+Whether this receipt's own schema ever reserves such a slot (parallel
+to `release.sign`), or whether a signed form is always a wholly
+separate sibling artifact (e.g. a `SignedReceiptEnvelope{receipt_digest,
+signer_identity, signature}` wrapping this receipt, never touching its
+own schema) is **not decided here** — that is a receipt *schema
+layout* question, squarely C4's territory, the same way D1's
+version-identity facts were kept separate from their wire layout
+earlier in this section. Deciding it now would repeat that exact
+boundary violation one row over.
+
+**A second, smaller overclaim, also corrected:** "a signature requires
+Vault access AND counter-signature policy" overstates it. Producing a
+signature requires an external signer/key authority (Vault access);
+counter-signing is a separate, optional second layer applied *on top
+of* an existing signature (`cic_countersign`, per D-015: "applied
+after signing, by a different authority"), not a precondition for
+producing one at all. The README names two different things this
+engine stays out of, not one combined requirement.
+
 So C3 is now decided for `BOUNDARY.md`'s own sketch (the two digests,
-the two provenance-derived lists) plus D1's four version-identity
-facts (content, not layout), and explicitly open for `signature`
-(nothing grounds it yet), `unresolved/unknown markers` (blocked on F's
+the two provenance-derived lists), D1's four version-identity facts
+(content, not layout), C5's evidence shapes, and `signature` as to
+WHETHER this engine signs (CLOSED — it does not, and does not decide
+signer authority). What remains open is *whether the receipt schema
+itself ever carries a signature-related field* (C4's call, not
+decided here), `unresolved/unknown markers` (blocked on F's
 coverage-projection decision, not B2 anymore), and the two F-territory
-digests. C4 still owns how every one of these facts is actually nested
-and named on the wire.
+digests. C4 still owns how every one of the closed facts is actually
+nested and named on the wire.
 
 ### C4. Schema home — partially decided
 
@@ -915,7 +973,10 @@ kept as a C-owned companion fact rather than folded into B3's already-
 closed `provenance` enum; `inputs` is the actual paths this invocation
 read, not a static rule-definition property, and `value_digest` keeps
 both evidence shapes symmetric rather than leaving derived entries
-unverifiable on their own).
+unverifiable on their own), and C3's `signature` row **as to whether
+this engine signs** (CLOSED — it does not, and does not decide signer
+authority; this repo's own README excludes Vault access/counter-
+signature policy from this engine's scope).
 
 **Open:**
 - C3's unresolved/unknown markers — B2 closing gave the *value* a real
@@ -925,10 +986,18 @@ unverifiable on their own).
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
+- **Whether the receipt schema itself ever carries a signature-related
+  field**, populated by an external authority the same way
+  `cic-primitives`' own `release.sign`/`pledge.sign` are — a review on
+  PR #14 caught that an earlier pass overclaimed this as settled
+  ("the schema carries no signature field"), when D-015 actually shows
+  schema ownership and producer ownership are different facts. This is
+  a receipt *schema layout* question, C4's territory, not resolved by
+  "this engine doesn't sign."
 - C4's exact schema location — deferred until C3 is actually complete
-  (still blocked on `signature` and the two F-territory rows above).
-- `signature` — nothing grounds it yet; a future decision, not
-  recovered from anywhere.
+  (still blocked on the two F-territory rows above and the
+  signature-field layout question just named; "this engine doesn't
+  sign" no longer blocks it, since that part of C3 closed).
 
 ## D — Version binding (closes section D)
 
