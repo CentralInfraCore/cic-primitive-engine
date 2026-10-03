@@ -413,15 +413,22 @@ closure pending F and C5's evidence-record specification
    a later pass:** the minimum field set reconciles `BOUNDARY.md`'s
    sketch with what's actually proven. `BOUNDARY.md`'s own fields are
    decided: the two digests and `applied_defaults`/`derived_values`
-   (derived from B3, see item 5 below). **Now also closed:** the
-   version-identity row (`grammar_version`/`primitive_release`/
-   `schema_version`/validator identity) — D1's four identifier groups
-   fill it in directly (grammar digest, primitive release identity,
-   domain schema identity, validator/engine identity); C adopts D's
-   shape rather than inventing a parallel one. **`signature` is OPEN,
-   not decided** — an earlier version claimed "Relay already signs
-   this," which is false (no landed precedent exists; the sketched
-   `proof` index that would carry it is itself deferred).
+   (derived from B3, see item 5 below). **Now also closed, as to WHICH
+   facts, not their wire layout:** the version-identity row
+   (`grammar_version`/`primitive_release`/`schema_version`/validator
+   identity) — D1's four identifier groups fill in *which logical
+   facts* the receipt must carry (grammar digest, primitive release
+   identity, domain schema identity, validator/engine identity).
+   **Correction (review-caught):** an earlier version called this "the
+   receipt's version block," implying a single nested object — a
+   specific wire representation D never decided. Whether these four
+   facts nest under one key, sit as flat top-level fields, or
+   something else is **C4's call**, same as every other field's
+   placement, not settled by D1 or by this row closing.
+   **`signature` is OPEN, not decided** — an earlier version claimed
+   "Relay already signs this," which is false (no landed precedent
+   exists; the sketched `proof` index that would carry it is itself
+   deferred).
    `unresolved/unknown markers` was reserved pending B2
    (`missing`/`unknown`); B2 has since closed with a real shape for
    both terms (`missing` ≡ coverage's `absent`, `unknown` a new fourth

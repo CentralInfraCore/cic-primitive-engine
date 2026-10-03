@@ -651,11 +651,13 @@ input_digest                 BOUNDARY.md                  decided
 output_digest                 BOUNDARY.md                  decided
 applied_defaults[]           BOUNDARY.md                  decided -- see C5
 derived_values[]             BOUNDARY.md                  decided -- see C5
-version block                 D1 (four identifier         decided -- see
+version-identity fields        D1 (four identifier         decided -- see
 (grammar digest,              groups)                     below; D closed
  primitive release,                                       after this row
  schema identity,                                         was first
- validator/engine identity)                               reserved
+ validator/engine identity                                reserved. C4
+ -- as logical facts,                                     still owns
+ NOT a wire layout)                                        nesting/shape
 signature                    none (not BOUNDARY.md's      OPEN -- no
                               sketch, not landed Relay     landed or
                               code -- the sketched `proof` sketched
@@ -714,16 +716,22 @@ observation_digest           landed, but on a DIFFERENT    OPEN --
                                                              field
 ```
 
-**The version-identity row is now CLOSED, filled in by D's later
-closure** (it was only a reservation when this table was first written;
-D1 has since decided the shape). The receipt's version block is D1's
-four identifier groups directly: grammar digest
+**The version-identity row is now CLOSED as to WHICH facts the receipt
+must carry, filled in by D's later closure** (it was only a reservation
+when this table was first written; D1 has since decided the shape).
+**Correction (review-caught): this is not the same as deciding how
+those facts are laid out on the wire.** An earlier draft called this
+"the receipt's version block," implying a single nested object
+(`version: {grammar, primitive_release, schema, engine}`) — a specific
+representation D never decided and C4 hasn't either. D1 closed *which
+logical identity groups must be present* — grammar digest
 (`grammar_sha256`/`grammar_schema_sha256`), primitive release identity
 (release tag + `source_commit`/`build_hash`), domain schema identity
 (logical identity + version + content digest, D1.3's three-part group),
 and validator/engine identity (which implementation produced this
-receipt). No new field design needed — C3 adopts D1's already-decided
-shape rather than inventing a parallel one.
+receipt) — not whether they nest under one `version` key, sit as four
+flat top-level fields, or something else. That layout question belongs
+to C4, same as every other field's placement, and stays open there.
 
 **The `unresolved/unknown markers` row stays open, but its blocker has
 moved.** B2's closure gives `unknown` (and `missing` ≡ `absent`) a
@@ -737,10 +745,12 @@ several times already (F1 regressing B3, F3 re-asserting coverage in
 the receipt). Left for F.
 
 So C3 is now decided for `BOUNDARY.md`'s own sketch (the two digests,
-the two provenance-derived lists) plus D1's version block, and
-explicitly open for `signature` (nothing grounds it yet),
-`unresolved/unknown markers` (blocked on F's coverage-projection
-decision, not B2 anymore), and the two F-territory digests.
+the two provenance-derived lists) plus D1's four version-identity
+facts (content, not layout), and explicitly open for `signature`
+(nothing grounds it yet), `unresolved/unknown markers` (blocked on F's
+coverage-projection decision, not B2 anymore), and the two F-territory
+digests. C4 still owns how every one of these facts is actually nested
+and named on the wire.
 
 ### C4. Schema home — partially decided
 
