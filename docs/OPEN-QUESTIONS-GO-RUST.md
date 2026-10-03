@@ -202,8 +202,10 @@ raw UTF-8 byte order (Go's `sort.Strings`, which a Rust `Vec<String>::sort`
 reproduces identically — no new algorithm needed here, only a port).
 Numbers per `number.go`'s proven, byte-identical-with-Rust rules (exact
 integer digits, `-0`→`0`, shortest plain-decimal floats, normalized before
-structural writing, never inline). Strings escape `<`/`>`/`&`/U+2028/U+2029
-as `<`/`>`/`&`/` `/` ` — **verified empirically
+structural writing, never inline). Strings escape `<`, `>`, `&`, U+2028 and U+2029
+as the literal six-character ASCII sequences `\u003c`, `\u003e`, `\u0026`,
+`\u2028` and `\u2029` respectively (see `MATERIALIZATION-SPEC.md` for the
+full table) — **verified empirically
 in this session**, not assumed: this is Go's default `json.Marshal`
 behavior (inherited by calling it directly), not an RFC 8259 minimum, and
 a Rust writer must replicate it exactly or it will not produce

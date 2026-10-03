@@ -50,16 +50,42 @@ Go/Rust vector pair (`cic-canonical` crate):
 - a non-integer literal normalizes through `f64`'s shortest round-trip
   plain-decimal form (`strconv.FormatFloat(f, 'f', -1, 64)` — **never
   scientific notation**), with `-0.0` → `0`;
-- `4`, `4.0`, `4e0` and the literal string `"4"` (when read as a number)
-  all canonicalize to the same token, `4`.
+- `4`, `4.0` and `4e0` — numeric *values* — all canonicalize to the same
+  numeric token, `4`.
+
+**This does not extend to the JSON string `"4"`.** Review caught that the
+original wording here conflated two different functions: `canonicalNumber`
+also accepts a numeric-looking *string* as input, but that is
+`compare.go`'s comparison semantics (`CompareNumeric`/`CompareExact`
+deciding whether an intent value and an observed value are the same
+number regardless of which Go type each happened to arrive as) — not
+materialization semantics. The actual materialization pass,
+`normalizeNumbers`, is explicit about the distinction in its own comment:
+*"Strings, bools and null are left untouched — a JSON string `"4"` stays
+distinct from the number `4`."* So for the canonical form this section
+specifies:
+
+```text
+4, 4.0, 4e0          → canonical numeric token: 4
+"4" (a JSON string)  → canonical JSON string:   "4"
+```
+
+A Rust implementation must preserve this type distinction through
+materialization — a numeric-looking string must not be silently promoted
+to a number during canonicalization, even though a *separate*, later
+comparison step may legitimately treat them as equal values. Conflating
+the two would produce a real divergence: a Go materializer that keeps
+`"4"` as a string and a Rust one that "helpfully" numifies it would no
+longer agree on canonical bytes for the same input.
 
 Numbers are canonicalized **before** structural writing (`number.go`'s
-`normalizeNumbers` walks the whole tree first, replacing numeric leaves
-with their canonical decimal token held as a raw, unquoted literal) — the
-structural writer itself does not re-derive number formatting. A Rust
-implementation must do the same two-pass shape: normalize numbers through
-the tree, then write structure, not attempt to format numbers inline
-during structural writing.
+`normalizeNumbers` walks the whole tree first, replacing numeric *values*
+— never strings — with their canonical decimal token held as a raw,
+unquoted literal) — the structural writer itself does not re-derive number
+formatting. A Rust implementation must do the same two-pass shape:
+normalize numeric values through the tree, then write structure, not
+attempt to format numbers inline during structural writing, and not widen
+the normalization pass to touch strings.
 
 ### A4. Strings
 
@@ -69,16 +95,23 @@ directly rather than a bare string encoder. **Verified empirically** (not
 from documentation) against `encoding/json` in this session:
 
 ```text
-input                          Go json.Marshal output
------------------------------------------------------
-"a<b>c&d"                      "a<b>c&d"
-"line sep para"      "line sep para"   (escaped, not literal)
+input                          Go json.Marshal output (literal bytes, not the characters)
+----------------------------------------------------------------------------------------
+"a<b>c&d"                      "a\u003cb\u003ec\u0026d"
+"line" + U+2028 + "sep" + U+2029 + "para"
+                                "line\u2028sep\u2029para"
 "café" (precomposed, U+00E9)   "café"  (bytes: 63 61 66 c3 a9)
-"cafe"+combining-acute U+0301  "café"  (bytes: 63 61 66 65 cc 81)  <- DIFFERENT BYTES
+"cafe" + combining acute U+0301  "café"  (bytes: 63 61 66 65 cc 81)  <- DIFFERENT BYTES
 ```
 
+The middle row's output is the **six-character ASCII sequence** `\u2028`
+(backslash, u, 2, 0, 2, 8) for each separator, not the actual U+2028/U+2029
+character — writing the real character into this table would silently
+defeat the point of showing what the escaping produces.
+
 Decision: **adopt as-is.** `<`, `>`, `&`, U+2028 and U+2029 are escaped as
-`<`/`>`/`&`/` `/` ` (lowercase hex), exactly Go's
+the literal ASCII sequences `\u003c`, `\u003e`, `\u0026`, `\u2028` and
+`\u2029` (lowercase hex), exactly Go's
 default `json.Marshal` behavior. This is inherited from calling the stdlib
 marshaler directly rather than a deliberate design choice, but the decision
 here is to replicate it exactly rather than "fix" it — anything already
