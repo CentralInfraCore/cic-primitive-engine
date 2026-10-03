@@ -1277,13 +1277,19 @@ Closed:  E1 (all dispatch paths -- native Go and WASM -- pass through
          mechanism is identical regardless of guest language, since it
          runs before any WASM boundary is crossed).
 Open:    E2b (the constructor-gated type's exact Go representation and
-         the receipt-transport wire shape), whether native and WASM
-         modules get the SAME trust/policy treatment inside the
-         mandatory boundary (a different question from E1 -- corrected
-         after review caught the two being conflated), how the ACL
-         actor identity gets threaded through (a real gap found in the
-         current code, not invented), and the guest-side
-         defense-in-depth digest check's shape.
+         the receipt-transport wire shape); whether native and WASM
+         modules SHOULD get the SAME trust/policy treatment inside the
+         mandatory boundary remains a normative open question, though
+         it is now confirmed, by reading the code, that they do not
+         even share the same MECHANISM today (native has no identity
+         parameter at all; WASM has a meaningless one); how the ACL
+         actor identity gets threaded through was a named gap, now
+         checked directly against the code -- confirmed no existing
+         Relay mechanism is available to wire in (iac.Actor has zero
+         production call sites; SetPayload, the external API's own
+         entry point, carries no identity field), so this needs
+         building, not finding -- designing it remains open; and the
+         guest-side defense-in-depth digest check's shape.
 ```
 
 ### E1. Enforcement lives at the host, at an already-existing chokepoint — verified against real code, not designed from scratch
@@ -1385,11 +1391,50 @@ evaluate meaningfully. For B5's capability/ACL gates
 (`default_injection` substitution) to run as part of this same
 pre-dispatch step — which is where they need to run, so a module is
 simply never handed a value it isn't entitled to, rather than trusted to
-self-filter — `authContextJson` needs to carry a real identity. **This
-section does not resolve that** — whether Relay's existing auth/identity
-system already has one available at this call site, or needs one built,
-wasn't checked; named as an open, concrete gap rather than assumed either
-way.
+self-filter — `authContextJson` needs to carry a real identity.
+
+**The hedge this section first left — "whether Relay's existing
+auth/identity system already has one available at this call site, or
+needs one built, wasn't checked" — is now checked, directly against
+the code, not assumed:**
+- `core/nexus/iac/acl.go`'s `Actor{User, Groups}` (A0.1, landed and
+  tested) is the ONLY actor-identity type anywhere in the repo —
+  checked by grepping every `.go` file for its construction. It has
+  **zero production call sites.** The only places an `Actor` value is
+  ever built are its own unit tests (`acl_test.go`). A tested,
+  well-defined type exists; nothing in this codebase has ever
+  instantiated one for a real request.
+- The gap goes further back than `service.go` itself: `SetPayload`
+  (`core/cabinet/set_schema.go`), the external API's own request
+  struct — the very top of this whole call chain — carries
+  `WorkflowID`, `Modules`, `Payload`, `Options`, `SourceDigest` and
+  nothing resembling a caller identity. There is no point between the
+  external API boundary and `service.go`'s dispatch loop where a real
+  actor identity could be picked up from something already present —
+  it would have to be added at the API boundary itself, not merely
+  threaded through from somewhere nearby.
+- **Decided: this needs to be built, not found.** No existing
+  Relay auth/identity mechanism is sitting unused nearby, waiting to be
+  wired in — the search for one came back empty. This still does not
+  design the mechanism (that's real follow-up work, not a documentation
+  decision), but it replaces "wasn't checked" with a verified negative
+  result, so nobody re-does this search expecting to find something
+  this document already looked for and didn't find.
+
+**A second, related finding, also checked directly against the code:**
+the native dispatch branch (`service.go`'s `moduleDesc.NativeImpl`
+case) does not receive `authContextJson`, or anything like it, at all
+— its call signature (verified via the `reflect` call-shape check at
+that branch) is exactly `func(context.Context, interface{}) (T,
+error)`, with no slot for an identity argument. So today, native and
+WASM modules do not merely get *different trust/policy treatment*
+inside the mandatory boundary (E1's still-open question) — they do not
+even have the **same mechanism shape**: WASM carries a (currently
+meaningless) identity-shaped string, native carries nothing at all.
+This is a factual asymmetry, found, not a normative answer to whether
+the two paths *should* end up symmetric once a real identity exists —
+that design question stays open, but it is no longer an
+undocumented one.
 
 This directly answers the question B5 left open (*"what prevents a
 module from reading `MaterializedField.value` directly, bypassing B5's
@@ -1440,10 +1485,20 @@ concern as everything else in this effort, not designed further here.
   itself) and `WasmCode` get the *same* capability/ACL checks once past
   the chokepoint, or `NativeImpl` earns a different trust tier there.
   Explicitly a different question from E1 (which only fixes that neither
-  path bypasses the chokepoint itself) — not decided either way.
+  path bypasses the chokepoint itself) — not decided either way, though
+  it is now confirmed, by reading `NativeImpl`'s own call-shape check,
+  that the two branches don't even share a mechanism today: `NativeImpl`
+  has no identity-carrying parameter at all, where `WasmCode` has a
+  meaningless one.
 - How `authContextJson` becomes a real actor identity — a genuine,
-  found-not-invented gap, left for whoever owns Relay's auth/identity
-  binding.
+  found-not-invented gap, **now checked, not merely flagged:** grepping
+  the whole repo for `iac.Actor{` construction found zero production
+  call sites (only its own unit tests), and `SetPayload` — the external
+  API's own request struct, the top of this entire call chain — carries
+  no identity field either. There is no existing mechanism sitting
+  nearby to wire in; this needs building from the API boundary down,
+  not discovering. Left for whoever owns that build, same as before —
+  this section narrows *what* is missing, not *who* builds it.
 - The guest-side digest-verification SDK shape (Go and Rust) — not
   designed here, just established as necessary.
 
