@@ -621,12 +621,16 @@ proof chain
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
 chain-of-custody (which steps ran, with which I/O hashes), (2) the
-materialization receipt (section C — how a field's value came to be),
-and (3) the conformance/drift verdict (`conformance.go` — whether an
-observed value matches a declared intent) are three separate facts.
-`C3` already flagged `conformance_plan_digest`/`observation_digest` as
-"section F's territory, not provenance" for exactly this reason — the
-verdict is not part of the receipt.
+materialization receipt (section C — digests plus provenance-derived
+default/derivation evidence, per what C3/C5 actually decided; **not**
+restated here as already carrying coverage/observation evidence, which
+stays open per this section's own item above), and (3) the
+conformance/drift verdict (`conformance.go` — whether an observed value
+matches a declared intent) are three separate facts. `C3` already
+flagged `conformance_plan_digest`/`observation_digest` as "section F's
+territory, not provenance" for exactly this reason — the verdict is not
+part of the receipt, whatever the receipt eventually turns out to
+include.
 
 ---
 

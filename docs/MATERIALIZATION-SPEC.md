@@ -1214,21 +1214,38 @@ there are now three artifacts in view, and they must stay distinct:
 1. ProofTrace chain       -- which workflow steps ran, with which
    (service.go/              input/output hashes, chained
     proof_trace.go)           (execution audit, not field semantics)
-2. Materialization receipt -- per-field capability/coverage/provenance
-   (section C)                evidence (what this effort specifies)
+2. Materialization receipt -- materialization evidence bound to the
+   (section C)                canonical result: today, digests plus
+                               provenance-derived default/derivation
+                               evidence (C3/C5). Whether coverage/
+                               observation evidence ever becomes part
+                               of this artifact is OPEN, not decided
+                               by this section (see F1/F4) -- not
+                               restated as settled here.
 3. Conformance/drift verdict -- intent vs. observed comparison outcome
    (conformance.go)            (CONFORMANT/DRIFT/OBSERVED_ABSENT/
                                 UNOBSERVED/NOT_COMPARABLE)
 ```
 
+**Correction (review-caught, a third occurrence of the same error F1/F4
+already fixed twice in this section):** this subsection's own prose
+originally said the receipt carries "capability/coverage/provenance
+evidence" and "says how its value came to be (defaulted, derived,
+**observed**)" — both quietly re-asserting the coverage-in-receipt claim
+F1/F4 explicitly mark OPEN, in the same document, two headings later.
+Fixed to describe only what C actually decided (digests +
+provenance-derived evidence), with the coverage question named as open
+rather than answered a third time by implication.
+
 `C3` already flagged `conformance_plan_digest`/`observation_digest` as
 "section F's territory, not provenance" — this section confirms why:
-artifact 3 is not a part of artifact 2. A field's materialization
-receipt says how its value came to be (defaulted, derived, observed);
-the conformance verdict says whether that value matches what was
-declared. Related, sequential, and currently computed by overlapping
-code paths in Relay — but not the same fact, and not to be merged into
-one structure for convenience.
+artifact 3 is not a part of artifact 2, whatever artifact 2 eventually
+includes. The conformance verdict says whether an observed value matches
+what was declared; the receipt says what C already specifies today
+(digests, provenance-derived evidence) — not a claim about coverage.
+Related, sequential, and currently computed by overlapping code paths in
+Relay — but not the same fact, and not to be merged into one structure
+for convenience.
 
 ### F4. What this does and doesn't close
 
