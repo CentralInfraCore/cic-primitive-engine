@@ -184,3 +184,215 @@ for both languages from this point forward.
   this canonical form — e.g. whether a `not_implemented`/`deprecated`
   marker is itself subject to A2's key-ordering once it's part of the
   materialized tree. Not decided here.
+
+## B — Semantic state model (closes section B)
+
+**Decision:** the "five distinct statements" `docs/BOUNDARY.md` names
+(`missing`, `unknown`, `not_observed`, `not_implemented`, schema-applied
+default) are not five values of one enum — they are points on **three
+separate, orthogonal axes**. Collapsing them onto one axis is exactly the
+mistake `BOUNDARY.md` warns against; keeping them on three means a field
+can independently be, say, `not_implemented` (capability) **and**
+`unobserved` (coverage) **and** `authored` (provenance) at once, each
+fact recorded separately rather than forced into one slot.
+
+### B1. The three axes
+
+**Capability** (static, per device/adapter binding — `cic-primitives`
+D-012, `access.yaml`'s `conformance`):
+```text
+implemented      (default) — field exists and is manageable on the device
+not_implemented  — field does NOT exist on the device; write is a HARD REJECT
+deprecated       — field exists but should be avoided; write WARNS and is accepted
+```
+This does not vary between individual observe calls — it is a property of
+*this field on this device/provider binding*, set by the adapter, per
+D-012: *"conformance is the adapter's runtime annotation, not a
+schema-level removal."*
+
+**Coverage** (dynamic, per observe call — `core/nexus/iac/observation.go`'s
+`CoverageState`, already landed in Go, A0.1):
+```text
+observed    — this observe call saw the field; its value is authoritative
+absent      — this observe call looked and the field is authoritatively not there
+unobserved  — this observe call did not cover this path at all
+```
+This *can* vary between two observe calls on the same field (a provider
+API may include a field sometimes and omit it other times; a specific
+observe call may simply not request it).
+
+**Provenance** (how a materialized *intent*-side value got its value —
+`docs/BOUNDARY.md`'s receipt sketch, `applied_defaults`/`derived_values`):
+```text
+authored        — present in the intent document as the operator wrote it
+schema_default  — not authored; substituted from the schema's declared
+                   default (only legal where BOUNDARY.md's defaultability
+                   table allows it — e.g. never for authority: state/
+                   operational, lifecycle: volatile, or structural: key)
+derived         — computed by the engine from other field(s), not authored
+                   and not a static schema default
+```
+
+### B2. Mapping `BOUNDARY.md`'s five terms onto the three axes
+
+```text
+BOUNDARY.md term      Axis         Value
+----------------------------------------------------------------
+not_implemented        capability   not_implemented
+(a schema-applied
+ default)              provenance   schema_default
+not_observed           coverage     unobserved
+missing                coverage     absent, OR: the key is not present in
+                                     the materialized object at all --
+                                     see the open question below
+unknown                ???          not grounded anywhere in either repo
+                                     -- see below, this is a new proposal,
+                                     not a recovered fact
+```
+
+**`missing` needs a named caveat.** `BOUNDARY.md` uses "missing" once, in
+passing (*"a missing observation must not be masked by an invented
+one"*), without formally distinguishing it from `unobserved`/`absent`.
+Grepped both `cic-primitives` and this repo: **no decision record defines
+`missing` as a state distinct from the coverage axis's `absent`.** Treated
+here as the same concept as coverage's `absent` (an observe call looked
+and the field is authoritatively not there) — not a fourth coverage value.
+**This is a judgment call, not a recovered fact — flagging for review
+rather than asserting it quietly.**
+
+Separately: `missing` has a completely different, already-decided meaning
+one level up, in `cic-schema-registry`'s `coverage.py` (this session's
+earlier D-017 work) — there, `"missing"` is a **schema-evolution**
+violation kind: a field declared in a base/prior schema version that has
+no restatement at all in the derived/new one. That is a fact about a
+*schema's field list across versions*, not about one *materialized
+instance's* observed object. The two uses of the English word are
+unrelated axes (schema authoring-time vs. runtime materialization) and
+must not be conflated — the exact kind of error section A's review caught
+once already (`canonicalNumber` vs. `normalizeNumbers`), named explicitly
+here so it doesn't happen again with "missing."
+
+**`unknown` is ungrounded — this is a new proposal, not a recovered
+fact.** Neither `cic-primitives`' `ai/DECISIONS.md` nor `core/nexus/iac`
+defines this term; `BOUNDARY.md` names it in its list of five and never
+elaborates. Best-reasoned candidate, offered for review rather than
+asserted as settled: a **fourth coverage-axis value**, distinct from
+`observed`/`absent`/`unobserved` —
+
+```text
+unknown  — this observe call saw the field, and the DEVICE ITSELF
+           reported an indeterminate value (e.g. a sensor reporting
+           "fault" rather than a reading) -- distinct from `absent`
+           (the device affirmatively reports there is no value) and
+           from `unobserved` (the observe call never asked).
+```
+
+If this reading is wrong, section B is not actually closed until someone
+who knows what `BOUNDARY.md`'s author meant corrects it — this paragraph
+is a placeholder with a concrete, falsifiable shape, not a guess dressed
+up as a decision.
+
+### B3. How this surfaces in the materialized type
+
+Per-field metadata, held **alongside** the value, not merged into it —
+matching the Access atom's long form (`{value, access, modify, inherit,
+default_injection, conformance}`) and Go's existing `Node{Value, Meta}`
+split (A0.1): the value and its status are different things a module can
+inspect independently, and a module reading `.Value` never has to parse
+status out of the value's own shape.
+
+```text
+MaterializedField {
+    value:       <canonical value, per section A>
+    capability:  implemented | not_implemented | deprecated
+    coverage:    observed | absent | unobserved | unknown   (state/output side only --
+                                                               see note below)
+    provenance:  authored | schema_default | derived          (intent/input side only)
+}
+```
+
+**Coverage and provenance are not both populated on every field.**
+Coverage is meaningful on the *observed/state* side (did we see it);
+provenance is meaningful on the *intent/input* side (why does it have
+this value). A field materialized from authored intent carries a
+provenance and no coverage; a field materialized from an observation
+carries a coverage and no provenance. This mirrors `core/nexus/iac`'s own
+intent/state split (A0's inventory: `field.go`'s `mode.read`/`write`,
+`schema.go`'s "a writable field is a config/intent field... a read-only
+field is provider-computed observed state") rather than inventing a new
+split.
+
+### B4. Resolving A0.4's tri-state/boolean conformance conflict
+
+A0's inventory found the real conflict: `cic-primitives`' `conformance`
+is tri-state (B1 above); `core/nexus/iac`'s `FieldMode.Implemented` is a
+plain Go `bool`, with **no representation of `deprecated` at all**.
+
+**Decision:** the library's materialized type carries the full tri-state
+(B1's `capability` field) — it is not constrained to Relay's current
+boolean. Relay's `FieldMode.Implemented bool` becomes a **named, lossy
+projection** of it, until Relay migrates onto the library directly
+(roadmap step 6):
+
+```text
+capability: implemented      → FieldMode.Implemented = true
+capability: deprecated       → FieldMode.Implemented = true   (lossy: a
+                                                                 caller reading
+                                                                 only the bool
+                                                                 cannot tell
+                                                                 deprecated
+                                                                 from
+                                                                 implemented)
+capability: not_implemented  → FieldMode.Implemented = false
+```
+
+This is stated explicitly as **lossy**, not silently accepted: any code
+that reads only `FieldMode.Implemented` during the migration period cannot
+distinguish `deprecated` from `implemented`, and must not be trusted for
+decisions that care about that distinction (e.g. a UI warning about
+deprecated-field use) until it reads the library's tri-state directly.
+
+### B5. `default_injection` is a response-time filter, not a stored second value
+
+Per `access.yaml`'s own semantic mapping (`miss_behavior: default_injection
+returned when access is denied`; *"fields the requestor cannot access are
+filtered from the... response or returned with their default_injection
+value"*): `default_injection` is **not** a second value held inside
+`MaterializedField` alongside the real one. The materialized form always
+holds the real value and its full B1 metadata; `default_injection` is
+computed **at response-construction time**, parameterized by the
+requesting actor's ACL check (`core/nexus/iac/acl.go`'s `ACL.Allows`,
+already landed) — if the actor fails the read check, the response
+substitutes `default_injection` for that field; the internally-held
+materialized value is never touched or duplicated.
+
+```text
+MaterializedField.value  -- always the real value, always present internally
+  ↓ (at response time, per-requester)
+ACL.Allows(actor, PermRead)?
+  yes → emit MaterializedField.value
+  no  → emit access.default_injection  (from the field's long-form descriptor)
+```
+
+### B6. What this does and doesn't close
+
+**Closed:** the three-axis model (B1), the mapping of `BOUNDARY.md`'s
+named terms onto it with one explicit judgment call (`missing` ≡
+coverage's `absent`) and one explicit new proposal offered for review
+(`unknown` as a fourth coverage value), the materialized-type shape (B3),
+the resolution of A0.4's conformance conflict as a named lossy projection
+(B4), and `default_injection`'s place as a response-time filter, not
+stored state (B5).
+
+**Not closed, deliberately:**
+- The `unknown` proposal in B2 is explicitly flagged as unverified
+  reasoning, not a recovered fact — review before treating it as settled.
+- Section C (receipt schema) still has to decide how `provenance`
+  (B1/B3) relates to the receipt's own `applied_defaults`/`derived_values`
+  fields — are they the same data surfaced twice, or does the receipt
+  derive from the per-field provenance, or vice versa? Not decided here.
+- Section E (boundary enforcement) still has to decide what prevents a
+  module from reading `MaterializedField.value` directly, bypassing B5's
+  response-time `default_injection` substitution, for a module that is
+  itself an untrusted requester (not just the external API caller this
+  section assumed). Not decided here.

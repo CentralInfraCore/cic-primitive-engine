@@ -55,8 +55,8 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-**A0 and A are now closed** (2026-10-03) — see `docs/A0-INVENTORY.md` and
-`docs/MATERIALIZATION-SPEC.md`. **B is next.**
+**A0, A and B are now closed** (2026-10-03) — see `docs/A0-INVENTORY.md`
+and `docs/MATERIALIZATION-SPEC.md`. **C is next.**
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -225,25 +225,43 @@ number canonicalization still has to be written).
 
 ### B. Semantic state model
 
-**Status:** OPEN
+**Status:** **DECIDED**, with one explicit judgment call and one
+explicit new proposal flagged for review (see below) — not everything in
+this section is a recovered fact
 **Blocks:** the materialized output's type shape (C, E); `default_injection`
 correctness
-**Decision ref:** —
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-closes-section-b`
 
-`docs/BOUNDARY.md` names five distinct statements that must never collapse
-into one: `missing`, `unknown`, `not_observed`, `not_implemented`, and a
-schema-applied default. For each:
+`docs/BOUNDARY.md`'s "five distinct statements" are not five values of
+one enum — they're points on **three separate, orthogonal axes**:
+**capability** (D-012's `implemented`/`not_implemented`/`deprecated`,
+static per device binding), **coverage** (`observed`/`absent`/
+`unobserved`, dynamic per observe call, already landed in Go as
+`CoverageState`), and **provenance** (`authored`/`schema_default`/
+`derived`, intent-side only).
 
-1. Which of these is a **data value**, which is **metastate**, which is
-   **provenance**, and which is a **capability claim** (e.g. `not_implemented`
-   is D-012's hard-reject capability statement, not a data value at all)?
-2. How does this surface in the materialized output's type — a tagged union
-   per field, a side-channel status map, or something else?
-3. How does `access.default_injection` (what a requester *without* access
-   sees) stay distinct from the field's real internal state in the same
-   output — two separate fields, or a view-dependent filter applied only at
-   serialization/response time (never present in the internally-held
-   materialized form at all)?
+Two things flagged, not silently settled:
+- `missing` is treated as the same concept as coverage's `absent` — a
+  judgment call, since neither repo formally distinguishes them.
+- `unknown` is **ungrounded in both repos** — `BOUNDARY.md` names it and
+  never defines it, and nothing in `cic-primitives`' decision log or
+  `core/nexus/iac` gives it a concrete shape either. The spec offers a
+  best-reasoned candidate (a fourth coverage value, for "the device
+  reported an indeterminate value," distinct from an affirmed absence)
+  explicitly as a new proposal for review, not a recovered fact.
+
+Also resolves A0.4's tri-state/boolean conformance conflict: the library
+carries the full tri-state; Relay's existing `FieldMode.Implemented bool`
+becomes a named **lossy** projection of it until Relay migrates (step 6)
+— and clarifies `default_injection` as a response-time, per-requester ACL
+filter, never a second value stored in the materialized form.
+
+Also names a real risk and heads it off: `cic-schema-registry`'s
+`coverage.py` (this session's earlier D-017 work) already uses the word
+`missing` for an unrelated, already-decided concept — a schema-evolution
+violation (a field absent across schema *versions*), not an instance's
+observed-object state. Called out explicitly so the two don't get
+conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 
 ---
 
