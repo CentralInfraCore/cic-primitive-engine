@@ -74,7 +74,13 @@ Rust release independently; the full semantic-input identity (grammar
 digest + primitive release + schema version + input digest, everything
 except validator/engine identity, which is supposed to differ) is the
 comparability gate section G's differential conformance checks before
-comparing output. **E is next.**
+comparing output. **E is now PARTIALLY DECIDED** — host-side enforcement
+at a specific, real chokepoint already found in `CIC-Relay/core/cabinet/
+service.go` (E1, E3 closed), with the exact type shape and a real,
+found gap (the dispatch loop's `authContextJson` isn't a genuine actor
+identity yet) left open (E2). **F is next**, though E2's identity gap is
+a standing dependency for anyone implementing E, not just a documentation
+loose end.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -467,33 +473,65 @@ judgment call, out of scope for this docs-only change.
 
 ### E. Boundary enforcement
 
-**Status:** OPEN
-**Blocks:** F, G — nothing downstream is meaningful if a module can bypass
-materialization
-**Decision ref:** —
+**Status:** **PARTIALLY DECIDED, not closed.** E1, E2a and E3 are
+settled. E2b (exact type shape, receipt-transport wire shape), whether
+native and WASM modules get the *same* trust/policy treatment inside
+the mandatory boundary (a different question from E1 — review caught an
+earlier draft conflating the two), how a real actor identity gets
+threaded through (a genuine gap found in the live code, not
+hypothesized), and the guest-side digest-check shape are open.
+**Blocks:** F, G — nothing downstream is meaningful if a module can
+bypass materialization
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#e--boundary-enforcement-partially-decided-not-closed`
 
-```text
-Raw<T>
-  ↓
-Materialized<T>
-  ↓
-Validated<T>
-  ↓
-Module
-```
-
-1. Where does enforcement actually live — the host (Relay) layer refusing to
-   hand a module anything but validated output, or is every guest module
-   independently responsible for calling the resolver itself?
-2. `docs/BOUNDARY.md` already records that Rust's `Materialized<T>`/
-   `Validated<T>` private-constructor guarantee does not survive a
-   process/WASM boundary, and is "only approximately" achievable in Go even
-   in-process. Given that, what — concretely — stops a Go-authored WASM guest
-   from skipping the resolver, if not the type system? A host-side gate that
-   refuses unresolved input before it reaches the guest's entry point is one
-   candidate; name the actual mechanism, don't leave it implicit.
-3. Is the enforcement point identical for a Go guest and a Rust guest, or
-   does the language difference require two different mechanisms?
+1. **Closed, grounded in the live codebase, not designed from scratch:**
+   `CIC-Relay/core/cabinet/service.go`'s workflow step executor is
+   *already* the single chokepoint every module call passes through —
+   native Go and WASM alike, **mandatorily — neither bypasses it.**
+   **Correction (review-caught):** an earlier draft's "one gate covers
+   both paths" conflated that structural fact (where the boundary sits)
+   with a claim about trust/policy treatment *inside* it (what happens
+   once past it) — the latter is explicitly **not** decided here (see
+   below); E1 only fixes that neither path routes around the chokepoint
+   itself. Verified what runs there today: `validateInputSchema` only
+   checks a `"$schema"` key's presence/membership (a routing guard, not
+   materialization), and `hashValue` is section A's exact canonical-digest
+   pipeline (`canonicaljson.ToJSON` → SHA-256) — but feeding
+   **ProofTrace's own chain-of-custody**, a different proof artifact
+   from this effort's materialization receipt (section C); reusing the
+   digest code is fine, conflating the two artifacts is not.
+2. **Split, after review caught this section marked itself both open
+   and closed in different places (the same mistake already fixed once
+   in section B):**
+   - **E2a, closed:** that chokepoint must accept only a
+     constructor-gated handle, never a raw `inputData interface{}` —
+     host and resolver are the same process at that point, so Go's type
+     system genuinely can enforce this (the in-process case
+     `BOUNDARY.md` already said was achievable, not yet built).
+   - **E2b, open:** the type's exact Go representation, and the
+     receipt-transport wire shape (`service.go`'s current
+     `Process(ctx, authContextJson, inputJson string)` only has room for
+     two strings — not designed here).
+   **A real, found gap, also open:** `authContextJson := step.ComponentID`
+   is the calling component's own ID, not an actual actor identity
+   `acl.go`'s `ACL.Allows` could evaluate — so B5's capability/ACL gates
+   can't run meaningfully at this point *yet*. This directly answers
+   what B5 left open (what prevents a module from reading a value it
+   isn't entitled to): this same gate, once a real identity is threaded
+   through — not a separate mechanism, and not resolved by this section.
+   **Also open, distinct from item 1's structural claim:** whether
+   `NativeImpl` (first-party, non-WASM) modules get the *same*
+   capability/ACL treatment as `WasmCode` modules once past the
+   mandatory chokepoint, or a different trust tier there. "Same
+   chokepoint for both" (item 1, closed) is not the same claim as "same
+   policy for both" (open).
+3. **Closed:** the gate runs entirely before any WASM boundary is
+   crossed, in Go, regardless of which language the eventual guest was
+   compiled from — identical for a Go guest and a Rust guest. The one
+   language-specific piece is defense-in-depth: a guest independently
+   verifying `digest(received_bytes) == receipt.output_digest` on its
+   own side — cheap, needed once per guest language, not designed
+   further here.
 
 ---
 

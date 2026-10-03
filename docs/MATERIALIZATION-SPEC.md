@@ -904,3 +904,185 @@ as if a byte difference meant divergence (D2).
   the receipts" as one single byte-equality check. D2 only establishes
   that a gate mismatch must be distinguishable from an actual
   divergence; G has to build the actual comparison logic.
+
+## E — Boundary enforcement (PARTIALLY DECIDED, not closed)
+
+```text
+Status: PARTIALLY DECIDED, not closed.
+Closed:  E1 (all dispatch paths -- native Go and WASM -- pass through
+         the SAME host-side boundary point, mandatorily; neither
+         bypasses it -- a fact about WHERE the boundary sits, not what
+         happens inside it), E2a (that boundary point must accept only
+         a constructor-gated handle, never a raw interface{}), E3 (the
+         mechanism is identical regardless of guest language, since it
+         runs before any WASM boundary is crossed).
+Open:    E2b (the constructor-gated type's exact Go representation and
+         the receipt-transport wire shape), whether native and WASM
+         modules get the SAME trust/policy treatment inside the
+         mandatory boundary (a different question from E1 -- corrected
+         after review caught the two being conflated), how the ACL
+         actor identity gets threaded through (a real gap found in the
+         current code, not invented), and the guest-side
+         defense-in-depth digest check's shape.
+```
+
+### E1. Enforcement lives at the host, at an already-existing chokepoint — verified against real code, not designed from scratch
+
+**Grounding, not speculation:** `CIC-Relay/core/cabinet/service.go`'s
+workflow step executor is *already* the single chokepoint every module
+call passes through, regardless of module kind:
+
+```text
+3b. inputData, ok := execCtx.Get(step.InputKey)   -- resolved ONCE
+3c. validateInputSchema(moduleDesc, inputData)      -- checked ONCE
+3d. hashValue(inputData)                            -- hashed ONCE
+3e. branch: moduleDesc.NativeImpl != nil  -> native Go call, inputData passed directly
+            moduleDesc.WasmCode != nil    -> host.Process(ctx, authContextJson, json.Marshal(inputData))
+```
+
+**Verified, not assumed, what happens at 3c/3d today:**
+- `validateInputSchema` (`schema_validate.go`) checks only that
+  `inputData` is a `map[string]interface{}` carrying a `"$schema"` key
+  whose value is in the module's declared `Accepts` list. No field-level
+  resolution, no short/long-form expansion, no capability/coverage/
+  provenance tagging — this is a routing guard ("does this claim to be
+  the right schema"), not materialization.
+- `hashValue` (`proof_trace.go`) is `canonicaljson.ToJSON(v)` → SHA-256 →
+  hex — **the exact canonical-digest pipeline section A adopted**, already
+  in production use here. But it feeds **ProofTrace's own chain-of-custody**
+  (per-step input/output hashes, chained into `ComputeChainHashV1`) — a
+  *different* proof artifact from this effort's materialization receipt
+  (section C). They must not be conflated just because they share the
+  same digest machinery: ProofTrace proves *which steps ran with which
+  I/O*; the materialization receipt proves *how a field's value was
+  derived*. Reusing the canonical-digest code is fine and expected;
+  treating the two proof artifacts as one thing is not.
+
+**Decision:** enforcement belongs at this exact chokepoint — between
+3b (input resolved) and 3e (dispatch) — not left to each module's own
+discretion, and not duplicated once per dispatch branch.
+
+**Correction (review-caught): "one gate covers both paths" conflated two
+different claims.** What's actually decided is narrower and purely
+structural: **both dispatch branches pass through the identical
+host-side boundary point, mandatorily — neither gets a bypass around
+it.** That is a fact about *where* the boundary sits, not about what
+happens *inside* it. Whether `NativeImpl` and `WasmCode` receive the
+*same trust/policy treatment* once past that mandatory point (same
+capability/ACL checks, same strictness) is a **separate, still-open**
+question — see E4. This section does not say the two paths are treated
+identically; it says neither path may route around the boundary itself.
+If `NativeImpl` modules ever get a different trust tier, that
+differentiation happens *at* this chokepoint, as a policy decision
+applied there — it can never mean skipping the chokepoint, or the "every
+module call" framing this whole section rests on stops being true.
+
+This answers E1: the host enforces, not the guest, and not "whichever
+the module author remembers to call" — consistent with `BOUNDARY.md`'s
+own admission that the Rust-side type guarantee doesn't survive
+serialization anyway, so a voluntary per-guest convention would be
+exactly the kind of unenforced promise that guarantee was never going to
+deliver.
+
+### E2. The concrete mechanism, split into what's decided and what isn't
+
+**Correction (review-caught): an earlier draft marked this whole section
+decided in one place and open in another** — the same self-contradiction
+already fixed once in section B (there, `missing`/`unknown`; here, this
+item). Splitting it into the architectural requirement (decided) and the
+implementation shape (not):
+
+**E2a — CLOSED.** The host dispatch loop (`service.go`'s step 3e) MUST
+NOT accept a raw `inputData interface{}` for either branch. It may only
+accept a handle that can only have been produced by calling the
+materialization library — a constructor-gated type, private fields,
+no literal-construction path, mirroring `BOUNDARY.md`'s
+`Materialized<T>`/`Validated<T>` pattern (originally specified for Rust)
+applied to **this Go host code specifically**, where it is achievable:
+host and resolver run in the *same process* here, at step 3b, before
+anything crosses a WASM boundary — the "in-process" case `BOUNDARY.md`
+already said was achievable, just not yet built. (Not the same claim as
+node.go's `Node` — A0/B3 already corrected that overclaim; this is new
+work, not a reuse of something already landed.) This is the
+architectural decision; it does not depend on exactly how the type is
+shaped.
+
+**E2b — OPEN.** The type's exact Go representation: field layout,
+constructor signature, which accessor methods exist (canonical JSON?
+receipt? both?), and the wire shape for carrying the receipt alongside
+the bytes once they do cross a boundary (`service.go`'s current
+`host.Process(ctx, authContextJson, inputJson string)` only has room for
+two strings — a receipt-carrying envelope isn't designed here, flagged
+as a real follow-up for whoever implements this, not assumed solved).
+None of this is fixed by E2a; only that *some* constructor-gated type
+must exist and sit at that exact chokepoint.
+
+**A real gap, found by reading the code, not hypothesized:**
+`authContextJson := step.ComponentID` (`service.go`) is **not a genuine
+actor identity** — it's the calling component's own ID string, not
+something `core/nexus/iac/acl.go`'s `ACL.Allows(actor, ...)` (A0.1) could
+evaluate meaningfully. For B5's capability/ACL gates
+(`default_injection` substitution) to run as part of this same
+pre-dispatch step — which is where they need to run, so a module is
+simply never handed a value it isn't entitled to, rather than trusted to
+self-filter — `authContextJson` needs to carry a real identity. **This
+section does not resolve that** — whether Relay's existing auth/identity
+system already has one available at this call site, or needs one built,
+wasn't checked; named as an open, concrete gap rather than assumed either
+way.
+
+This directly answers the question B5 left open (*"what prevents a
+module from reading `MaterializedField.value` directly, bypassing B5's
+response-time gates, for a module that is itself an untrusted
+requester"*): the answer is this same host-side gate, at this exact
+point in `service.go` — not a separate mechanism.
+
+### E3. Same mechanism regardless of guest language
+
+The gate above runs entirely in `service.go`, in Go, before branching to
+either `NativeImpl` or `WasmCode` — and before any WASM boundary is
+crossed at all. Whether the eventual WASM guest was compiled from Go or
+Rust source is invisible at this call site; by the time
+`host.Process(ctx, authContextJson, inputJson)` runs, it's bytes either
+way. So E1/E2's host-side enforcement is identical for a Go guest and a
+Rust guest — answering E3.
+
+The one place language *does* matter is defense-in-depth: a guest
+independently verifying `digest(received_bytes) == receipt.output_digest`
+(section A7's digest format) on its own side, catching a corrupted
+transport or a host bug, not relying solely on the host's gate. This is
+cheap (a hash-and-compare, not a re-materialization) and needs
+implementing once per guest language — the same two-implementation-parity
+concern as everything else in this effort, not designed further here.
+
+### E4. What this does and doesn't close
+
+**Closed:**
+- **E1** — all dispatch paths (`NativeImpl` and `WasmCode`) pass through
+  the same host-side boundary point (`service.go`'s identified
+  chokepoint), mandatorily; neither gets a bypass around it. This is a
+  fact about *where* the boundary sits, not about what happens inside it
+  (see open item below).
+- **E2a** — that boundary point must accept only a constructor-gated
+  handle, never a raw `inputData interface{}`.
+- **E3** — the mechanism is language-independent, since it runs before
+  any WASM boundary is crossed.
+
+**Not closed, deliberately:**
+- **E2b** — the constructor-gated type's exact Go representation (field
+  layout, constructor signature, accessor methods) and the wire shape
+  for carrying a receipt alongside bytes once they cross a boundary
+  (`service.go`'s current `Process(ctx, authContextJson, inputJson
+  string)` only has room for two strings — a receipt-carrying envelope
+  needs designing, not assumed to already fit).
+- **Trust/policy treatment inside the mandatory boundary** — whether
+  `NativeImpl` (first-party, non-WASM Go modules compiled into Relay
+  itself) and `WasmCode` get the *same* capability/ACL checks once past
+  the chokepoint, or `NativeImpl` earns a different trust tier there.
+  Explicitly a different question from E1 (which only fixes that neither
+  path bypasses the chokepoint itself) — not decided either way.
+- How `authContextJson` becomes a real actor identity — a genuine,
+  found-not-invented gap, left for whoever owns Relay's auth/identity
+  binding.
+- The guest-side digest-verification SDK shape (Go and Rust) — not
+  designed here, just established as necessary.
