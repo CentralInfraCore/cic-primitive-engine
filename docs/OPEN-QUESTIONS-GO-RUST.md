@@ -956,6 +956,53 @@ a decided core; B, C, E and F remain explicitly partial, each with
 named, specific open items. The next work is closing those — not
 starting new sections.
 
+## Addendum: `PRIMITIVE-IR.md`'s open question #2
+
+`PRIMITIVE-IR.md`'s own five open questions seeded part of this effort
+(#1 → C1, #3 → A, #4 → D). Of the remaining two, **#2 is now answered**
+— by reconciling a real internal tension in `BOUNDARY.md`, not a
+clean, uninterpreted recovery (review caught an overclaim here, see
+below) — and **#5** ("which parts are stable API and which are
+engine-internal") stays genuinely open; nothing grounds an answer to
+it yet, and this file does not invent one.
+
+**#2** asks whether the IR carries unresolved references explicitly,
+or whether resolution is total. `BOUNDARY.md`'s Constructors text
+states, as one of `Validated<Materialized<PrimitiveDocument>>`'s
+guarantees: *"every reference is resolved or explicitly unresolved."*
+**Correction (review-caught):** citing only that sentence and calling
+the question "recovered" overstated it — `BOUNDARY.md` also forbids,
+in the same document, *"an object with references still unresolved"*,
+and separately requires materialized validation to leave *"references
+resolvable."* Taken at face value, those three sentences contradict
+each other. The actual decision here is reconciling them: *"still
+unresolved"* (forbidden) describes resolution as an **incomplete,
+in-progress** state, the same register as its list-mates ("a partially
+interpreted document," "defaults still unapplied"); *"explicitly
+unresolved"* (permitted) is resolution having **run to completion**
+with a terminal, determinate answer — no binding found, not "haven't
+looked yet." `"resolvable"` is read here as *"reached a terminal
+result"*, not *"the target must exist"* — favoring the constructor's
+more specific, explicit wording over the validation bullet's looser
+restatement, named explicitly as this document's own interpretive
+reading of a genuine ambiguity, not a fact `BOUNDARY.md` states
+unambiguously. With that distinction drawn: an explicitly-unresolved
+reference, reached as resolution's own terminal output, is a
+legitimate, representable materialized state, not a failure mode.
+**Named so it isn't conflated with a different gap:** `cic-primitives`'
+own D-014 left reference *target-existence* checking unbuilt (no type
+registry to confirm a declared target Kind is real) — a static,
+schema-level question, explicitly scoped by D-014 itself as "a
+separate item," not this one. This question is instance-level: does
+*this* authored reference, in *this* composition, resolve within that
+composition's own graph? Recovered here deliberately **outside**
+section B, not folded into it — B1's three-axis count is already
+closed as final, and treating this as a fourth value on an existing
+axis (or a fourth axis) would be a new design decision this recovery
+does not make. **Exactly how** "explicitly unresolved" gets
+represented stays open.
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#addendum-primitive-irmds-open-question-2`
+
 ---
 
 ## Related
@@ -963,8 +1010,8 @@ starting new sections.
 - `README.md` — the engine's contract and the archived-model lesson this
   file exists to avoid repeating
 - `docs/PRIMITIVE-IR.md` — the IR's required properties and its own five
-  still-open questions, several of which this file restates with Go/Rust
-  context attached
+  open questions; #1/#3/#4 are answered (C1/A/D), #2 is answered (see
+  addendum above), #5 remains genuinely open
 - `docs/BOUNDARY.md` — the custody boundary, the five forbidden states, the
   defaultability-by-Role-axis table, and the receipt sketch this file builds
   decision tracking on top of
