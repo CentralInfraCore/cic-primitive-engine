@@ -195,6 +195,15 @@ Closed:  B1 (the three axes, confirmed final), B2 (missing = coverage's
          absent; unknown = a new, fourth coverage value), B3
          (materialized-type shape), B4 (A0.4's conformance conflict),
          B5 (default_injection's two gates).
+
+Named, not blocking this section's closure (PRIMITIVE-IR.md's
+`authored-absent` is not one of BOUNDARY.md's five terms; it came up
+only as supporting evidence while closing `missing`): review caught
+that an earlier draft wrongly conflated `authored-absent` with an
+authored literal `null`. Its exact representation is a separate,
+genuinely open question -- see B2's closing paragraphs -- that belongs
+with section A's canonical value representation (null-as-a-value vs.
+null-as-absence-marker), not with B2's actual scope.
 ```
 
 **Decision:** the "five distinct statements" `docs/BOUNDARY.md` names
@@ -295,11 +304,27 @@ concept (*"an adapter could not observe `power_state`"* describes
 `absent`/`missing` both describe). Treating them as the same value,
 closed, not open.
 
-`PRIMITIVE-IR.md`'s `authored-absent` is also already representable
-without a new concept: it is `provenance: authored` with `value: None`
-(B3) — an operator who explicitly writes `field: null` still *authored*
-something; the value they authored happens to be absent. No new
-provenance value needed either.
+**Correction (review-caught): `authored-absent` is not settled by this
+section, and must not be conflated with an authored literal `null`.**
+An earlier draft claimed `authored-absent` is simply `provenance:
+authored` with `value: None`, illustrated by "an operator who writes
+`field: null`." That conflates two things `PRIMITIVE-IR.md`'s own
+wording keeps apart: *"the authoring side explicitly establishes
+absence"* is a statement about **presence**, not about **the value
+being the literal null**. If a field's schema legitimately accepts
+`null` as a real scalar value, then `value: Some(null), provenance:
+authored` is an authored *value* (which happens to be null) — a
+materially different fact from "the operator declined to provide a
+value for this field at all," which is what `authored-absent` is
+actually naming. Whether `authored-absent` is represented as
+`provenance: authored` + `value: None` (the field has a presence marker
+distinct from a null-valued field) is therefore a **representation
+decision this section does not make**, not something
+`PRIMITIVE-IR.md`'s wording proves on its own. Left open, named
+precisely rather than quietly assumed — closing it properly would need
+to also settle how an authored literal `null` is distinguished from
+authored absence in section A's canonical value representation, which
+is out of scope for B2.
 
 Separately, still worth stating: `missing` has a completely different,
 already-decided meaning one level up, in `cic-schema-registry`'s
@@ -348,7 +373,7 @@ status out of the value's own shape.
 MaterializedField {
     value:       Option<canonical value, per section A>
     capability:  implemented | not_implemented | deprecated
-    coverage:    observed | absent | unobserved | (unknown, proposed)
+    coverage:    observed | absent | unobserved | unknown
     provenance:  authored | schema_default | derived
 }
 ```
@@ -524,6 +549,15 @@ directly answered what prevents a module from reading
 `MaterializedField.value` it isn't entitled to (the same host-side gate
 B5 already specified, once a real actor identity is threaded through —
 itself still an open implementation gap, tracked under E, not B).
+
+**Named while closing B2, not blocking B's closure, not B2's actual
+scope:** `PRIMITIVE-IR.md`'s `authored-absent` surfaced only as
+supporting evidence for resolving `missing` — it is not one of
+`BOUNDARY.md`'s five terms. Review caught that an earlier draft wrongly
+equated it with an authored literal `null`; its real representation
+(how it's distinguished from a field whose schema-legitimate value
+happens to be `null`) is a separate open question, naturally section
+A's (canonical value representation), not resolved here.
 
 ## C — Receipt schema (PARTIALLY DECIDED, not closed)
 

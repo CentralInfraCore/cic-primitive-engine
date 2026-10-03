@@ -327,10 +327,14 @@ answered no:**
   "not-observed" is the coarse union of what `BOUNDARY.md` splits finer
   into `not_observed` (never looked) and `missing` (looked, confirmed
   gone) — exactly `core/nexus/iac`'s existing `unobserved`/`absent`
-  split, needing no new concept. `PRIMITIVE-IR.md`'s `authored-absent`
-  is likewise already representable as `provenance: authored` +
-  `value: None` (B3) — an operator who authors an explicit null still
-  authored *something*.
+  split, needing no new concept. **`PRIMITIVE-IR.md`'s `authored-absent`
+  itself is NOT settled here** — review caught that an earlier draft
+  wrongly equated it with an authored literal `null`, which conflates a
+  presence statement ("the authoring side explicitly establishes
+  absence") with a value statement (a schema-legitimate `null` *value*).
+  Its representation is a separate, genuinely open question for
+  section A, named but not resolved by B2 — `authored-absent` is not
+  one of `BOUNDARY.md`'s five terms this section is actually scoped to.
 - `unknown` is adopted as a new, fourth **coverage** value (for a
   device-reported indeterminate value, distinct from an affirmed
   absence) — the previously-offered candidate, finalized since no
