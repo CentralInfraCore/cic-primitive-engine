@@ -55,15 +55,17 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-**A0 and A are now closed; B is PARTIALLY DECIDED, not closed**
+**A0 and A are now closed; B and C are PARTIALLY DECIDED, not closed**
 (2026-10-03) — see `docs/A0-INVENTORY.md` and
 `docs/MATERIALIZATION-SPEC.md`. B's `missing`/`unknown` question (B2)
 remains open and could still change B1's three-axis count — review
 caught that an earlier version of this file claimed B was fully closed
 while its own B2 was marked OPEN, a real contradiction, not an
-admin detail. **C may proceed in parallel** on the parts that don't
-depend on B2 (B1/B3/B4/B5 are stable enough to build on), but section B
-itself does not close until B2 does.
+admin detail. C built on B's closed parts (B1/B3/B4/B5) without waiting
+for B2, and is itself now partially decided: C1/C2/C5 are settled, but
+C3 (field list) and C4 (schema home) each have a part that's really
+section D's, F's, or B2's job, reserved rather than guessed at. **D is
+next**, and also unblocks the version-identity fields C3 reserved for it.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -297,33 +299,48 @@ conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 
 ### C. Receipt schema
 
-**Status:** OPEN
-**Blocks:** differential conformance (G); proof-chain integration
-**Decision ref:** —
+**Status:** **PARTIALLY DECIDED, not closed** — same posture as B. C1
+(sibling artifact, not IR-embedded), C2 (produced every materialization
+call), and C5 (the receipt's `applied_defaults`/`derived_values` are
+*derived from* B3's per-field `provenance`, not a second, independently
+maintained source) are settled. C3 (full v1 field list) and C4 (schema
+home) are only partially decided — each has a part that's really another
+section's job (D for version-identity fields, F for
+`conformance_plan_digest`/`observation_digest`, B2 for
+unresolved/unknown markers), reserved here rather than guessed at.
+**Blocks:** differential conformance (G); proof-chain integration; full
+closure pending D, F and B2
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed--same-posture-as-b`
 
-1. Is the receipt part of the IR document, or a sibling artifact bound by
-   digest? (`PRIMITIVE-IR.md` open question #1)
-2. Is a receipt produced on every materialization call, or only at specific
-   points (e.g. release-time, not every runtime resolution)?
-3. Minimum candidate field set (per `BOUNDARY.md`'s sketch) — decide which of
-   these are actually in v1, not just possible:
-   ```text
-   grammar_version
-   primitive_release
-   schema_version
-   input_digest
-   materialized_digest
-   field provenance (authored / defaulted / derived / observed / unavailable)
-   defaults applied
-   derivations applied
-   unresolved/unknown markers
-   validator/version identity
-   ```
-4. Where does the receipt's own schema live — does it get a home in
-   `cic-primitives`/`cic-schema-registry` as a real, versioned schema, so
-   both the Go and Rust implementations are provably targeting the same
-   definition rather than each hand-rolling a struct that happens to agree
-   today?
+1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
+   is a *recovered* decision: `BOUNDARY.md` already settled it, with its
+   own stated reason (avoiding the archived model's infinite provenance
+   regress). `PRIMITIVE-IR.md` open question #1 is answered.
+2. **Closed:** produced on every materialization call, not only at
+   release — matches what's already landed in Go (`core/nexus/iac`'s
+   `proof` is computed per `Evaluate()` call, far more often than a
+   release/signing event).
+3. **Partially decided:** the minimum field set reconciles `BOUNDARY.md`'s
+   sketch with Relay's already-landed `proof` (A0) — digests,
+   `applied_defaults`/`derived_values` (derived from B3, see item 5
+   below), and `signature` (not in `BOUNDARY.md`'s sketch at all; Relay
+   already signs this, adopted) are decided. `grammar_version`/
+   `primitive_release`/`schema_version`/validator identity are reserved
+   for section D. `unresolved/unknown markers` cannot be specified until
+   B2 (`missing`/`unknown`) has a real shape. `conformance_plan_digest`/
+   `observation_digest` are section F's territory (intent/state
+   comparison), named so they aren't dropped, not claimed as decided
+   here.
+4. **Partially decided:** the schema does **not** live in
+   `cic-primitives`' `schemas/atomic/`/`schemas/aggregate/` — giving the
+   receipt a primitive's schema home would reintroduce the exact
+   category error `BOUNDARY.md`'s regress argument (item 1) exists to
+   avoid. Whether it lives in this repo instead, or needs its own
+   location, is deferred until item 3's field list is actually complete.
+5. **Closed:** `applied_defaults`/`derived_values` are **computed from**
+   `MaterializedField.provenance` (B3) per field, not independently
+   tracked — the same two-sources-of-truth risk A0 found elsewhere,
+   closed here by construction rather than by convention.
 
 The receipt is not a byproduct. If the CIC proof chain is to mean anything
 here, the materialization receipt **is** the evidence that the custody

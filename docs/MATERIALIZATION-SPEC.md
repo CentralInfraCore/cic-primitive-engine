@@ -490,3 +490,143 @@ kept separate on both read and write per D-012).
   response-time gates, for a module that is itself an untrusted requester
   (not just the external API caller this section assumed). Not decided
   here.
+
+## C — Receipt schema (PARTIALLY DECIDED, not closed — same posture as B)
+
+```text
+Status: PARTIALLY DECIDED, not closed.
+Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
+         materialization, not just at release), C5 (applied_defaults/
+         derived_values are DERIVED from B3's per-field provenance, not
+         independently maintained data).
+Open:    C3 (the full v1 field list) and C4 (where the receipt's own
+         schema lives) are only PARTIALLY decided -- both have a part
+         that depends on sections not yet closed. Does not block C1/
+         C2/C5 from being used, but the receipt is not a finished,
+         implementable artifact until C3/C4 close.
+```
+
+### C1. Sibling artifact, bound by digest — not part of the IR
+
+**This is a recovered decision, not a new one.** `docs/BOUNDARY.md`
+already settled this, with its own stated reason: *"This is deliberately
+beside the data, not inside it. The archived model made provenance a
+node member — every primitive was a node, every node had an `origin`, so
+an `origin` that were itself a primitive needed one of its own, without
+end. A receipt has no such regress."* `PRIMITIVE-IR.md`'s open question
+#1 (*"is the receipt part of the IR document or a sibling artifact bound
+by digest?"*) is answered: **sibling artifact**, bound to the
+materialized data by `input_digest`/`output_digest` (A7's digest format),
+never embedded inside the `MaterializedField` tree itself.
+
+### C2. Produced on every materialization, not only at release time
+
+`BOUNDARY.md`'s sketch doesn't say when a receipt is produced.
+**Decision:** every materialization call produces one — not only a
+release-time/signing event. This matches what's already landed and
+running in Go: `core/nexus/iac`'s `proof` (A0's inventory) is computed
+per `Evaluate()` call — i.e. per runtime conformance check, which is far
+more frequent than a release — and `digest.go`/`node.go`'s `Digest()`
+functions are plain, cheap, always-available calls with no "only at
+release" gate anywhere in the code. Treating the receipt as release-only
+would be new, invented behavior inconsistent with what's already proven;
+adopting "every call" is the same "don't invent what's already decided
+by running code" posture section A took for the canonical format itself.
+
+### C3. Minimum field set — only partially decided
+
+Reconciling `BOUNDARY.md`'s sketch with what Relay's `proof` already
+has landed (A0's inventory) surfaces more fields than either source
+names alone:
+
+```text
+field                      source                  status
+---------------------------------------------------------------------
+schema.digest              BOUNDARY.md             decided
+input_digest                BOUNDARY.md             decided
+output_digest                BOUNDARY.md             decided
+applied_defaults[]          BOUNDARY.md             decided -- see C5
+derived_values[]            BOUNDARY.md             derived -- see C5
+signature                   proof.go (A0, Go-only)  decided -- not in
+                                                      BOUNDARY.md's
+                                                      sketch at all;
+                                                      Relay already
+                                                      signs this, adopt
+engine.version / grammar_version / primitive_release /
+validator identity          OPEN-QUESTIONS' own C candidate list
+                                                      OPEN -- this is
+                                                      section D (version
+                                                      binding)'s job, not
+                                                      C's; C just
+                                                      reserves the field
+unresolved/unknown markers  OPEN-QUESTIONS' own C candidate list
+                                                      OPEN -- genuinely
+                                                      blocked on B2
+                                                      (`missing`/
+                                                      `unknown`); cannot
+                                                      specify the shape
+                                                      of a marker for a
+                                                      state that isn't
+                                                      defined yet
+conformance_plan_digest /
+observation_digest          proof.go (A0, Go-only)  OPEN -- this is
+                                                      section F (output
+                                                      symmetry)'s
+                                                      territory (intent/
+                                                      state comparison),
+                                                      not provenance;
+                                                      named here so it
+                                                      isn't silently
+                                                      dropped, not
+                                                      claimed as decided
+```
+
+So C3 is decided for the data this section itself governs (digests,
+signature, the two provenance-derived lists) and explicitly open for the
+three rows that are really another section's job to fill in — this
+section reserves their place rather than inventing premature shapes for
+them.
+
+### C4. Schema home — partially decided
+
+The receipt needs a **formal, versioned schema both languages implement
+against** — the same cross-language concern driving this whole effort.
+**Decided:** it does **not** live in `cic-primitives`' `schemas/atomic/`
+or `schemas/aggregate/` — C1's own reasoning (BOUNDARY.md's regress
+argument) is specifically about the receipt NOT being a primitive/node,
+so giving it a primitive's schema home would reintroduce the exact
+category error that reasoning exists to avoid. **Open:** whether its
+schema lives in this repo (`cic-primitive-engine`, as the engine's own
+output-format definition — the natural reading of "the engine
+materializes and proves") or needs its own location is not yet decided,
+and shouldn't be until C3's field list is actually complete — schema-ing
+a partially-known field set would bake in gaps.
+
+### C5. `applied_defaults`/`derived_values` are derived from B3's per-field provenance, not a second source
+
+**Decision:** the receipt does not independently track which fields were
+defaulted or derived — it is **computed from** `MaterializedField.provenance`
+(B3), already decided and already present per field. Walking every
+materialized field: a `provenance: schema_default` field contributes one
+`applied_defaults` entry; a `provenance: derived` field contributes one
+`derived_values` entry. This closes `BOUNDARY.md`'s implicit ambiguity
+(it shows both the per-field idea and the receipt's aggregate lists
+without stating which drives which) in the direction that avoids a
+second, independently-maintained source of the same fact — exactly the
+two-sources-of-truth risk this whole effort exists to prevent (cf. A0's
+own framing: two implementations of the same fact silently diverging).
+
+### C6. What this does and doesn't close
+
+**Closed:** C1 (sibling artifact), C2 (produced every call), C5 (derived
+from B3, not duplicated).
+
+**Open:**
+- C3's version-identity fields — section D's job, reserved here, not
+  specified here.
+- C3's unresolved/unknown markers — blocked on B2, cannot be specified
+  until `missing`/`unknown` have a real shape.
+- C3's `conformance_plan_digest`/`observation_digest` — section F's
+  territory (intent/state comparison), named so it isn't dropped, not
+  claimed as settled.
+- C4's exact schema location — deferred until C3 is actually complete.
