@@ -70,9 +70,17 @@ now, with the argument recorded, not asserted again.)
 **C was built on B's closed parts (B1/B3/B4/B5) before B2 closed**, and
 remains partially decided for its own, separate reasons: C1/C2 are
 settled, C3's version-identity row is now also closed (D1's four
-identifier groups filled it in, once D closed — see below), C5's
-classification rule is settled but its entry-evidence payload is open,
-and C3's remaining rows (`signature`; `unresolved/unknown markers`;
+identifier groups filled it in, once D closed — see below), C5 is now
+closed in full (classification — provenance alone decides list
+membership — **and** the entry-evidence payload: `DefaultEvidence
+{rule, value_digest}` for schema defaults, `DerivedEvidence{rule,
+inputs, value_digest}` for derivations, produced inline by the same
+materialization step that applies the default or runs the derivation,
+never folded into B3's closed `provenance` enum — `inputs` is the
+exact paths that invocation actually read, not a static property
+declared by the rule's definition, and `value_digest` keeps the two
+evidence shapes symmetric), and C3's remaining rows
+(`signature`; `unresolved/unknown markers`;
 `conformance_plan_digest`/`observation_digest`) plus C4 (schema home)
 are reserved for F or genuinely ungrounded, not guessed at. C3's
 `unresolved/unknown markers` row was specifically reserved pending B2
@@ -125,12 +133,12 @@ C4's exact receipt layout is still open — with its own verdict
 vocabulary (`NOT_COMPARABLE`/`DIVERGENCE`),
 deliberately distinct from `conformance.go`'s intent-vs-observed
 verdicts (F3). What G cannot yet do is run with full coverage: any
-vector touching C3's still-open fields, C5's evidence record, or F's
-unbuilt comparator is out of scope until those close (B2 no longer
-belongs on this list — it closed in a later pass). Every section A–G
-now has at least a decided core — B is fully closed; C, E and F remain
-explicitly partial. The next work is closing those named items, not
-opening new sections.
+vector touching C3's still-open fields or F's unbuilt comparator is
+out of scope until those close (B2 and C5 no longer belong on this
+list — both closed in later passes). Every section A–G now has at
+least a decided core — B and C5 are fully closed; C's remaining rows,
+E and F remain explicitly partial. The next work is closing those
+named items, not opening new sections.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -375,21 +383,30 @@ conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 ### C. Receipt schema
 
 **Status:** **PARTIALLY DECIDED, not closed.** C1 (sibling artifact, not
-IR-embedded), C2 (produced every materialization call), and C3's
+IR-embedded), C2 (produced every materialization call), C3's
 version-identity row (filled in by D1's four identifier groups, once D
 closed — a later-pass fill-in, not decided when this table was first
-written) are settled. C5's *classification* rule is settled
-(`provenance` alone decides whether an `applied_defaults`/
-`derived_values` entry exists — no second source needed for that
-yes/no), but C5's entry *evidence* (`rule`/`inputs`/`value_digest`) is
-open: the three-value `provenance` enum cannot supply it, and the
-execution record it would come from isn't specified yet. C3's remaining
-rows (`signature`; `unresolved/unknown markers`, now blocked on F's
-coverage-projection decision rather than B2, which has since closed;
-`conformance_plan_digest`/`observation_digest`, F's territory) and C4
-(schema home, still deferred until C3's remaining rows close) are open.
+written), and C5 in full are settled. C5 closes both its
+*classification* rule (`provenance` alone decides whether an
+`applied_defaults`/`derived_values` entry exists — no second source
+needed for that yes/no) **and** its entry *evidence*: `rule`/
+`value_digest` for a schema default (`DefaultEvidence`) and `rule`/
+`inputs`/`value_digest` for a derivation (`DerivedEvidence`), produced
+inline by the same materialization step that applies the default or
+runs the derivation — a C-owned companion fact, never folded into B3's
+closed `provenance` enum. `inputs` records the exact paths that
+specific invocation actually read, not a static property declared by
+the rule's own definition; `value_digest` is present on both evidence
+shapes so a `derived_values` entry is auditable on its own, the same
+way an `applied_defaults` entry already is. C3's remaining rows
+(`signature`; `unresolved/unknown
+markers`, now blocked on F's coverage-projection decision rather than
+B2, which has since closed; `conformance_plan_digest`/
+`observation_digest`, F's territory) and C4 (schema home, still
+deferred until C3's remaining rows close) are open.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending F and C5's evidence-record specification
+closure pending C3's remaining rows, C4, and F (C5's evidence record no
+longer blocks this)
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -448,12 +465,13 @@ closure pending F and C5's evidence-record specification
    category error `BOUNDARY.md`'s regress argument (item 1) exists to
    avoid. Whether it lives in this repo instead, or needs its own
    location, is deferred until item 3's field list is actually complete.
-5. **Classification closed; evidence open — review caught an
-   overclaim here too.** B3's `provenance` was first wrongly scoped
-   "intent/input side only," which couldn't produce `BOUNDARY.md`'s own
-   state-side `derived_values` example (`$.state.effective_state`,
-   derived from `$.state.admin_state`/`$.state.oper_state`). Fixed:
-   `authored`/`schema_default` stay intent-side only (the latter also
+5. **CLOSED — classification and evidence, both specified; review
+   caught an overclaim here too, on the way to closing it.** B3's
+   `provenance` was first wrongly scoped "intent/input side only,"
+   which couldn't produce `BOUNDARY.md`'s own state-side
+   `derived_values` example (`$.state.effective_state`, derived from
+   `$.state.admin_state`/`$.state.oper_state`). Fixed: `authored`/
+   `schema_default` stay intent-side only (the latter also
    independently forbidden state-side by B1's defaultability rules), but
    `derived` can occur on either side — a state field can carry both
    `coverage: observed` and `provenance: derived` at once. **Then a
@@ -466,10 +484,37 @@ closure pending F and C5's evidence-record specification
    two distinct things: `provenance` is the **authoritative
    classification** (decides list membership, avoiding a second source
    for that fact — the real two-sources-of-truth risk A0 cares about),
-   while the entry's **evidence payload** comes from a separate
-   materialization/derivation execution record this section does not
-   yet specify. The receipt is a deterministic projection of both, not
-   of `provenance` alone.
+   while the entry's **evidence payload** is now specified as a
+   C-owned companion fact, produced inline by the same materialization
+   step that already has to know it to do its own job:
+   `DefaultEvidence{rule, value_digest}` when Normalize applies a
+   schema default (`rule` a literal, unversioned `"schema-default"`
+   constant — the corpus shows exactly one default-application
+   algorithm, not a family of named rules), `DerivedEvidence{rule,
+   inputs, value_digest}` when a derivation step runs (`rule` a stable,
+   versioned string per `BOUNDARY.md`'s own `effective-state-v1`
+   example). **A third overclaim, caught on review of the PR that
+   closed this item:** the first draft defined `inputs` as a *static*
+   list declared by the rule's own definition, and gave `DerivedEvidence`
+   no `value_digest` at all (asymmetric with `DefaultEvidence`).
+   Neither survives — `BOUNDARY.md`'s single example happens to read a
+   fixed pair of paths every time, but that is a property of that one
+   rule, not a constraint on every future rule (a selector-based
+   aggregation's consumed set can vary by invocation); corrected so
+   `inputs` always records the exact paths THIS invocation actually
+   read, which also still matches the one existing example, exactly.
+   `value_digest` was added to `DerivedEvidence` so a single
+   `derived_values` entry is auditable on its own — the receipt's
+   top-level `output_digest` already binds the whole canonical output,
+   but cannot verify one entry without re-canonicalizing and extracting
+   that path from the full document, the same gap a per-entry digest
+   closes for `applied_defaults` already. Neither shape modifies B3's
+   already-closed `provenance` enum — the evidence sits beside the
+   classification, the same way C1 keeps the receipt beside the
+   materialized data rather than embedding it. The receipt is a
+   deterministic projection of both: `provenance` decides which list an
+   entry belongs to, the matching `*Evidence` struct supplies that
+   entry's payload.
 
 The receipt is not a byproduct. If the CIC proof chain is to mean anything
 here, the materialization receipt **is** the evidence that the custody
@@ -692,9 +737,9 @@ include.
 ### G. Differential conformance
 
 **Status:** **PARTIALLY DECIDED, not closed** — and cannot fully close
-until C3's open fields/evidence record and F's comparator implementation
-do (B2 has since closed and no longer blocks this). The comparison
-*harness structure* is fixed; full test *coverage* is not yet possible.
+until C3's open fields and F's comparator implementation do (B2 and C5
+have since closed and no longer block this). The comparison *harness
+structure* is fixed; full test *coverage* is not yet possible.
 **Blocks:** nothing further — this is the last section
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#g--differential-conformance-partially-decided-not-closed`
 
@@ -763,9 +808,11 @@ anything about parity.
 **Not closed, and cannot be yet:** full test coverage. Any vector
 touching C3's still-open fields (its `unresolved/unknown markers` row
 specifically — B2 itself has since closed, but that row's receipt-field
-shape has not), C5's evidence record, or F's not-yet-implemented
-comparator is out of scope for the harness today — named as a gap, not
-silently passed or skipped.
+shape has not) or F's not-yet-implemented comparator is out of scope
+for the harness today — named as a gap, not silently passed or
+skipped. C5's evidence record has since closed with a specified shape
+(`DefaultEvidence`/`DerivedEvidence`) and no longer belongs on this
+list.
 
 **This closes the first pass through A–G.** Every section has at least
 a decided core; B, C, E and F remain explicitly partial, each with
