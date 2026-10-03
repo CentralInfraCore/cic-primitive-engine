@@ -99,10 +99,14 @@ since closed too, by B7 (added later, while closing F1): coverage is
 part of the materialized semantic claim `output_digest` already
 commits to, so this row needs no field of its own — not B2's or C3's
 call, but B7's, the same way the row was always going to be decided
-somewhere else, not here. C3's remaining rows
+somewhere else, not here. **C4's own WHICH-REPO question has since
+closed too** (added later, while closing C4): the schema lives in this
+repo, not a new or separate location — see C4's own entry below for
+the three convergent reasons. C3's remaining rows
 (`conformance_plan_digest`/`observation_digest`; the signature-field
-layout question just named) plus C4 (schema home) are reserved for F
-or genuinely ungrounded, not guessed at.
+layout question just named) plus C4's actual schema *text* (not which
+repo hosts it) are reserved for F or genuinely ungrounded, not guessed
+at.
 
 **D is now closed too** — four identifiers, not one or two (grammar
 digest, primitive release identity, domain schema identity — logical
@@ -469,14 +473,18 @@ markers` row is also now closed, by B7 (added later, while closing
 F1): coverage, including `unknown`, is already part of the
 materialized semantic claim `output_digest` commits to, so this row
 needs no field of its own — the custody question is settled, not
-merely unblocked. C3's remaining rows (`conformance_plan_digest`/
-`observation_digest`, F's territory; the signature-field layout
-question just named) and C4 (schema home, still deferred until C3's
-remaining rows close) are open.
+merely unblocked. **C4's WHICH-REPO question is also now closed**
+(added later, while closing C4): the schema lives in this repo, not a
+new or separate location — see C4's own entry below. C3's remaining
+rows (`conformance_plan_digest`/`observation_digest`, F's territory;
+the signature-field layout question just named) and C4's actual schema
+*text* (field-by-field layout, still deferred until C3's remaining
+rows close) are open.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending C3's remaining F-territory row, C4, and F (C5's
-evidence record, C3's engine-doesn't-sign sub-decision, and C3's
-unresolved/unknown-markers row no longer block this)
+closure pending C3's remaining F-territory row, C4's schema text, and F
+(C5's evidence record, C3's engine-doesn't-sign sub-decision, C3's
+unresolved/unknown-markers row, and C4's which-repo question no longer
+block this)
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -562,12 +570,33 @@ unresolved/unknown-markers row no longer block this)
    with no landed precedent either; `observation_digest` **is**
    landed — but as a field of `ConformanceResult` (the drift verdict),
    a different artifact from this receipt, not simply reusable here.
-4. **Partially decided:** the schema does **not** live in
-   `cic-primitives`' `schemas/atomic/`/`schemas/aggregate/` — giving the
-   receipt a primitive's schema home would reintroduce the exact
-   category error `BOUNDARY.md`'s regress argument (item 1) exists to
-   avoid. Whether it lives in this repo instead, or needs its own
-   location, is deferred until item 3's field list is actually complete.
+4. **CLOSED as to WHICH repo; the schema's own text stays deferred.**
+   The schema does **not** live in `cic-primitives`' `schemas/atomic/`/
+   `schemas/aggregate/` — giving the receipt a primitive's schema home
+   would reintroduce the exact category error `BOUNDARY.md`'s regress
+   argument (item 1) exists to avoid. This item originally deferred the
+   *whole* "which repo, or a new location" question until item 3's
+   field list was complete, reasoning that schema-ing a partially-known
+   field set would bake in gaps. That reasoning is sound for *writing
+   the schema's actual text*, but not for *deciding which repository
+   hosts it* — a coarser, organizational fact that doesn't depend on
+   knowing every field, the same kind of split D1 drew between which
+   version-identity facts must exist and how they're nested on the
+   wire. **Decided: the schema lives in this repo
+   (`cic-primitive-engine`), not a new or separate location** — three
+   convergent reasons: (a) A0's closed meta-decision that this library
+   is the single semantic authority, not a contract split across
+   repos; (b) the already-closed `signature` row (item 5's sibling
+   decision on PR #14) establishing the receipt needs none of the
+   signed-release pipeline that justified splitting `cic-primitives`
+   out from this engine in the first place, so that reason for a split
+   doesn't apply here; (c) `docs/PRIMITIVE-IR.md` — the receipt's own
+   sibling artifact per item 1 — already lives in this repo with nobody
+   ever treating its repo as an open question, an unquestioned
+   precedent for the identical situation. **Still genuinely open:** the
+   exact in-repo path (trivial, non-blocking) and the schema's actual
+   field-by-field text, which still cannot be written until item 3's
+   remaining field-set rows close.
 5. **CLOSED — classification and evidence, both specified; review
    caught an overclaim here too, on the way to closing it.** B3's
    `provenance` was first wrongly scoped "intent/input side only,"
