@@ -672,7 +672,10 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          B7 settles that coverage, including `unknown`, is part of the
          materialized semantic output committed by `output_digest`; it
          does not need its own receipt row for custody purposes, so
-         this row needs no field of its own in C's schema).
+         this row needs no field of its own in C's schema), and C4's
+         WHICH-REPO question (CLOSED -- the schema lives in this repo,
+         `cic-primitive-engine`, not a new or separate location; see
+         C4 for the three convergent reasons).
 Open:    C3's remaining rows (conformance_plan_digest/observation_digest,
          F's territory; WHETHER the receipt schema itself ever carries a
          signature-related field populated by an external authority,
@@ -681,12 +684,12 @@ Open:    C3's remaining rows (conformance_plan_digest/observation_digest,
          engine-doesn't-sign closure; and, smaller, whether the receipt
          should ADDITIONALLY carry a redundant coverage projection as an
          audit convenience, not a custody requirement -- F1/F4's
-         territory), and C4 (schema location, still deferred until C3's
-         remaining rows close). Does not block
-         C1/C2/C3-version/C5/C3-signing/C3-unresolved-unknown from
-         being used, but the receipt is not a finished, implementable
-         artifact until
-         C3/C4 close.
+         territory), and C4's actual schema TEXT (the field-by-field
+         layout, still deferred until C3's remaining rows close -- only
+         WHICH repo hosts it is closed, not what it says). Does not
+         block C1/C2/C3-version/C5/C3-signing/C3-unresolved-unknown/C4-
+         repo from being used, but the receipt is not a finished,
+         implementable artifact until C3 and C4's schema text close.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -910,7 +913,7 @@ an audit convenience (F1/F4's call, not a custody question), and the
 two F-territory digests. C4 still owns how every one of the closed
 facts is actually nested and named on the wire.
 
-### C4. Schema home — partially decided
+### C4. Schema home — CLOSED as to WHICH repo; the schema's own text stays deferred
 
 The receipt needs a **formal, versioned schema both languages implement
 against** — the same cross-language concern driving this whole effort.
@@ -918,12 +921,80 @@ against** — the same cross-language concern driving this whole effort.
 or `schemas/aggregate/` — C1's own reasoning (BOUNDARY.md's regress
 argument) is specifically about the receipt NOT being a primitive/node,
 so giving it a primitive's schema home would reintroduce the exact
-category error that reasoning exists to avoid. **Open:** whether its
-schema lives in this repo (`cic-primitive-engine`, as the engine's own
-output-format definition — the natural reading of "the engine
-materializes and proves") or needs its own location is not yet decided,
-and shouldn't be until C3's field list is actually complete — schema-ing
-a partially-known field set would bake in gaps.
+category error that reasoning exists to avoid.
+
+**This section previously deferred the whole question — "whether its
+schema lives in this repo or needs its own location" — until C3's
+field list was complete, reasoning "schema-ing a partially-known field
+set would bake in gaps."** That reasoning is sound for one of the two
+things "schema home" was asking, but not the other, and conflating
+them is why the whole question sat open longer than it needed to:
+*writing the schema's actual field list* genuinely cannot happen before
+C3 completes (C3 still has two F-territory rows open —
+`conformance_plan_digest`/`observation_digest`, blocked on F's
+comparator, which doesn't exist in either language yet). *Deciding
+which repository hosts that eventual schema* is a coarser,
+organizational fact that doesn't depend on knowing every field — the
+same kind of distinction D1 drew between WHICH version-identity facts
+must exist and HOW they're nested on the wire (C4's own job, elsewhere
+in this section), or B7 drew between semantic membership and physical
+layout. Splitting the two lets the repo question close now, without
+waiting on F.
+
+**Decided: the schema lives in this repo (`cic-primitive-engine`), not
+a new or separate location.** Three already-closed or already-stated
+facts converge on this, not a single guess:
+- **A0's meta-decision** (closed), the strongest of the three on its
+  own: *"the materialization library is the single semantic
+  authority... not a second, competing contract to keep alive
+  indefinitely."* The receipt is an artifact produced by, and
+  describing, this engine's own materialization semantics — so the
+  schema describing it belongs to the same single authority as
+  everything else that semantics covers. Hosting it anywhere else
+  would mean the authority that defines the receipt's content and the
+  repository that owns its schema disagree about who's in charge of
+  it.
+- **Correction (review-caught on PR #18): a second argument originally
+  claimed the receipt "needs none of" `cic-primitives`' signed,
+  Vault-backed release pipeline — that overreaches past what C3's
+  `signature` row actually closed.** That row closed only that *this
+  engine* does not sign and does not decide signer authority; it left
+  genuinely open whether the receipt's own schema reserves a slot for
+  an externally-populated signature (parallel to `release.sign`) —
+  schema ownership and producer ownership are different facts, per
+  D-015, which is exactly why PR #14 refused to claim the schema
+  "carries no signature field." Claiming the receipt needs *none* of
+  that machinery risks being contradicted the moment C4 decides that
+  slot question either way. **The actually-sound version of this
+  argument doesn't depend on that undecided question at all:** semantic
+  ownership (who defines what the receipt's fields mean) and signature
+  *production* (who, if anyone, ever signs it) are orthogonal.
+  Whichever way C4 eventually decides the signature-slot question,
+  external signing does not transfer ownership of the receipt's
+  *semantic* schema to whatever authority performs that signing — the
+  same way `cic-primitives`' own schema isn't owned by Vault just
+  because Vault signs its releases. This repo defines the semantics
+  either way.
+- **`docs/PRIMITIVE-IR.md` is precedent for this repo owning the
+  contract for an artifact it produces — not for a formal schema
+  already existing here.** Correction (review-caught): `PRIMITIVE-IR.md`
+  itself opens with *"Not specified yet. This file states what the IR
+  must satisfy, so that the constraints are fixed before the
+  representation is"* — it is a required-properties/architectural
+  contract, not a working formal schema; no formal schema exists yet
+  for either artifact. The precedent this actually supports is narrower
+  but still real: the IR's *contract* is already, unquestionably, owned
+  by this repo, and the receipt is `PRIMITIVE-IR.md`'s own sibling
+  artifact (C1) — produced by the identical pipeline, for the identical
+  consumers. Treating the receipt's contract as belonging elsewhere
+  would need a specific, stated reason; none of the three facts above
+  supplies one.
+
+**Still open, and genuinely so — not decided by the above:** the exact
+file path/directory within this repo (a small implementation detail,
+not blocking), and — unchanged from before — the schema's actual field
+enumeration, which still cannot be written until C3's two remaining
+F-territory rows close.
 
 ### C5. `provenance` is the classification source; the entry's evidence is a separate, now-specified record — CLOSED
 
@@ -1079,11 +1150,22 @@ both evidence shapes symmetric rather than leaving derived entries
 unverifiable on their own), C3's `signature` row **as to whether
 this engine signs** (CLOSED — it does not, and does not decide signer
 authority; this repo's own README excludes Vault access/counter-
-signature policy from this engine's scope), and C3's
+signature policy from this engine's scope), C3's
 `unresolved/unknown markers` row (CLOSED, by B7 — added later, while
 closing F1: coverage, including `unknown`, is already committed via
 `output_digest` as part of the materialized semantic claim, so this
-row needs no field of its own in the receipt).
+row needs no field of its own in the receipt), and **C4's WHICH-REPO
+question** (CLOSED — the schema lives in this repo,
+`cic-primitive-engine`, not a new or separate location: A0's single-
+semantic-authority meta-decision as the strongest reason on its own;
+semantic ownership and signature *production* being orthogonal, so
+however C4 eventually settles the still-open signature-slot question,
+external signing never transfers ownership of the receipt's semantic
+schema to whoever signs it; and `PRIMITIVE-IR.md` already establishing
+that this repo owns the *contract* for an artifact it produces, the
+receipt's own sibling per C1 — narrower precedent than "a formal
+schema already lives here," since no formal schema exists yet for
+either artifact, but real).
 
 **Open:**
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
@@ -1101,11 +1183,12 @@ row needs no field of its own in the receipt).
   projection**, purely as an audit convenience — not a custody
   question any more (B7 settled that), but F1/F4's smaller, remaining
   one.
-- C4's exact schema location — deferred until C3 is actually complete
-  (still blocked on the F-territory digest row above and the
-  signature-field layout question just named; "this engine doesn't
-  sign" and `unresolved/unknown markers` no longer block it, since both
-  closed).
+- **C4's actual schema text** — the field-by-field layout, still
+  deferred until C3's F-territory row above actually closes (schema-ing
+  a partially-known field set would bake in gaps); unlike before, only
+  the *text* waits on this now, not *which repo* hosts it, and not the
+  exact in-repo file path, a small, non-blocking detail left for
+  whoever writes the file.
 
 ## D — Version binding (closes section D)
 
@@ -1824,10 +1907,11 @@ For each conformance vector, given a Go-side and a Rust-side result:
 
 3. RECEIPT SEMANTIC EQUALITY (sections C, D1.4) -- only reached if (2)
    matched. **Correction (review-caught): this is a semantic
-   projection, not a wire-level field removal** -- C4 (receipt schema
-   home/exact layout) is still open, so there is no fixed field path
-   to name "remove" yet; specifying one here would decide C4's layout
-   by accident, from inside G, before C4 itself closes.
+   projection, not a wire-level field removal** -- C4's exact field
+   layout is still open (only WHICH repo hosts the schema has closed),
+   so there is no fixed field path to name "remove" yet; specifying one
+   here would decide C4's layout by accident, from inside G, before C4
+   itself closes.
 
    Construct the comparison projection of each receipt:
      - include every receipt field whose semantics are required to
