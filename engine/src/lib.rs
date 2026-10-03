@@ -42,11 +42,17 @@
 //!
 //! # Status
 //!
-//! Early. `error` and `reader` are extracted and working; the stages above
-//! `Read` are not implemented yet. Nothing here is a stable API, and no module
-//! should depend on it as one.
+//! Early. `error` and `reader` are extracted and working. `canonical`
+//! implements `Stage::Canonicalize`'s byte format (section A of
+//! `docs/MATERIALIZATION-SPEC.md`) as a standalone primitive, over whatever
+//! [`reader::Value`] tree it is handed — it is not yet wired into a pipeline
+//! stage, because `Parse`/`Normalize`/`Resolve`/`Validate`, the stages that
+//! would produce a materialized tree to canonicalize, do not exist yet.
+//! Nothing here is a stable API, and no module should depend on it as one.
 
+pub mod canonical;
 pub mod error;
 pub mod reader;
 
+pub use canonical::{digest, to_canonical_json};
 pub use error::{code, Error, Result, Stage};
