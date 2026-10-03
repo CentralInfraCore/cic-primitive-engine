@@ -12,3 +12,9 @@ repository.workspace = true
 # parser, so this pins no second YAML implementation.
 saphyr = "0.0.6"
 saphyr-parser = "0.0.6"
+# A7's digest (sha256: + lowercase-hex) -- the RustCrypto implementation,
+# not a hand-rolled one: a cryptographic primitive is exactly the case where
+# reusing an audited, widely-depended-on crate is the right call, unlike the
+# canonicalization logic itself (section A), which is ported by hand so this
+# crate stays self-contained.
+sha2 = "0.10"

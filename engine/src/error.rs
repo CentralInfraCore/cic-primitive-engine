@@ -81,6 +81,15 @@ pub mod code {
     /// A structural position holds something of the wrong arity — a mapping
     /// where the grammar fixes a list, or the reverse. Raised at `Stage::Parse`.
     pub const TYPE_MISMATCH: &str = "E_TYPE_MISMATCH";
+
+    /// A number is `NaN` or infinite. Canonical JSON (section A) has no
+    /// representation for either — RFC 8259 numbers are finite by
+    /// construction — so a value that reaches canonicalization still
+    /// carrying one cannot be written, not "written specially". Raised at
+    /// `Stage::Canonicalize`. Reachable today from authored YAML's own
+    /// `.nan`/`.inf`/`-.inf` core-schema tags, verified empirically, not
+    /// hypothetical.
+    pub const NON_FINITE_NUMBER: &str = "E_NON_FINITE_NUMBER";
 }
 
 /// The single error type this crate raises.
