@@ -55,8 +55,15 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-**A0, A and B are now closed** (2026-10-03) — see `docs/A0-INVENTORY.md`
-and `docs/MATERIALIZATION-SPEC.md`. **C is next.**
+**A0 and A are now closed; B is PARTIALLY DECIDED, not closed**
+(2026-10-03) — see `docs/A0-INVENTORY.md` and
+`docs/MATERIALIZATION-SPEC.md`. B's `missing`/`unknown` question (B2)
+remains open and could still change B1's three-axis count — review
+caught that an earlier version of this file claimed B was fully closed
+while its own B2 was marked OPEN, a real contradiction, not an
+admin detail. **C may proceed in parallel** on the parts that don't
+depend on B2 (B1/B3/B4/B5 are stable enough to build on), but section B
+itself does not close until B2 does.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -225,13 +232,18 @@ number canonicalization still has to be written).
 
 ### B. Semantic state model
 
-**Status:** **DECIDED** (the three-axis model, the type shape, the A0.4
-conformance resolution, and the two-trigger `default_injection` logic),
-with **two terms left genuinely open** (`missing`, `unknown` — see below)
-rather than guessed at
+**Status:** **PARTIALLY DECIDED, not closed.** B1 (the axis model, modulo
+below)/B3 (type shape)/B4 (A0.4 conformance resolution)/B5
+(two-trigger `default_injection`) are settled. B2 (`missing`, `unknown`)
+is **OPEN** and blocks full closure — review caught that an earlier
+version of this status line said "DECIDED" while the spec's own B2
+said OPEN, a real contradiction. Resolving `missing` may even add a
+**fourth axis** (field-value presence/existence), which would revise
+B1, not just fill in a blank — so B1 itself is not 100% final either
+until B2 closes.
 **Blocks:** the materialized output's type shape (C, E); `default_injection`
-correctness
-**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-closes-section-b`
+correctness; full closure of this section
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-partially-decided-not-closed`
 
 `docs/BOUNDARY.md`'s "five distinct statements" are not five values of
 one enum — they're points on **three separate, orthogonal axes**:

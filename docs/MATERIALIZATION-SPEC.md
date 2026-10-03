@@ -185,16 +185,37 @@ for both languages from this point forward.
   marker is itself subject to A2's key-ordering once it's part of the
   materialized tree. Not decided here.
 
-## B — Semantic state model (closes section B)
+## B — Semantic state model (partially decided, not closed)
 
-**Decision:** the "five distinct statements" `docs/BOUNDARY.md` names
-(`missing`, `unknown`, `not_observed`, `not_implemented`, schema-applied
-default) are not five values of one enum — they are points on **three
-separate, orthogonal axes**. Collapsing them onto one axis is exactly the
-mistake `BOUNDARY.md` warns against; keeping them on three means a field
-can independently be, say, `not_implemented` (capability) **and**
+```text
+Status: PARTIALLY DECIDED, not closed.
+Closed:  B1 (the three axes), B3 (materialized-type shape), B4 (A0.4's
+         conformance conflict), B5 (default_injection's two gates).
+Open:    B2 -- what `missing` and `unknown` actually mean. Section B
+         does not close as a whole until these do. Resolving `missing`
+         in particular may turn out to need a FOURTH axis (a presence/
+         existence axis, separate from coverage) rather than fitting
+         into the three below -- that question is still live and could
+         still change B1's shape, not just fill in a blank.
+
+Sections downstream of B that only depend on B1/B3/B4/B5 (receipt
+provenance wiring in C, the capability/ACL gates in E) may proceed in
+parallel. Anything that depends on B2's resolution -- in particular,
+whether a fourth axis gets added -- must not be treated as settled
+until B2 closes.
+```
+
+**Decision (B1/B3/B4/B5 only):** the "five distinct statements"
+`docs/BOUNDARY.md` names (`missing`, `unknown`, `not_observed`,
+`not_implemented`, schema-applied default) are not five values of one
+enum. At least three of them are points on **three separate, orthogonal
+axes** — collapsing them onto one axis is exactly the mistake
+`BOUNDARY.md` warns against, and keeping them on three means a field can
+independently be, say, `not_implemented` (capability) **and**
 `unobserved` (coverage) **and** `authored` (provenance) at once, each
-fact recorded separately rather than forced into one slot.
+fact recorded separately rather than forced into one slot. Whether three
+axes is the final count, or `missing` turns out to need a fourth, is B2's
+open question below, not settled by this paragraph.
 
 ### B1. The three axes
 
@@ -435,20 +456,31 @@ asking at all). The internally-held materialized value (B3, now
 
 ### B6. What this does and doesn't close
 
-**Closed:** the three-axis model (B1), the materialized-type shape with
-`value` correctly optional rather than always-present (B3), the
-resolution of A0.4's conformance conflict as a named lossy projection
-(B4), and `default_injection`'s two independent triggers — capability and
-ACL, kept separate on both read and write per D-012 (B5).
+**Section B as a whole is PARTIALLY DECIDED, not closed.** It does not
+get a "what's closed" summary that reads as complete, because it isn't
+one yet — B2 is load-bearing for whether B1's three-axis count is even
+final (see the status block at the top of this section).
 
-**Not closed, deliberately — two genuinely open terms, not one:**
-- **`missing`** (B2) — review correctly caught that an earlier draft
-  wrongly collapsed this into coverage's `absent`. `BOUNDARY.md` calls all
-  five of its terms "different statements," and `observation.go`'s actual
+**Closed:** B1 (the axis model, modulo B2's open question about whether
+a fourth axis is needed), B3 (the materialized-type shape, with `value`
+correctly optional rather than always-present), B4 (the resolution of
+A0.4's conformance conflict as a named lossy projection), B5
+(`default_injection`'s two independent triggers — capability and ACL,
+kept separate on both read and write per D-012).
+
+**Open — B2, blocking full closure of section B:**
+- **`missing`** — review correctly caught that an earlier draft wrongly
+  collapsed this into coverage's `absent`. `BOUNDARY.md` calls all five
+  of its terms "different statements," and `observation.go`'s actual
   `absent`/`unobserved` split doesn't have an obvious slot for it either.
-  Left genuinely open.
-- **`unknown`** (B2) — offered as a reasoned candidate, explicitly not a
-  recovered fact. Review before treating it as settled.
+  Review also flagged that resolving this might require a **fourth axis**
+  (field-value presence/existence, distinct from coverage) rather than
+  fitting into B1's three — an open architectural question, not just a
+  missing label.
+- **`unknown`** — offered as a reasoned candidate, explicitly not a
+  recovered fact.
+
+**Also open, downstream of B generally:**
 - Section C (receipt schema) still has to decide how `provenance`
   (B1/B3) relates to the receipt's own `applied_defaults`/`derived_values`
   fields — are they the same data surfaced twice, or does the receipt
