@@ -777,12 +777,24 @@ to catch.
    enforces and the *release artifact itself* are different facts — a
    release could in principle re-sign the same grammar under a new
    envelope without the rules changing.
-3. **Schema version** — an individual *domain* schema's own version
-   (e.g. `storage-resource.v1.2.0`), which varies **per schema**,
-   independently of the grammar it's written against. A schema can
-   bump its own version (new field, narrowed conformance, ...) without
-   the grammar changing at all, and vice versa — the grammar can move to
-   v0.3.0 while every existing domain schema stays exactly where it was.
+3. **Domain schema identity** — not just a version number. **Correction
+   (review-caught):** an earlier draft defined this group as "schema
+   version" alone (e.g. `storage-resource.v1.2.0`), then D2 went on to
+   require "schema identity + version/digest" at the comparability gate
+   — a direct contradiction, and for the same reason item 1 isn't a bare
+   semver tag: **a version string alone is not an immutable content
+   identity.** Two files could both claim `v1.2.0` at different commits.
+   This group is three parts, still one logical identifier group (not a
+   fifth axis):
+   ```text
+   schema logical identity / canonical name   (e.g. cic:storage:StorageResource)
+   schema version                              (e.g. v1.2.0)
+   canonical schema digest                     (content hash, not a tag)
+   ```
+   All three vary together **per schema**, independently of the grammar
+   it's written against — a schema can bump its own version (new field,
+   narrowed conformance, ...) without the grammar changing at all, and
+   vice versa.
 4. **Validator/engine identity** — which *implementation* materialized
    this data, and its own version: e.g. `cic-primitive-engine-rust
    v0.1.0` vs `cic-primitive-engine-go v0.1.0`. Required specifically

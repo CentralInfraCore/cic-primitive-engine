@@ -421,8 +421,13 @@ identifiers, not one or two:
    (`primitives/@v0.2.0`) plus its own `source_commit`/`build_hash`;
    distinct from (1) because the rules a release enforces and the
    release artifact itself are different facts.
-3. **Schema version** — an individual domain schema's own version,
-   varying per schema, independently of the grammar.
+3. **Domain schema identity** — not a bare version number (review caught
+   this inconsistency: D2 requires "identity + version/digest," so the
+   group has to actually contain those). Three parts, one group: logical
+   identity/canonical name, version, and a canonical content digest —
+   for the same reason item 1 isn't a bare tag, a version string alone
+   isn't an immutable identity. Varies per schema, independently of the
+   grammar.
 4. **Validator/engine identity** — which implementation (Go vs. Rust)
    and its own version produced this materialization — required so
    section G's differential conformance can tell the two sides apart at
