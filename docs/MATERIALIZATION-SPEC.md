@@ -183,18 +183,31 @@ for both languages from this point forward.
   concern and A0.4's tri-state/boolean conformance conflict interact with
   this canonical form — e.g. whether a `not_implemented`/`deprecated`
   marker is itself subject to A2's key-ordering once it's part of the
-  materialized tree. Not decided here.
+  materialized tree. Not decided here. **Closed later, as B7** (added
+  after F1 surfaced that this forward reference was never actually
+  answered when B first closed): capability/coverage/provenance ARE part
+  of the materialized semantic claim `output_digest` commits to — but B7
+  decides that as semantic membership, not as the wire layout A2 governs;
+  the exact nesting/ordering question this bullet poses stays open, for
+  C4/E2b.
 
 ## B — Semantic state model (CLOSED)
 
 ```text
 Status: DECIDED, closed. B2 (missing/unknown, and the "is a fourth axis
 needed" meta-question) is now resolved -- see B2 below for the
-cross-document argument, not a repeated assertion.
+cross-document argument, not a repeated assertion. B7 is a later-pass
+addition (added while closing F1): A8 had deferred a question to this
+section that B's original closure never actually answered -- whether
+capability/coverage/provenance are part of the materialized semantic
+output at all. B7 answers it: yes, as semantic membership/canonical
+commitment, not as a wire-layout decision.
 Closed:  B1 (the three axes, confirmed final), B2 (missing = coverage's
          absent; unknown = a new, fourth coverage value), B3
          (materialized-type shape), B4 (A0.4's conformance conflict),
-         B5 (default_injection's two gates).
+         B5 (default_injection's two gates), B7 (capability/coverage/
+         provenance are part of the materialized semantic claim
+         output_digest commits to -- closing A8's forward reference).
 
 Named, not blocking this section's closure (PRIMITIVE-IR.md's
 `authored-absent` is not one of BOUNDARY.md's five terms; it came up
@@ -559,6 +572,82 @@ equated it with an authored literal `null`; its real representation
 happens to be `null`) is a separate open question, naturally section
 A's (canonical value representation), not resolved here.
 
+### B7. The three axes are part of the materialized semantic claim — closing A8's forward reference
+
+**This closes a gap A8 named but B's original closure never actually
+answered.** A8 explicitly deferred: *"Section B... still has to decide
+how the five-state concern... interact[s] with this canonical form —
+e.g. whether a `not_implemented`/`deprecated` marker is itself subject
+to A2's key-ordering once it's part of the materialized tree."* B6's
+closure never revisited this — a real, previously untracked gap,
+surfaced only while attempting to close F1/F4 (section F cannot decide
+whether `coverage` needs *projecting into the receipt* until it's
+settled whether `coverage` is part of the *materialized output* at
+all in the first place).
+
+**Decision: capability, coverage, and provenance are part of the
+materialized semantic output this engine commits to — not purely
+in-memory/engine-internal facts that vanish at the module boundary.**
+
+Two already-closed decisions force this, taken together, not a new
+assumption:
+- **B3** already states what a module actually sees: *"the value and
+  its status are different things a module can inspect independently,
+  and a module reading `.Value` never has to parse status out of the
+  value's own shape."* A module can inspect capability/coverage/
+  provenance, not only the bare value.
+- **`BOUNDARY.md`** already states what happens to in-process types at
+  a module boundary: *"The type system does not survive
+  serialization... what crosses is bytes, and bytes carry no
+  `Validated<_>`."* Across any real process boundary (WASM, subprocess,
+  wire), only data survives — never a Rust/Go type's internal
+  structure.
+
+A module on the other side of a real process boundary can only
+exercise B3's promised ability to inspect status independently of
+value if that status is actual *data* that crossed the wire — a
+type-level annotation that does not survive serialization is not
+something a WASM module can "inspect." B3's own promise, combined with
+`BOUNDARY.md`'s own rule about what survives a process boundary,
+already requires capability/coverage/provenance to be real, serialized
+data. This is not this section inventing new scope; it is the
+conclusion the two already-closed decisions jointly force, simply
+never stated as a canonicalization/commitment decision until now.
+
+**Consequence: a change in any of capability, coverage or provenance is
+a change in the materialized claim, and must therefore be covered by
+the canonical representation/`output_digest` (A7).** Two
+materializations with the identical `value` but different `coverage`
+(`observed` vs. `unknown`) or different `provenance` (`authored` vs.
+`schema_default`) are not the same materialized claim, and must not
+digest to the same `output_digest`. Concretely, for differential
+conformance (G): a Go implementation that reports `observed` for a
+field and a Rust implementation that reports `unknown` for the
+identical `value` must **diverge** at `output_digest` comparison —
+section A's canonical-byte-equality step (G3) already catches this
+once this decision is in effect, without G needing any new machinery
+of its own.
+
+**This decision does NOT prescribe the wire layout.** It closes
+*semantic membership* (these three facts are part of what the engine
+commits to) and *canonical commitment* (`output_digest` must cover
+them) — not *how* they are nested, named, or positioned in the
+canonical byte tree next to `value`. That stays exactly where A8
+already left wire-layout questions, and where C4/E2b's own open layout
+questions already live. Deciding the physical shape here would repeat
+the identical boundary violation this document has already corrected
+several times (most recently, D1's version-identity facts vs. C4's
+wire nesting of them) — this section closes **that this is committed**,
+not **how it is written down**.
+
+**Consequence for F1/F4 and C3, named here, closed there:** this does
+not mean the *receipt* (section C) must also carry a coverage
+projection — coverage no longer needs "rescuing" by the receipt for
+custody purposes, because it is already part of the materialized
+output `output_digest` protects. Whether the receipt *additionally*
+carries a redundant coverage projection as an audit convenience is a
+separate, non-custody question, addressed where F1/F4 actually live.
+
 ## C — Receipt schema (PARTIALLY DECIDED, not closed)
 
 ```text
@@ -572,22 +661,28 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          produced inline by the same step that applies a default or
          runs a derivation, never folded into B3's closed provenance
          enum; inputs is what THIS invocation actually read, not a
-         static rule-definition property), and C3's `signature` row AS
+         static rule-definition property), C3's `signature` row AS
          TO WHETHER THIS ENGINE SIGNS (CLOSED -- it does not, and does
          not decide signer authority; this engine's own README
          excludes Vault access/counter-signature policy from its
-         scope).
-Open:    C3's remaining rows (unresolved/unknown markers, blocked on
-         F's coverage-projection decision, not B2 or C5;
-         conformance_plan_digest/observation_digest, F's territory;
-         WHETHER the receipt schema itself ever carries a
+         scope), and C3's `unresolved/unknown markers` row (CLOSED --
+         B7 settles that coverage, including `unknown`, is part of the
+         materialized semantic output committed by `output_digest`; it
+         does not need its own receipt row for custody purposes, so
+         this row needs no field of its own in C's schema).
+Open:    C3's remaining rows (conformance_plan_digest/observation_digest,
+         F's territory; WHETHER the receipt schema itself ever carries a
          signature-related field populated by an external authority,
          same pattern as cic-primitives' own release.sign/pledge.sign
          -- C4's call, a schema-layout question, not decided by this
-         engine-doesn't-sign closure), and C4 (schema location, still
-         deferred until C3's remaining rows close). Does not block
-         C1/C2/C3-version/C5/C3-signing from being used, but the
-         receipt is not a finished, implementable artifact until
+         engine-doesn't-sign closure; and, smaller, whether the receipt
+         should ADDITIONALLY carry a redundant coverage projection as an
+         audit convenience, not a custody requirement -- F1/F4's
+         territory), and C4 (schema location, still deferred until C3's
+         remaining rows close). Does not block
+         C1/C2/C3-version/C5/C3-signing/C3-unresolved-unknown from
+         being used, but the receipt is not a finished, implementable
+         artifact until
          C3/C4 close.
 ```
 
@@ -680,32 +775,28 @@ signature                    this engine's own README      CLOSED, NARROWER
                                                              question, not
                                                              decided here;
                                                              see prose below
-unresolved/unknown markers   B1/B2 (coverage axis)        OPEN -- B2
-                                                             closed
-                                                             (missing ≡
-                                                             absent,
-                                                             unknown = a
-                                                             new coverage
-                                                             value), so
-                                                             the VALUE
-                                                             this row
-                                                             would record
-                                                             now has a
-                                                             concrete
-                                                             shape -- but
-                                                             WHETHER
-                                                             coverage
-                                                             projects
-                                                             into the
-                                                             receipt at
-                                                             all is F's
-                                                             own,
-                                                             still-open
+unresolved/unknown markers   B1/B2 (coverage axis) +     CLOSED -- no
+                              B7 (coverage is part of     receipt row
+                              the materialized semantic   needed; B7
+                              claim, committed by          commits
+                              output_digest)               coverage via
+                                                             output_digest
+                                                             already, the
+                                                             same
+                                                             mechanism
+                                                             protecting
+                                                             `value`;
+                                                             whether a
+                                                             REDUNDANT
+                                                             audit-
+                                                             convenience
+                                                             projection is
+                                                             ALSO added is
+                                                             a separate,
+                                                             smaller,
+                                                             non-blocking
                                                              question
-                                                             (F1/F4); not
-                                                             decided here,
-                                                             not C3's call
-                                                             to make
+                                                             (F1/F4)
 conformance_plan_digest      sketched only, deferred       OPEN --
                               (`iac-object-model.md`'s      section F's
                               proof index)                  territory,
@@ -743,16 +834,23 @@ receipt) — not whether they nest under one `version` key, sit as four
 flat top-level fields, or something else. That layout question belongs
 to C4, same as every other field's placement, and stays open there.
 
-**The `unresolved/unknown markers` row stays open, but its blocker has
-moved.** B2's closure gives `unknown` (and `missing` ≡ `absent`) a
-concrete value to record — but *whether the receipt records coverage
-at all* is explicitly F's own open question (F1/F4: "whether/how
-`MaterializedField.coverage` projects into the receipt"), not C3's to
-decide. Deciding this row here, now that B2 unblocked the value's
-shape, would mean quietly answering F's question from inside C — the
-same category of boundary violation this file has caught and corrected
-several times already (F1 regressing B3, F3 re-asserting coverage in
-the receipt). Left for F.
+**The `unresolved/unknown markers` row is now CLOSED, by B7 — added
+later, while closing F1.** B2's closure gave `unknown` (and `missing` ≡
+`absent`) a concrete value to record, but *whether the receipt records
+coverage at all* stayed F's own open question (F1/F4) rather than C3's
+to decide — correctly left there at the time, to avoid the exact
+boundary violation this file has caught and corrected several times
+already (F1 regressing B3, F3 re-asserting coverage in the receipt).
+**F1 has since closed the custody half of that question via B7:**
+coverage, including `unknown`, is part of the materialized semantic
+output itself, committed by `output_digest` — it does not need a
+receipt row to survive the module boundary, the same way `value`
+doesn't need a second copy elsewhere to survive it. So this row closes
+with **no field**, not because the question was skipped, but because
+B7 answered it: custody is already satisfied without one. A smaller,
+separate, non-blocking question — whether the receipt should
+*additionally* carry a redundant coverage projection as an audit
+convenience — remains F1/F4's to decide, not this row's.
 
 **The `signature` row is now CLOSED, but narrower than a first pass
 over this claimed.** This repo's own `README.md`, under "What does not
@@ -798,14 +896,16 @@ engine stays out of, not one combined requirement.
 
 So C3 is now decided for `BOUNDARY.md`'s own sketch (the two digests,
 the two provenance-derived lists), D1's four version-identity facts
-(content, not layout), C5's evidence shapes, and `signature` as to
-WHETHER this engine signs (CLOSED — it does not, and does not decide
-signer authority). What remains open is *whether the receipt schema
-itself ever carries a signature-related field* (C4's call, not
-decided here), `unresolved/unknown markers` (blocked on F's
-coverage-projection decision, not B2 anymore), and the two F-territory
-digests. C4 still owns how every one of the closed facts is actually
-nested and named on the wire.
+(content, not layout), C5's evidence shapes, `signature` as to WHETHER
+this engine signs (CLOSED — it does not, and does not decide signer
+authority), and `unresolved/unknown markers` (CLOSED by B7 — no receipt
+field needed; coverage is already committed via `output_digest`). What
+remains open is *whether the receipt schema itself ever carries a
+signature-related field* (C4's call, not decided here), *whether the
+receipt should additionally carry a redundant coverage projection* as
+an audit convenience (F1/F4's call, not a custody question), and the
+two F-territory digests. C4 still owns how every one of the closed
+facts is actually nested and named on the wire.
 
 ### C4. Schema home — partially decided
 
@@ -973,16 +1073,16 @@ kept as a C-owned companion fact rather than folded into B3's already-
 closed `provenance` enum; `inputs` is the actual paths this invocation
 read, not a static rule-definition property, and `value_digest` keeps
 both evidence shapes symmetric rather than leaving derived entries
-unverifiable on their own), and C3's `signature` row **as to whether
+unverifiable on their own), C3's `signature` row **as to whether
 this engine signs** (CLOSED — it does not, and does not decide signer
 authority; this repo's own README excludes Vault access/counter-
-signature policy from this engine's scope).
+signature policy from this engine's scope), and C3's
+`unresolved/unknown markers` row (CLOSED, by B7 — added later, while
+closing F1: coverage, including `unknown`, is already committed via
+`output_digest` as part of the materialized semantic claim, so this
+row needs no field of its own in the receipt).
 
 **Open:**
-- C3's unresolved/unknown markers — B2 closing gave the *value* a real
-  shape, but *whether* coverage projects into the receipt at all is
-  F's own open question (F1/F4), not C3's to decide. Blocked on F now,
-  not B2.
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
@@ -994,10 +1094,15 @@ signature policy from this engine's scope).
   schema ownership and producer ownership are different facts. This is
   a receipt *schema layout* question, C4's territory, not resolved by
   "this engine doesn't sign."
+- **Whether the receipt should additionally carry a redundant coverage
+  projection**, purely as an audit convenience — not a custody
+  question any more (B7 settled that), but F1/F4's smaller, remaining
+  one.
 - C4's exact schema location — deferred until C3 is actually complete
-  (still blocked on the two F-territory rows above and the
+  (still blocked on the F-territory digest row above and the
   signature-field layout question just named; "this engine doesn't
-  sign" no longer blocks it, since that part of C3 closed).
+  sign" and `unresolved/unknown markers` no longer block it, since both
+  closed).
 
 ## D — Version binding (closes section D)
 
@@ -1351,16 +1456,20 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          real split is observation-knowledge vs. value-origin, and a
          derived state field legitimately carries both at once, per
          B3), F1-mechanism (C2's every-call receipt production is
-         direction-agnostic), F2 (core/nexus/iac's compare.go/
-         observation.go/conformance.go are migration source per A0's
-         existing meta-decision, not a permanently separate contract --
-         made explicit for the output axis, not newly decided).
-Open:    whether/how MaterializedField.coverage gets PROJECTED INTO
-         the receipt for an observed field -- C3's decided field set
-         (digests + applied_defaults[]/derived_values[]) carries no
-         coverage payload today, and conformance_plan_digest/
-         observation_digest are explicitly still reserved for this
-         section, unresolved. Also open: the comparator/verdict
+         direction-agnostic), F1-custody (coverage does NOT need
+         projecting into the receipt to survive the wire -- B7 already
+         commits it via output_digest, as part of the materialized
+         semantic claim itself, closing the custody half of this row),
+         F2 (core/nexus/iac's compare.go/observation.go/conformance.go
+         are migration source per A0's existing meta-decision, not a
+         permanently separate contract -- made explicit for the output
+         axis, not newly decided).
+Open:    whether the receipt should ADDITIONALLY carry a redundant
+         coverage projection as an audit convenience (not a custody
+         requirement any more, per B7) -- a smaller, non-blocking
+         question than the one this row used to pose.
+         conformance_plan_digest/observation_digest remain reserved for
+         this section, unresolved. Also open: the comparator/verdict
          EXECUTION LOGIC (doesn't exist in the new lib yet, in either
          language), and how the conformance/drift verdict relates to
          the receipt (C) and to ProofTrace (E's finding) -- three
@@ -1422,9 +1531,20 @@ regression to B3's pre-correction framing:**
   `conformance_plan_digest`/`observation_digest` as *this section's*
   territory, still open. So: `MaterializedField.coverage` (B3) is
   in-memory state, already decided. Whether — and how — that coverage
-  information gets *projected into the receipt* for an observed field is
-  a **separate, still-open question**, not something this section
-  (or C) has settled.
+  information gets *projected into the receipt* for an observed field was
+  left as a separate, open question here — **now closed, by B7, added
+  while closing this very row:** coverage does not need the receipt to
+  survive the module boundary at all. B7 establishes that
+  capability/coverage/provenance are part of the materialized semantic
+  output itself, committed by `output_digest` — the same mechanism that
+  already protects `value`. The receipt's own job (C1's reasoning: trace
+  *where a value came from*, sitting beside the data) was never the only
+  thing standing between coverage and "disappearing at the wire"; B7
+  shows it was never at risk of disappearing in the first place. What
+  remains genuinely open, and is smaller than the original question, is
+  whether the receipt should *additionally* carry a redundant coverage
+  projection purely as an audit convenience — not a custody requirement,
+  since B7 already supplies that — addressed in F4 below.
 
 **What doesn't exist yet, in either language:** the actual comparator
 and verdict-aggregation *logic* — deciding whether an observed value
@@ -1472,11 +1592,17 @@ there are now three artifacts in view, and they must stay distinct:
 2. Materialization receipt -- materialization evidence bound to the
    (section C)                canonical result: today, digests plus
                                provenance-derived default/derivation
-                               evidence (C3/C5). Whether coverage/
-                               observation evidence ever becomes part
-                               of this artifact is OPEN, not decided
-                               by this section (see F1/F4) -- not
-                               restated as settled here.
+                               evidence (C3/C5). Coverage/observation
+                               evidence does NOT need to become part of
+                               this artifact for custody purposes --
+                               B7 already commits coverage via the
+                               canonical result's own output_digest,
+                               the same mechanism protecting `value`.
+                               Whether this artifact ADDITIONALLY
+                               carries a redundant coverage projection,
+                               purely as an audit convenience, remains
+                               OPEN (see F1/F4) -- a smaller question
+                               than this diagram originally posed.
 3. Conformance/drift verdict -- intent vs. observed comparison outcome
    (conformance.go)            (CONFORMANT/DRIFT/OBSERVED_ABSENT/
                                 UNOBSERVED/NOT_COMPARABLE)
@@ -1507,19 +1633,28 @@ for convenience.
 **Closed:** F1's model claim (B's existing coverage/provenance axes
 already cover output, with no input-vs-output split — corrected after
 review caught a regression to B3's pre-correction framing), F1's
-mechanism claim (C2's receipt production is direction-agnostic), F2
-(the comparator is migration source under A0's existing meta-decision,
-not a permanent fork — explicit, not newly decided), and the
-three-artifact distinction (F3).
+mechanism claim (C2's receipt production is direction-agnostic), F1's
+custody claim (coverage needs no receipt projection to survive the
+module boundary at all — B7 already commits it via `output_digest`,
+as part of the materialized semantic claim itself), F2 (the comparator
+is migration source under A0's existing meta-decision, not a permanent
+fork — explicit, not newly decided), and the three-artifact distinction
+(F3).
 
 **Not closed, deliberately:**
-- **Whether/how `MaterializedField.coverage` gets projected into the
-  receipt** — corrected, a second overclaim an earlier draft made in
-  the same paragraph as the one above. The receipt mechanism being
-  direction-agnostic (C2) does not mean C3's actual field set carries a
-  coverage payload — it doesn't, today, and `conformance_plan_digest`/
-  `observation_digest` remain exactly as open as C3 already said they
-  were.
+- **Whether the receipt should ADDITIONALLY carry a redundant coverage
+  projection, purely as an audit convenience.** This is what remains of
+  the row that used to read "whether/how `MaterializedField.coverage`
+  gets projected into the receipt" — narrowed by B7, which answered the
+  custody half (coverage doesn't need the receipt to survive the wire;
+  it's already part of what `output_digest` commits to). C3's actual
+  field set still carries no coverage payload today, and that is no
+  longer a gap this document is waiting to fill — it's a legitimate,
+  closed answer (no custody-driven coverage field), leaving only a
+  smaller "nice to have for audits" question, not decided here.
+  `conformance_plan_digest`/`observation_digest` remain exactly as open
+  as C3 already said they were — a different artifact's (verdict's)
+  digests, not this one.
 - The comparator/verdict logic has no implementation in the new lib at
   all yet, in either language — this section establishes where it
   belongs, not its code.
@@ -1529,15 +1664,20 @@ three-artifact distinction (F3).
   materialization call — is not decided here.
 - Whether/how `conformance_plan_digest` (sketched, not landed, per the
   A0/D correction) ever gets built is not this section's job.
+- **B7's own wire-layout question** (exactly how capability/coverage/
+  provenance are nested/named next to `value` in the canonical tree) is
+  not decided here either — that's C4/E2b's call, same as every other
+  field's physical placement.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
 ```text
 Status: PARTIALLY DECIDED, not closed -- and cannot fully close until
-C3's open fields and F's comparator implementation do (B2 and C5 have
-since closed in later passes and no longer belong on this list). This
-section fixes the comparison HARNESS's structure and two scoping
-questions; it does not, and cannot yet, specify full test coverage.
+C3's open fields and F's comparator implementation do (B2, C5 and
+C3's unresolved/unknown-markers row have since closed in later passes
+and no longer belong on this list). This section fixes the comparison
+HARNESS's structure and two scoping questions; it does not, and
+cannot yet, specify full test coverage.
 
 Closed:  G1 (the existing conformance/ corpus is extended, not
          duplicated), G2 (check_grammar.py stays out -- confirmed
@@ -1546,14 +1686,17 @@ Closed:  G1 (the existing conformance/ corpus is extended, not
          bytes (A), then compare receipt semantics excluding engine
          identity (D1.4's forward note) -- three separate questions,
          never one byte-equality check on everything.
-Open:    full coverage. Anything touching C3's still-open fields (its
-         unresolved/unknown markers row specifically -- B2 itself has
-         closed, but that row's receipt-field shape has not) or F's
-         not-yet-implemented comparator is explicitly out of the
+Open:    full coverage. Anything touching C3's still-open fields
+         (conformance_plan_digest/observation_digest, F's territory) or
+         F's not-yet-implemented comparator is explicitly out of the
          harness's scope until those sections close -- not silently
-         skipped. C5's evidence record is no longer on this list: it
-         closed with a specified shape (DefaultEvidence/DerivedEvidence),
-         so it is not a harness-scope blocker any more.
+         skipped. C5's evidence record and C3's unresolved/unknown
+         markers row are no longer on this list: C5 closed with a
+         specified shape (DefaultEvidence/DerivedEvidence), and the
+         markers row closed via B7 (coverage is part of the canonical
+         byte comparison step A already performs, with no separate
+         receipt field needed) -- neither is a harness-scope blocker
+         any more.
 ```
 
 ### G1. Extend the existing corpus; don't build a parallel one
@@ -1669,13 +1812,15 @@ structure, reusing D2's gate and A's canonical comparison rather than
 inventing new mechanisms).
 
 **Not closed, and cannot be yet:**
-- Full test coverage — blocked on C3's still-open fields (its
-  `unresolved/unknown markers` row specifically; B2 itself closed in a
-  later pass) and F's comparator/verdict implementation (doesn't exist
-  in the new lib in either language). C5's evidence-record shape has
-  since closed and no longer blocks this. The harness structure is
-  ready to run the moment the remaining items close; it cannot run
-  completely before they do.
+- Full test coverage — blocked on C3's still-open fields
+  (`conformance_plan_digest`/`observation_digest`, F's territory) and
+  F's comparator/verdict implementation (doesn't exist in the new lib
+  in either language). C5's evidence-record shape and C3's
+  `unresolved/unknown markers` row have since closed (the latter via
+  B7: coverage is part of what section A's canonical-byte comparison
+  already catches, no separate receipt field needed) and no longer
+  block this. The harness structure is ready to run the moment the
+  remaining items close; it cannot run completely before they do.
 - The actual Go and Rust implementations this harness would exercise —
   this document specifies what they must agree on, not their code.
 - The `materialization_vectors()` execution function itself — per G1's
