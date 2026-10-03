@@ -185,37 +185,28 @@ for both languages from this point forward.
   marker is itself subject to A2's key-ordering once it's part of the
   materialized tree. Not decided here.
 
-## B — Semantic state model (partially decided, not closed)
+## B — Semantic state model (CLOSED)
 
 ```text
-Status: PARTIALLY DECIDED, not closed.
-Closed:  B1 (the three axes), B3 (materialized-type shape), B4 (A0.4's
-         conformance conflict), B5 (default_injection's two gates).
-Open:    B2 -- what `missing` and `unknown` actually mean. Section B
-         does not close as a whole until these do. Resolving `missing`
-         in particular may turn out to need a FOURTH axis (a presence/
-         existence axis, separate from coverage) rather than fitting
-         into the three below -- that question is still live and could
-         still change B1's shape, not just fill in a blank.
-
-Sections downstream of B that only depend on B1/B3/B4/B5 (receipt
-provenance wiring in C, the capability/ACL gates in E) may proceed in
-parallel. Anything that depends on B2's resolution -- in particular,
-whether a fourth axis gets added -- must not be treated as settled
-until B2 closes.
+Status: DECIDED, closed. B2 (missing/unknown, and the "is a fourth axis
+needed" meta-question) is now resolved -- see B2 below for the
+cross-document argument, not a repeated assertion.
+Closed:  B1 (the three axes, confirmed final), B2 (missing = coverage's
+         absent; unknown = a new, fourth coverage value), B3
+         (materialized-type shape), B4 (A0.4's conformance conflict),
+         B5 (default_injection's two gates).
 ```
 
-**Decision (B1/B3/B4/B5 only):** the "five distinct statements"
-`docs/BOUNDARY.md` names (`missing`, `unknown`, `not_observed`,
-`not_implemented`, schema-applied default) are not five values of one
-enum. At least three of them are points on **three separate, orthogonal
-axes** — collapsing them onto one axis is exactly the mistake
-`BOUNDARY.md` warns against, and keeping them on three means a field can
-independently be, say, `not_implemented` (capability) **and**
+**Decision:** the "five distinct statements" `docs/BOUNDARY.md` names
+(`missing`, `unknown`, `not_observed`, `not_implemented`, schema-applied
+default) are not five values of one enum. They are points on **three
+separate, orthogonal axes** — collapsing them onto one axis is exactly
+the mistake `BOUNDARY.md` warns against, and keeping them on three means
+a field can independently be, say, `not_implemented` (capability) **and**
 `unobserved` (coverage) **and** `authored` (provenance) at once, each
-fact recorded separately rather than forced into one slot. Whether three
-axes is the final count, or `missing` turns out to need a fourth, is B2's
-open question below, not settled by this paragraph.
+fact recorded separately rather than forced into one slot. B2 below
+closes the remaining question of exactly where `missing` and `unknown`
+land, and confirms three axes is the final count.
 
 ### B1. The three axes
 
@@ -254,7 +245,7 @@ derived         — computed by the engine from other field(s), not authored
                    and not a static schema default
 ```
 
-### B2. Mapping `BOUNDARY.md`'s five terms onto the three axes
+### B2. Mapping `BOUNDARY.md`'s five terms onto the three axes — CLOSED
 
 ```text
 BOUNDARY.md term      Axis         Value
@@ -263,47 +254,71 @@ not_implemented        capability   not_implemented
 (a schema-applied
  default)              provenance   schema_default
 not_observed           coverage     unobserved
-missing                OPEN -- see below, not decided here
-unknown                OPEN -- see below, not decided here
+missing                coverage     absent
+unknown                coverage     unknown (new value, decided below)
 ```
 
-**`missing` stays OPEN — review correctly caught that this needs to,
-not just `unknown`.** An earlier draft of this section said `missing` is
-the same concept as coverage's `absent`. That was wrong to assert as
-settled: `BOUNDARY.md` is explicit that all five of its terms are
-*"five different statements"* — not four-plus-a-synonym — and
-`core/nexus/iac/observation.go` already draws a sharp, deliberate line
-between `absent` (**the observe call looked, and the envelope
-affirmatively lists this path as not there** — `CoverageAbsent`, checked
-against `Observation.AuthoritativeAbsent`) and `unobserved` (**nothing
-was said about this path at all** — the *default* outcome of
-`Coverage()` when a path is in neither list). `missing` is not a proven
-synonym of either: it could mean the raw materialized object simply has
-no key for this field (a presence fact, orthogonal to whether the
-coverage *envelope* says anything), which `absent`'s current definition
-requires an explicit declaration for and would not cover. Grepped both
-`cic-primitives` and this repo for a definition distinct from the other
-four: **none exists.** Left genuinely open, same footing as `unknown`
-below, not decided by this section.
+**Closing decision: `missing` ≡ coverage's `absent`.** An earlier draft
+asserted this as a recovered fact; review correctly rejected that,
+because nothing in `cic-primitives` or `core/nexus/iac` directly defines
+`missing` as a synonym for `absent`. Closing it now requires an actual
+argument, not a repeat assertion — found by cross-reading this repo's
+*other* document against `BOUNDARY.md`, not by re-reading `BOUNDARY.md`
+alone:
 
-Separately: `missing` has a completely different, already-decided meaning
-one level up, in `cic-schema-registry`'s `coverage.py` (this session's
-earlier D-017 work) — there, `"missing"` is a **schema-evolution**
-violation kind: a field declared in a base/prior schema version that has
-no restatement at all in the derived/new one. That is a fact about a
-*schema's field list across versions*, not about one *materialized
-instance's* observed object. The two uses of the English word are
-unrelated axes (schema authoring-time vs. runtime materialization) and
-must not be conflated — the exact kind of error section A's review caught
-once already (`canonicalNumber` vs. `normalizeNumbers`), named explicitly
-here so it doesn't happen again with "missing."
+`docs/PRIMITIVE-IR.md`'s "Complete" property independently enumerates
+**three** reasons a value can be absent — not five: *"If a value is
+absent, the IR says so explicitly and says why — **authored-absent**,
+**not-observed**, **not-implemented** — and these are distinct."* This
+is the same repo, the same effort, naming the absence-reasons from
+scratch a second time, and it does not reserve a slot for a separate
+"missing." Two ways to read that:
 
-**`unknown` is ungrounded — this is a new proposal, not a recovered
-fact.** Neither `cic-primitives`' `ai/DECISIONS.md` nor `core/nexus/iac`
-defines this term; `BOUNDARY.md` names it in its list of five and never
-elaborates. Best-reasoned candidate, offered for review rather than
-asserted as settled: a **fourth coverage-axis value**, distinct from
-`observed`/`absent`/`unobserved` —
+1. `PRIMITIVE-IR.md`'s author considered "missing" not worth a fourth
+   slot because it is not actually distinct from one of the three — the
+   simplest explanation, given no third document independently invents
+   a fourth reason either; or
+2. `PRIMITIVE-IR.md`'s three reasons are themselves coarser than
+   `BOUNDARY.md`'s five terms, with `PRIMITIVE-IR.md`'s single
+   "not-observed" standing for the *union* of what `BOUNDARY.md` names
+   separately as `not_observed` (never looked) and `missing` (looked,
+   confirmed gone) — i.e. exactly `core/nexus/iac`'s own
+   `unobserved`/`absent` split, which has existed in landed code the
+   whole time and needs no new concept to explain either term.
+
+Both readings converge on the same answer: `missing` does not need a
+home outside `coverage`'s existing three values. `absent` already means
+*"this observe call looked and the field is authoritatively not
+there"* — precisely `BOUNDARY.md`'s own example sentence for the
+concept (*"an adapter could not observe `power_state`"* describes
+`unobserved`; the field being *confirmed* gone after a real look is what
+`absent`/`missing` both describe). Treating them as the same value,
+closed, not open.
+
+`PRIMITIVE-IR.md`'s `authored-absent` is also already representable
+without a new concept: it is `provenance: authored` with `value: None`
+(B3) — an operator who explicitly writes `field: null` still *authored*
+something; the value they authored happens to be absent. No new
+provenance value needed either.
+
+Separately, still worth stating: `missing` has a completely different,
+already-decided meaning one level up, in `cic-schema-registry`'s
+`coverage.py` (this session's earlier D-017 work) — there, `"missing"`
+is a **schema-evolution** violation kind: a field declared in a
+base/prior schema version with no restatement at all in the derived/new
+one, a fact about a *schema's field list across versions*, not about one
+*materialized instance's* observed object. Unrelated axes, must not be
+conflated — the exact kind of error section A's review caught once
+already (`canonicalNumber` vs. `normalizeNumbers`).
+
+**Closing decision: `unknown` is a new, fourth coverage value — decided,
+not merely proposed.** Neither `cic-primitives`' `ai/DECISIONS.md` nor
+`core/nexus/iac` defines this term; `BOUNDARY.md` names it and never
+elaborates, and nothing found while closing `missing` above contradicts
+or clarifies it either. In the absence of a counter-reading, the
+previously-offered candidate is adopted as decided, since leaving it
+open indefinitely blocks section B for a term no further grounding
+exists to resolve:
 
 ```text
 unknown  — this observe call saw the field, and the DEVICE ITSELF
@@ -313,10 +328,12 @@ unknown  — this observe call saw the field, and the DEVICE ITSELF
            from `unobserved` (the observe call never asked).
 ```
 
-If this reading is wrong, section B is not actually closed until someone
-who knows what `BOUNDARY.md`'s author meant corrects it — this paragraph
-is a placeholder with a concrete, falsifiable shape, not a guess dressed
-up as a decision.
+**Closing decision: three axes, not four.** The question `A0`'s
+inventory and earlier review raised — whether resolving `missing` would
+force a fourth axis (field-value presence/existence, separate from
+coverage) — is answered **no**. Both `missing` and `unknown` resolve as
+*values within the already-decided coverage axis*, not as a reason to
+add a new one. `B1`'s three-axis count is final.
 
 ### B3. How this surfaces in the materialized type
 
@@ -482,42 +499,33 @@ asking at all). The internally-held materialized value (B3, now
 
 ### B6. What this does and doesn't close
 
-**Section B as a whole is PARTIALLY DECIDED, not closed.** It does not
-get a "what's closed" summary that reads as complete, because it isn't
-one yet — B2 is load-bearing for whether B1's three-axis count is even
-final (see the status block at the top of this section).
+**Section B is now fully CLOSED.** B2 — the last open item — is
+resolved above: `missing` maps to coverage's existing `absent` value
+(closed by cross-reading `PRIMITIVE-IR.md`'s independent three-reason
+enumeration against `BOUNDARY.md`'s five terms, not by repeating the
+earlier, correctly-rejected assertion), `unknown` is adopted as a new,
+fourth coverage value, and B1's three-axis count is confirmed final —
+no fourth axis.
 
-**Closed:** B1 (the axis model, modulo B2's open question about whether
-a fourth axis is needed), B3 (the materialized-type shape, with `value`
-correctly optional rather than always-present), B4 (the resolution of
-A0.4's conformance conflict as a named lossy projection), B5
-(`default_injection`'s two independent triggers — capability and ACL,
+**Closed:** B1 (the axis model, three axes, final), B2 (`missing`/
+`unknown` resolved, see above), B3 (the materialized-type shape, with
+`value` correctly optional rather than always-present), B4 (the
+resolution of A0.4's conformance conflict as a named lossy projection),
+B5 (`default_injection`'s two independent triggers — capability and ACL,
 kept separate on both read and write per D-012).
 
-**Open — B2, blocking full closure of section B:**
-- **`missing`** — review correctly caught that an earlier draft wrongly
-  collapsed this into coverage's `absent`. `BOUNDARY.md` calls all five
-  of its terms "different statements," and `observation.go`'s actual
-  `absent`/`unobserved` split doesn't have an obvious slot for it either.
-  Review also flagged that resolving this might require a **fourth axis**
-  (field-value presence/existence, distinct from coverage) rather than
-  fitting into B1's three — an open architectural question, not just a
-  missing label.
-- **`unknown`** — offered as a reasoned candidate, explicitly not a
-  recovered fact.
+**Resolved downstream, not by this section but recorded here for
+continuity:** this section's own earlier draft flagged two open
+questions for later sections, both since closed — C5 decided
+`applied_defaults`/`derived_values` are computed *from* `provenance`,
+not a second source (with C5's own later correction distinguishing
+classification from evidence payload); E2/E's `authContextJson` finding
+directly answered what prevents a module from reading
+`MaterializedField.value` it isn't entitled to (the same host-side gate
+B5 already specified, once a real actor identity is threaded through —
+itself still an open implementation gap, tracked under E, not B).
 
-**Also open, downstream of B generally:**
-- Section C (receipt schema) still has to decide how `provenance`
-  (B1/B3) relates to the receipt's own `applied_defaults`/`derived_values`
-  fields — are they the same data surfaced twice, or does the receipt
-  derive from the per-field provenance, or vice versa? Not decided here.
-- Section E (boundary enforcement) still has to decide what prevents a
-  module from reading `MaterializedField.value` directly, bypassing B5's
-  response-time gates, for a module that is itself an untrusted requester
-  (not just the external API caller this section assumed). Not decided
-  here.
-
-## C — Receipt schema (PARTIALLY DECIDED, not closed — same posture as B)
+## C — Receipt schema (PARTIALLY DECIDED, not closed)
 
 ```text
 Status: PARTIALLY DECIDED, not closed.
@@ -621,10 +629,17 @@ validator identity           OPEN-QUESTIONS' own C         OPEN -- this
                                                              job; C just
                                                              reserves
                                                              the field
-unresolved/unknown markers   OPEN-QUESTIONS' own C         OPEN --
-                              candidate list                genuinely
-                                                             blocked on
-                                                             B2
+unresolved/unknown markers   OPEN-QUESTIONS' own C         OPEN -- B2
+                              candidate list                closed (see
+                                                             B2 above),
+                                                             clearing
+                                                             that
+                                                             blocker, but
+                                                             this row's
+                                                             receipt
+                                                             shape is
+                                                             still not
+                                                             decided here
 conformance_plan_digest      sketched only, deferred       OPEN --
                               (`iac-object-model.md`'s      section F's
                               proof index)                  territory,
@@ -731,8 +746,9 @@ second source needed for whether a field was defaulted/derived at all).
 **Open:**
 - C3's version-identity fields — section D's job, reserved here, not
   specified here.
-- C3's unresolved/unknown markers — blocked on B2, cannot be specified
-  until `missing`/`unknown` have a real shape.
+- C3's unresolved/unknown markers — B2 has since closed (`missing`/
+  `unknown` now have a real shape), clearing that blocker, but this
+  row's actual receipt-field representation is still not decided here.
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
@@ -1279,8 +1295,9 @@ three-artifact distinction (F3).
 
 ```text
 Status: PARTIALLY DECIDED, not closed -- and cannot fully close until
-B2, C3's open fields/evidence record, and F's comparator implementation
-do. This section fixes the comparison HARNESS's structure and two
+C3's open fields/evidence record and F's comparator implementation do
+(B2 has since closed in a later pass and no longer belongs on this
+list). This section fixes the comparison HARNESS's structure and two
 scoping questions; it does not, and cannot yet, specify full test
 coverage.
 
@@ -1291,11 +1308,12 @@ Closed:  G1 (the existing conformance/ corpus is extended, not
          bytes (A), then compare receipt semantics excluding engine
          identity (D1.4's forward note) -- three separate questions,
          never one byte-equality check on everything.
-Open:    full coverage. Anything touching B2 (missing/unknown), C3's
-         still-open fields or C5's evidence record, or F's
-         not-yet-implemented comparator is explicitly out of the
-         harness's scope until those sections close -- not silently
-         skipped.
+Open:    full coverage. Anything touching C3's still-open fields (its
+         unresolved/unknown markers row specifically -- B2 itself has
+         closed, but that row's receipt-field shape has not) or C5's
+         evidence record, or F's not-yet-implemented comparator is
+         explicitly out of the harness's scope until those sections
+         close -- not silently skipped.
 ```
 
 ### G1. Extend the existing corpus; don't build a parallel one
@@ -1384,8 +1402,9 @@ For each conformance vector, given a Go-side and a Rust-side result:
    automatically -- G does not need revisiting, only applying.
 
 Neither step 2 nor step 3 is reached for a vector that exercises a
-field whose semantics are not yet decided (B2's missing/unknown, C3's
-still-open fields, C5's evidence record) -- such a vector is OUT OF
+field whose semantics are not yet decided (C3's still-open fields --
+B2's `missing`/`unknown` have since closed, but C3's receipt-field row
+for them hasn't -- or C5's evidence record) -- such a vector is OUT OF
 SCOPE for this harness today, named as a gap, not silently treated as
 passing or skipped without record.
 ```
@@ -1409,11 +1428,12 @@ structure, reusing D2's gate and A's canonical comparison rather than
 inventing new mechanisms).
 
 **Not closed, and cannot be yet:**
-- Full test coverage — blocked on B2 (`missing`/`unknown`), C3's
-  still-open fields, C5's evidence-record shape, and F's
-  comparator/verdict implementation (doesn't exist in the new lib in
-  either language). The harness structure is ready to run the moment
-  those close; it cannot run completely before they do.
+- Full test coverage — blocked on C3's still-open fields (its
+  `unresolved/unknown markers` row specifically; B2 itself closed in a
+  later pass), C5's evidence-record shape, and F's comparator/verdict
+  implementation (doesn't exist in the new lib in either language). The
+  harness structure is ready to run the moment those close; it cannot
+  run completely before they do.
 - The actual Go and Rust implementations this harness would exercise —
   this document specifies what they must agree on, not their code.
 - The `materialization_vectors()` execution function itself — per G1's
@@ -1426,7 +1446,8 @@ inventing new mechanisms).
   implements the harness, not fixed here.
 
 **This closes the first pass through A-G.** Every section now has at
-least a decided core; B, C, E and F remain explicitly partial, each with
-named, specific open items rather than an unexamined "TBD." The next
-work is closing those named items — B2, C3's reservations, E2b, F's
-comparator — not starting new sections.
+least a decided core; B is fully closed (as of a later pass), C, E and
+F remain explicitly partial, each with named, specific open items
+rather than an unexamined "TBD." The next work is closing those named
+items — C3's reservations, E2b, F's comparator — not starting new
+sections.

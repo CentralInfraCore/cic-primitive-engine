@@ -55,17 +55,27 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-**A0 and A are now closed; B and C are PARTIALLY DECIDED, not closed**
-(2026-10-03) — see `docs/A0-INVENTORY.md` and
-`docs/MATERIALIZATION-SPEC.md`. B's `missing`/`unknown` question (B2)
-remains open and could still change B1's three-axis count — review
-caught that an earlier version of this file claimed B was fully closed
-while its own B2 was marked OPEN, a real contradiction, not an
-admin detail. C built on B's closed parts (B1/B3/B4/B5) without waiting
-for B2, and is itself now partially decided: C1/C2 are settled, C5's
-classification rule is settled but its entry-evidence payload is open,
-and C3 (field list)/C4 (schema home) each have a part that's really
-section D's, F's, or B2's job, reserved rather than guessed at.
+**A0, A and B are now closed** (2026-10-03, B as of a later pass — see
+`docs/A0-INVENTORY.md` and `docs/MATERIALIZATION-SPEC.md`). B's
+`missing`/`unknown` question (B2) is resolved: `missing` ≡ coverage's
+`absent` (closed by cross-reading `PRIMITIVE-IR.md`'s independent
+three-reason enumeration against `BOUNDARY.md`'s five terms, not by
+repeating the earlier, correctly-rejected bare assertion), `unknown` is
+adopted as a new, fourth coverage value, and B1's three-axis count is
+confirmed final — no fourth axis needed. (An earlier version of this
+file briefly claimed B was fully closed while its own B2 said OPEN, a
+real self-contradiction review caught at the time; B2 genuinely closes
+now, with the argument recorded, not asserted again.)
+
+**C was built on B's closed parts (B1/B3/B4/B5) before B2 closed**, and
+remains partially decided for its own, separate reasons: C1/C2 are
+settled, C5's classification rule is settled but its entry-evidence
+payload is open, and C3 (field list)/C4 (schema home) each have a part
+that's really section D's or F's job, reserved rather than guessed at.
+C3's `unresolved/unknown markers` row was specifically reserved pending
+B2 — B2 closing now clears that blocker, but the row's actual shape is
+still not decided; closing it is separate follow-up work for C, not
+done by B2's closure.
 
 **D is now closed too** — four identifiers, not one or two (grammar
 digest, primitive release identity, schema version, validator/engine
@@ -110,11 +120,12 @@ C4's exact receipt layout is still open — with its own verdict
 vocabulary (`NOT_COMPARABLE`/`DIVERGENCE`),
 deliberately distinct from `conformance.go`'s intent-vs-observed
 verdicts (F3). What G cannot yet do is run with full coverage: any
-vector touching B2, C3's open fields, C5's evidence record, or F's
-unbuilt comparator is out of scope until those close. Every section A–G
-now has at least a decided core — B, C, E and F remain explicitly
-partial. The next work is closing those named items, not opening new
-sections.
+vector touching C3's still-open fields, C5's evidence record, or F's
+unbuilt comparator is out of scope until those close (B2 no longer
+belongs on this list — it closed in a later pass). Every section A–G
+now has at least a decided core — B is fully closed; C, E and F remain
+explicitly partial. The next work is closing those named items, not
+opening new sections.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -292,43 +303,40 @@ number canonicalization still has to be written).
 
 ### B. Semantic state model
 
-**Status:** **PARTIALLY DECIDED, not closed.** B1 (the axis model, modulo
-below)/B3 (type shape)/B4 (A0.4 conformance resolution)/B5
-(two-trigger `default_injection`) are settled. B2 (`missing`, `unknown`)
-is **OPEN** and blocks full closure — review caught that an earlier
-version of this status line said "DECIDED" while the spec's own B2
-said OPEN, a real contradiction. Resolving `missing` may even add a
-**fourth axis** (field-value presence/existence), which would revise
-B1, not just fill in a blank — so B1 itself is not 100% final either
-until B2 closes.
-**Blocks:** the materialized output's type shape (C, E); `default_injection`
-correctness; full closure of this section
-**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-partially-decided-not-closed`
+**Status:** **CLOSED.** B1 (axis model)/B2 (`missing`/`unknown`
+resolved)/B3 (type shape)/B4 (A0.4 conformance resolution)/B5
+(two-trigger `default_injection`) are all settled.
+**Blocks:** nothing further — unblocks full closure of C, E
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-closed`
 
 `docs/BOUNDARY.md`'s "five distinct statements" are not five values of
 one enum — they're points on **three separate, orthogonal axes**:
 **capability** (D-012's `implemented`/`not_implemented`/`deprecated`,
 static per device binding), **coverage** (`observed`/`absent`/
-`unobserved`, dynamic per observe call, already landed in Go as
-`CoverageState`), and **provenance** (`authored`/`schema_default`/
-`derived`, intent-side only).
+`unobserved`/`unknown`, dynamic per observe call), and **provenance**
+(`authored`/`schema_default`/`derived`).
 
-Two terms flagged as genuinely open, not silently settled — review
-caught that an earlier draft wrongly resolved the first one:
-- `missing` stays **OPEN**. An earlier draft said it's the same concept
-  as coverage's `absent`; review correctly caught that `BOUNDARY.md`
-  calls all five of its terms "different statements" (not four plus a
-  synonym), and `observation.go`'s actual `absent` (envelope
-  affirmatively says not-there) vs. `unobserved` (envelope says nothing)
-  split has no obvious slot for it either. Neither repo defines it
-  distinctly from the other four — left open on the same footing as
-  `unknown`, not decided.
-- `unknown` is **ungrounded in both repos** — `BOUNDARY.md` names it and
-  never defines it, and nothing in `cic-primitives`' decision log or
-  `core/nexus/iac` gives it a concrete shape either. The spec offers a
-  best-reasoned candidate (a fourth coverage value, for "the device
-  reported an indeterminate value," distinct from an affirmed absence)
-  explicitly as a new proposal for review, not a recovered fact.
+**B2, closed — both terms resolved, and the "fourth axis" question
+answered no:**
+- `missing` ≡ coverage's `absent`. Closed not by repeating the earlier,
+  correctly-rejected assertion, but by cross-reading
+  `docs/PRIMITIVE-IR.md`'s own, independent "Complete" property, which
+  enumerates **three** absence-reasons (`authored-absent`,
+  `not-observed`, `not-implemented`) — no fourth slot for "missing"
+  either. The simplest reading: `PRIMITIVE-IR.md`'s single
+  "not-observed" is the coarse union of what `BOUNDARY.md` splits finer
+  into `not_observed` (never looked) and `missing` (looked, confirmed
+  gone) — exactly `core/nexus/iac`'s existing `unobserved`/`absent`
+  split, needing no new concept. `PRIMITIVE-IR.md`'s `authored-absent`
+  is likewise already representable as `provenance: authored` +
+  `value: None` (B3) — an operator who authors an explicit null still
+  authored *something*.
+- `unknown` is adopted as a new, fourth **coverage** value (for a
+  device-reported indeterminate value, distinct from an affirmed
+  absence) — the previously-offered candidate, finalized since no
+  counter-reading surfaced while closing `missing`.
+- **Three axes is the final count** — both terms resolved as coverage
+  values, not as a reason to add a fourth axis. B1 is fully settled.
 
 Also resolves A0.4's tri-state/boolean conformance conflict: the library
 carries the full tri-state; Relay's existing `FieldMode.Implemented bool`
@@ -367,11 +375,15 @@ open: the three-value `provenance` enum cannot supply it, and the
 execution record it would come from isn't specified yet. C3 (full v1
 field list) and C4 (schema home) are only partially decided — each has a
 part that's really another section's job (D for version-identity fields,
-F for `conformance_plan_digest`/`observation_digest`, B2 for
-unresolved/unknown markers), reserved here rather than guessed at.
+F for `conformance_plan_digest`/`observation_digest`). The
+`unresolved/unknown markers` row was reserved pending B2 — B2 has since
+closed (`missing` ≡ coverage's `absent`; `unknown` is a new, fourth
+coverage value), clearing that specific blocker, but the row's actual
+receipt-field shape is still not decided; that's separate follow-up
+work for C, not something B2's closure did on its own.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending D, F, B2, and C5's evidence-record specification
-**Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed--same-posture-as-b`
+closure pending D, F, and C5's evidence-record specification
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
    is a *recovered* decision: `BOUNDARY.md` already settled it, with its
@@ -399,9 +411,13 @@ closure pending D, F, B2, and C5's evidence-record specification
    precedent exists; the sketched `proof` index that would carry it is
    itself deferred). `grammar_version`/`primitive_release`/
    `schema_version`/validator identity are reserved for section D.
-   `unresolved/unknown markers` cannot be specified until B2
-   (`missing`/`unknown`) has a real shape. `conformance_plan_digest` is
-   section F's territory with no landed precedent either;
+   `unresolved/unknown markers` was reserved pending B2
+   (`missing`/`unknown`); B2 has since closed with a real shape for
+   both terms (`missing` ≡ coverage's `absent`, `unknown` a new fourth
+   coverage value), clearing that blocker — but this row's actual
+   receipt-field shape is still **not decided here**, only unblocked.
+   `conformance_plan_digest` is section F's territory with no landed
+   precedent either;
    `observation_digest` **is** landed — but as a field of
    `ConformanceResult` (the drift verdict), a different artifact from
    this receipt, not simply reusable here.
@@ -655,9 +671,9 @@ include.
 ### G. Differential conformance
 
 **Status:** **PARTIALLY DECIDED, not closed** — and cannot fully close
-until B2, C3's open fields/evidence record, and F's comparator
-implementation do. The comparison *harness structure* is fixed; full
-test *coverage* is not yet possible.
+until C3's open fields/evidence record and F's comparator implementation
+do (B2 has since closed and no longer blocks this). The comparison
+*harness structure* is fixed; full test *coverage* is not yet possible.
 **Blocks:** nothing further — this is the last section
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#g--differential-conformance-partially-decided-not-closed`
 
@@ -724,9 +740,11 @@ anything about parity.
    correct (after ProofTrace/receipt and receipt/verdict).
 
 **Not closed, and cannot be yet:** full test coverage. Any vector
-touching B2 (`missing`/`unknown`), C3's still-open fields, C5's evidence
-record, or F's not-yet-implemented comparator is out of scope for the
-harness today — named as a gap, not silently passed or skipped.
+touching C3's still-open fields (its `unresolved/unknown markers` row
+specifically — B2 itself has since closed, but that row's receipt-field
+shape has not), C5's evidence record, or F's not-yet-implemented
+comparator is out of scope for the harness today — named as a gap, not
+silently passed or skipped.
 
 **This closes the first pass through A–G.** Every section has at least
 a decided core; B, C, E and F remain explicitly partial, each with
