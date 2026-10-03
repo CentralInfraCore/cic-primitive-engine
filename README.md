@@ -7,8 +7,11 @@ A Rust **library and CLI** that turns a CIC composition into validated,
 materialized `PrimitiveIR`. Generators — YANG, RESTCONF, Kubernetes, Go, the
 Relay — consume the IR, never the YAML.
 
-> **Status: early.** `error` and `reader` are extracted and working. The stages
-> above `Read` are not implemented. Nothing here is a stable API.
+> **Status: early.** `error` and `reader` are extracted and working.
+> `canonical` implements `Stage::Canonicalize`'s byte format as a standalone
+> primitive, over whatever tree it is handed — it is not yet wired into a
+> pipeline stage, because `Parse`/`Normalize`/`Resolve`/`Validate` don't
+> exist yet. Nothing here is a stable API.
 
 ---
 
@@ -88,6 +91,12 @@ materializer, and its nineteen error codes named that model's ontology
 reinstated the rejected model through the one file measured as free of it. Codes
 are added as the stage that raises them is implemented, never in advance: a code
 with no raiser and no vector is a claim, not a check.
+
+A same-named `canonical.rs` exists today (section A's byte format,
+`Stage::Canonicalize`) — not a contradiction of the table above. The archived
+model's `canonical.rs` is the one "not carried"; this engine's own, written
+fresh against `docs/MATERIALIZATION-SPEC.md`'s section A, shares none of its
+code or its thirteen model references.
 
 ## Open obligation: the dependency is not pinned
 

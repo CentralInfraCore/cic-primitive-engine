@@ -173,15 +173,29 @@ for both languages from this point forward.
 - Unicode normalization (A4) and `TopologySet` element order (A6) are
   named, tracked gaps inherited from the existing pipeline, not decided
   here.
-- **The Rust side does not yet implement most of this.** A0's inventory
-  found `cic-canonical` only covers A3 (numbers) today, with a proven
-  byte-identical vector pair. A2 (key ordering), A4 (string escaping,
-  especially the HTML-escape quirk and the exact `\uXXXX` form), A6
-  (structural array/object writing) and A7 (digest assembly) have **no
-  Rust implementation yet** — writing one, with test vectors mirroring
-  `canonicaljson_test.go` the same way `cic-canonical`'s vectors already
-  mirror `number_test.go`, is the next concrete task (roadmap step 4, not
-  part of closing this section).
+- **Update, no longer accurate as first written: the Rust side now
+  implements all of A1–A7.** This bullet originally said the Rust side
+  implemented none of A2/A4/A6/A7, with only `cic-canonical` (the
+  separate `CIC-Relay` crate) covering A3. `engine/src/canonical.rs`
+  (this repo's own, self-contained module — PR #19) now implements A2
+  (key ordering), A3 (numbers — `cic-canonical`'s proven logic ported
+  by hand, not taken as a cross-repo dependency), A4 (string escaping,
+  re-verified empirically against Go's `encoding/json` in a Go
+  container, not assumed from this document's own table), A6 (array
+  order) and A7 (digest), with unit tests mirroring
+  `canonicaljson_test.go`'s and `cic-canonical`'s own vectors, plus
+  differential vectors diffed byte-for-byte against real Go output at
+  the extremes (`1e-100`, `5e-324`, integers beyond `i64`). A review on
+  that PR also found and closed a real gap this document's own A3 text
+  had not yet caught in code: `saphyr` (this engine's YAML parser)
+  silently demoted an integer literal beyond `i64` range to a lossy
+  `f64` before canonicalization ever saw it — fixed in `reader.rs`,
+  not papered over here, via a new `Value::BigInt(String)` carrying
+  the literal's exact digits. Not yet wired into a pipeline stage —
+  `Parse`/`Normalize`/`Resolve`/`Validate`, which would produce a
+  materialized tree to canonicalize, still don't exist — so this is a
+  standalone primitive, correct and tested in isolation, not yet
+  exercised end-to-end through a real composition.
 - Section B (semantic state model) still has to decide how the five-state
   concern and A0.4's tri-state/boolean conformance conflict interact with
   this canonical form — e.g. whether a `not_implemented`/`deprecated`
