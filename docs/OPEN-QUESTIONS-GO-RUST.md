@@ -96,7 +96,25 @@ comparator has no implementation in the new lib yet, in either language,
 whether/how `MaterializedField.coverage` projects into the receipt, and
 how the materialization receipt relates to the separate conformance/
 drift verdict (a third, distinct proof artifact alongside ProofTrace and
-the receipt) isn't decided. **G is next.**
+the receipt) isn't decided.
+
+**G is now PARTIALLY DECIDED too, and closes the first pass through
+A–G.** The comparison harness structure is fixed: extend the existing
+`conformance/` corpus rather than duplicating it; `check_grammar.py`
+confirmed out of scope (different axis, recovered from A0/F); and the
+actual comparison is three separate questions in order — D2's
+comparability gate, then section A's canonical-byte equality, then
+receipt semantic equality via a comparison *projection* that excludes
+engine identity (D1.4) rather than a wire-level field removal, since
+C4's exact receipt layout is still open — with its own verdict
+vocabulary (`NOT_COMPARABLE`/`DIVERGENCE`),
+deliberately distinct from `conformance.go`'s intent-vs-observed
+verdicts (F3). What G cannot yet do is run with full coverage: any
+vector touching B2, C3's open fields, C5's evidence record, or F's
+unbuilt comparator is out of scope until those close. Every section A–G
+now has at least a decided core — B, C, E and F remain explicitly
+partial. The next work is closing those named items, not opening new
+sections.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -636,12 +654,12 @@ include.
 
 ### G. Differential conformance
 
-**Status:** OPEN
-**Blocks:** nothing — this is the last section, and the point of the whole
-exercise
-**Decision ref:** —
-
-Only meaningful once A–F are closed:
+**Status:** **PARTIALLY DECIDED, not closed** — and cannot fully close
+until B2, C3's open fields/evidence record, and F's comparator
+implementation do. The comparison *harness structure* is fixed; full
+test *coverage* is not yet possible.
+**Blocks:** nothing further — this is the last section
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#g--differential-conformance-partially-decided-not-closed`
 
 ```text
 same authored input
@@ -655,16 +673,65 @@ Not "the same object, roughly" — byte-identical materialized output and
 semantically-identical receipts, or the pair does not actually prove
 anything about parity.
 
-1. Does `cic-primitive-engine/conformance/` (the existing language-independent
-   `input.yaml`/`expected.yaml` corpus, today covering only the `reader`
-   group) get extended to carry Go/Rust materialization vectors, or is a
-   separate corpus built for this purpose?
-2. Does `cic-primitives`' own Python grammar checker (`check_grammar.py`)
-   join as a third differential oracle, or does it stay scoped to static
-   schema-structure validation only (it validates field *definitions* —
-   e.g. is `role: config` legal — not runtime value-instance resolution,
-   which is this effort's actual target; confirm this stays a deliberate
-   split, not a gap)?
+1. **Closed:** `conformance/` already holds a language-independent
+   vector corpus with a harness that enforces it can't trivially pass
+   (`engine/tests/conformance.rs`, verified directly — empty corpus
+   fails, a group with no accepted vector fails). This effort adds a new
+   group to it (e.g. `materialization/`), not a second, parallel
+   mechanism. **Precision, not assumed:** that harness file has a
+   *generic* part (walks every group, checks only corpus invariants)
+   and a *separate*, named, hardcoded `reader_vectors()` test that
+   actually runs the engine and checks outcomes — adding a
+   `materialization/` group gets the generic checks for free, but an
+   analogous hand-written `materialization_vectors()` test, actually
+   exercising the resolver, still needs writing.
+2. **Closed, recovered from A0/F, not newly decided:** `check_grammar.py`
+   validates static schema structure (field definitions); this effort
+   resolves value instances at runtime. Different axes, nothing to
+   differentially agree or disagree about — it does not join as a third
+   oracle. Stated explicitly so the split reads as a decision.
+3. **Closed — the harness structure, per D1.4's own forward note that
+   "compare the receipts" can't be one byte-equality check:** three
+   separate questions, checked in order —
+   ```text
+   1. Comparability gate (D2): grammar digest + primitive release +
+      schema identity/version/digest + authored input digest MUST
+      match; validator/engine identity MUST differ and is excluded.
+      Mismatch -> NOT_COMPARABLE (not a divergence). Stop.
+   2. Value equality (A): canonical materialized bytes, compared
+      directly. Mismatch -> DIVERGENCE.
+   3. Receipt semantic equality (C, D1.4): construct each receipt's
+      comparison PROJECTION (every field whose semantics must agree,
+      excluding validator/engine identity), canonicalize each
+      projection (A's format, reused), compare bytes. Mismatch ->
+      DIVERGENCE.
+   ```
+   **Correction (review-caught):** step 3 originally said "remove the
+   engine-identity field" — a wire-level operation naming a field path
+   that doesn't exist yet, since C4 (the receipt's exact schema/layout)
+   is still open. Reframed as a semantic *projection* so this doesn't
+   quietly decide C4's layout from inside G; once C4 fixes the real
+   field layout, the projection's mechanical definition follows, G does
+   not need revisiting.
+
+   This harness gets its **own** verdict vocabulary
+   (`NOT_COMPARABLE`/`DIVERGENCE`) — deliberately distinct from
+   `conformance.go`'s `CONFORMANT`/`DRIFT`/etc. (F3, artifact 3), which
+   answers whether an *observed* value matches a *declared intent*, a
+   different question than whether *two implementations* agree. Sharing
+   the word `NOT_COMPARABLE` is a coincidence of English, named before
+   it becomes the third or fourth conflation this effort has had to
+   correct (after ProofTrace/receipt and receipt/verdict).
+
+**Not closed, and cannot be yet:** full test coverage. Any vector
+touching B2 (`missing`/`unknown`), C3's still-open fields, C5's evidence
+record, or F's not-yet-implemented comparator is out of scope for the
+harness today — named as a gap, not silently passed or skipped.
+
+**This closes the first pass through A–G.** Every section has at least
+a decided core; B, C, E and F remain explicitly partial, each with
+named, specific open items. The next work is closing those — not
+starting new sections.
 
 ---
 
