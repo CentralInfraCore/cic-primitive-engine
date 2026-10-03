@@ -1312,6 +1312,19 @@ reason to do this, not invent a new one: *"a corpus proves what it
 contains... differential execution finds what nobody thought to write
 down"* — one corpus, one harness, extended, not duplicated.
 
+**Precision, not assumed: adding a group does not make execution
+automatic.** `engine/tests/conformance.rs` has two distinct parts, read
+directly: a *generic* test that walks every group and checks corpus
+invariants only (non-empty, minimum vector count, at least one
+accepted) — group-agnostic, and already free for a new
+`materialization/` group — and `reader_vectors()`, a *separate*, named
+test hardcoded to the `reader` group specifically, which actually runs
+the engine against each vector and asserts the expected outcome. A new
+`materialization/` group gets the generic invariant checks immediately;
+an analogous `materialization_vectors()` test, actually exercising the
+resolver, still has to be written by hand, same as `reader_vectors()`
+was. Noted so this isn't later assumed to already be generic.
+
 ### G2. `cic-primitives`' grammar checker stays out — confirmed deliberate, not re-decided
 
 **Recovered, not newly decided:** sections A0 and F already established
@@ -1351,12 +1364,24 @@ For each conformance vector, given a Go-side and a Rust-side result:
      -> mismatch: verdict = DIVERGENCE.
 
 3. RECEIPT SEMANTIC EQUALITY (sections C, D1.4) -- only reached if (2)
-   matched: canonicalize both receipts with the validator/engine
-   identity field removed first (per D1.4 -- that field is SUPPOSED to
-   differ, and comparing it would always fail for the wrong reason),
-   then compare the resulting canonical bytes (section A's format,
-   reused, not a new comparison algorithm).
+   matched. **Correction (review-caught): this is a semantic
+   projection, not a wire-level field removal** -- C4 (receipt schema
+   home/exact layout) is still open, so there is no fixed field path
+   to name "remove" yet; specifying one here would decide C4's layout
+   by accident, from inside G, before C4 itself closes.
+
+   Construct the comparison projection of each receipt:
+     - include every receipt field whose semantics are required to
+       agree between implementations;
+     - exclude validator/engine identity (D1.4), which is intentionally
+       implementation-specific and must never be compared for equality.
+   Canonicalize each projection (section A's format, reused -- not a
+   new algorithm) and compare the resulting bytes.
      -> mismatch: verdict = DIVERGENCE.
+
+   Once C4 fixes the receipt's actual field layout, this projection's
+   mechanical definition (which fields it includes) follows
+   automatically -- G does not need revisiting, only applying.
 
 Neither step 2 nor step 3 is reached for a vector that exercises a
 field whose semantics are not yet decided (B2's missing/unknown, C3's
@@ -1391,6 +1416,11 @@ inventing new mechanisms).
   those close; it cannot run completely before they do.
 - The actual Go and Rust implementations this harness would exercise —
   this document specifies what they must agree on, not their code.
+- The `materialization_vectors()` execution function itself — per G1's
+  precision note, adding a corpus group only gets the generic
+  invariant checks; the hand-written test that actually runs the
+  resolver against each vector (mirroring `reader_vectors()`) still has
+  to be written.
 - Whether `NOT_COMPARABLE`/`DIVERGENCE` need richer sub-classification
   (e.g. which specific identifier mismatched) is left to whoever
   implements the harness, not fixed here.

@@ -104,8 +104,10 @@ A–G.** The comparison harness structure is fixed: extend the existing
 confirmed out of scope (different axis, recovered from A0/F); and the
 actual comparison is three separate questions in order — D2's
 comparability gate, then section A's canonical-byte equality, then
-receipt semantic equality with engine identity stripped first (D1.4) —
-with its own verdict vocabulary (`NOT_COMPARABLE`/`DIVERGENCE`),
+receipt semantic equality via a comparison *projection* that excludes
+engine identity (D1.4) rather than a wire-level field removal, since
+C4's exact receipt layout is still open — with its own verdict
+vocabulary (`NOT_COMPARABLE`/`DIVERGENCE`),
 deliberately distinct from `conformance.go`'s intent-vs-observed
 verdicts (F3). What G cannot yet do is run with full coverage: any
 vector touching B2, C3's open fields, C5's evidence record, or F's
@@ -676,7 +678,13 @@ anything about parity.
    (`engine/tests/conformance.rs`, verified directly — empty corpus
    fails, a group with no accepted vector fails). This effort adds a new
    group to it (e.g. `materialization/`), not a second, parallel
-   mechanism.
+   mechanism. **Precision, not assumed:** that harness file has a
+   *generic* part (walks every group, checks only corpus invariants)
+   and a *separate*, named, hardcoded `reader_vectors()` test that
+   actually runs the engine and checks outcomes — adding a
+   `materialization/` group gets the generic checks for free, but an
+   analogous hand-written `materialization_vectors()` test, actually
+   exercising the resolver, still needs writing.
 2. **Closed, recovered from A0/F, not newly decided:** `check_grammar.py`
    validates static schema structure (field definitions); this effort
    resolves value instances at runtime. Different axes, nothing to
@@ -692,10 +700,20 @@ anything about parity.
       Mismatch -> NOT_COMPARABLE (not a divergence). Stop.
    2. Value equality (A): canonical materialized bytes, compared
       directly. Mismatch -> DIVERGENCE.
-   3. Receipt semantic equality (C, D1.4): canonicalize both receipts
-      with the engine-identity field removed first, then compare
-      (A's format, reused). Mismatch -> DIVERGENCE.
+   3. Receipt semantic equality (C, D1.4): construct each receipt's
+      comparison PROJECTION (every field whose semantics must agree,
+      excluding validator/engine identity), canonicalize each
+      projection (A's format, reused), compare bytes. Mismatch ->
+      DIVERGENCE.
    ```
+   **Correction (review-caught):** step 3 originally said "remove the
+   engine-identity field" — a wire-level operation naming a field path
+   that doesn't exist yet, since C4 (the receipt's exact schema/layout)
+   is still open. Reframed as a semantic *projection* so this doesn't
+   quietly decide C4's layout from inside G; once C4 fixes the real
+   field layout, the projection's mechanical definition follows, G does
+   not need revisiting.
+
    This harness gets its **own** verdict vocabulary
    (`NOT_COMPARABLE`/`DIVERGENCE`) — deliberately distinct from
    `conformance.go`'s `CONFORMANT`/`DRIFT`/etc. (F3, artifact 3), which
