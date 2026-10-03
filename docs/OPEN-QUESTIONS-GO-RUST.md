@@ -69,20 +69,25 @@ now, with the argument recorded, not asserted again.)
 
 **C was built on B's closed parts (B1/B3/B4/B5) before B2 closed**, and
 remains partially decided for its own, separate reasons: C1/C2 are
-settled, C5's classification rule is settled but its entry-evidence
-payload is open, and C3 (field list)/C4 (schema home) each have a part
-that's really section D's or F's job, reserved rather than guessed at.
-C3's `unresolved/unknown markers` row was specifically reserved pending
-B2 — B2 closing now clears that blocker, but the row's actual shape is
-still not decided; closing it is separate follow-up work for C, not
-done by B2's closure.
+settled, C3's version-identity row is now also closed (D1's four
+identifier groups filled it in, once D closed — see below), C5's
+classification rule is settled but its entry-evidence payload is open,
+and C3's remaining rows (`signature`; `unresolved/unknown markers`;
+`conformance_plan_digest`/`observation_digest`) plus C4 (schema home)
+are reserved for F or genuinely ungrounded, not guessed at. C3's
+`unresolved/unknown markers` row was specifically reserved pending B2
+— B2 closing cleared *that* blocker (the value now has a shape), but
+*whether* coverage projects into the receipt at all is F's own open
+question, not C3's; the row is blocked on F now, not B2.
 
 **D is now closed too** — four identifiers, not one or two (grammar
-digest, primitive release identity, schema version, validator/engine
-identity), filling the version-identity row C3 reserved for it. Go and
-Rust release independently; the full semantic-input identity (grammar
-digest + primitive release + schema version + input digest, everything
-except validator/engine identity, which is supposed to differ) is the
+digest, primitive release identity, domain schema identity — logical
+name + version + content digest, three parts, not a bare version
+number — and validator/engine identity), filling the version-identity
+row C3 reserved for it. Go and Rust release independently; the full
+semantic-input identity (grammar digest + primitive release + schema
+identity/version/digest + input digest, everything except
+validator/engine identity, which is supposed to differ) is the
 comparability gate section G's differential conformance checks before
 comparing output. **E is now PARTIALLY DECIDED** — host-side enforcement
 at a specific, real chokepoint already found in `CIC-Relay/core/cabinet/
@@ -369,24 +374,22 @@ conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 
 ### C. Receipt schema
 
-**Status:** **PARTIALLY DECIDED, not closed** — same posture as B. C1
-(sibling artifact, not IR-embedded) and C2 (produced every
-materialization call) are settled. C5's *classification* rule is settled
+**Status:** **PARTIALLY DECIDED, not closed.** C1 (sibling artifact, not
+IR-embedded), C2 (produced every materialization call), and C3's
+version-identity row (filled in by D1's four identifier groups, once D
+closed — a later-pass fill-in, not decided when this table was first
+written) are settled. C5's *classification* rule is settled
 (`provenance` alone decides whether an `applied_defaults`/
 `derived_values` entry exists — no second source needed for that
 yes/no), but C5's entry *evidence* (`rule`/`inputs`/`value_digest`) is
 open: the three-value `provenance` enum cannot supply it, and the
-execution record it would come from isn't specified yet. C3 (full v1
-field list) and C4 (schema home) are only partially decided — each has a
-part that's really another section's job (D for version-identity fields,
-F for `conformance_plan_digest`/`observation_digest`). The
-`unresolved/unknown markers` row was reserved pending B2 — B2 has since
-closed (`missing` ≡ coverage's `absent`; `unknown` is a new, fourth
-coverage value), clearing that specific blocker, but the row's actual
-receipt-field shape is still not decided; that's separate follow-up
-work for C, not something B2's closure did on its own.
+execution record it would come from isn't specified yet. C3's remaining
+rows (`signature`; `unresolved/unknown markers`, now blocked on F's
+coverage-projection decision rather than B2, which has since closed;
+`conformance_plan_digest`/`observation_digest`, F's territory) and C4
+(schema home, still deferred until C3's remaining rows close) are open.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending D, F, and C5's evidence-record specification
+closure pending F and C5's evidence-record specification
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -406,25 +409,39 @@ closure pending D, F, and C5's evidence-record specification
    wire"*) requires a receipt for every materialization, or runtime
    materializations between releases cross the module boundary with no
    surviving evidence custody held.
-3. **Partially decided, re-grounded after review:** the minimum field set
-   reconciles `BOUNDARY.md`'s sketch with what's actually proven. Only
-   `BOUNDARY.md`'s own fields are decided: the two digests and
-   `applied_defaults`/`derived_values` (derived from B3, see item 5
-   below). **`signature` is now OPEN, not decided** — an earlier version
-   claimed "Relay already signs this," which is false (no landed
-   precedent exists; the sketched `proof` index that would carry it is
-   itself deferred). `grammar_version`/`primitive_release`/
-   `schema_version`/validator identity are reserved for section D.
+3. **Partially decided, re-grounded after review, and partly closed in
+   a later pass:** the minimum field set reconciles `BOUNDARY.md`'s
+   sketch with what's actually proven. `BOUNDARY.md`'s own fields are
+   decided: the two digests and `applied_defaults`/`derived_values`
+   (derived from B3, see item 5 below). **Now also closed, as to WHICH
+   facts, not their wire layout:** the version-identity row
+   (`grammar_version`/`primitive_release`/`schema_version`/validator
+   identity) — D1's four identifier groups fill in *which logical
+   facts* the receipt must carry (grammar digest, primitive release
+   identity, domain schema identity, validator/engine identity).
+   **Correction (review-caught):** an earlier version called this "the
+   receipt's version block," implying a single nested object — a
+   specific wire representation D never decided. Whether these four
+   facts nest under one key, sit as flat top-level fields, or
+   something else is **C4's call**, same as every other field's
+   placement, not settled by D1 or by this row closing.
+   **`signature` is OPEN, not decided** — an earlier version claimed
+   "Relay already signs this," which is false (no landed precedent
+   exists; the sketched `proof` index that would carry it is itself
+   deferred).
    `unresolved/unknown markers` was reserved pending B2
    (`missing`/`unknown`); B2 has since closed with a real shape for
    both terms (`missing` ≡ coverage's `absent`, `unknown` a new fourth
-   coverage value), clearing that blocker — but this row's actual
-   receipt-field shape is still **not decided here**, only unblocked.
-   `conformance_plan_digest` is section F's territory with no landed
-   precedent either;
-   `observation_digest` **is** landed — but as a field of
-   `ConformanceResult` (the drift verdict), a different artifact from
-   this receipt, not simply reusable here.
+   coverage value) — but that only unblocked the *value*. **Whether
+   coverage projects into the receipt at all is F's own open question**
+   (F1/F4), not C3's to decide — deciding this row now would mean
+   quietly answering F's question from inside C, the same kind of
+   boundary violation this file has caught and corrected before (F1
+   regressing B3, F3 re-asserting coverage in the receipt). Blocked on
+   F now, not B2. `conformance_plan_digest` is section F's territory
+   with no landed precedent either; `observation_digest` **is**
+   landed — but as a field of `ConformanceResult` (the drift verdict),
+   a different artifact from this receipt, not simply reusable here.
 4. **Partially decided:** the schema does **not** live in
    `cic-primitives`' `schemas/atomic/`/`schemas/aggregate/` — giving the
    receipt a primitive's schema home would reintroduce the exact

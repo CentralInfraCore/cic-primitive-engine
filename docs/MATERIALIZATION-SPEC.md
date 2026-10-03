@@ -564,16 +564,24 @@ A's (canonical value representation), not resolved here.
 ```text
 Status: PARTIALLY DECIDED, not closed.
 Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
-         materialization, not just at release). C5's classification
-         rule is closed (provenance alone decides list MEMBERSHIP --
-         no second source needed for whether a field was defaulted/
-         derived at all), but C5's entry EVIDENCE is open -- see below.
-Open:    C3 (full v1 field list), C4 (schema location), and C5's
+         materialization, not just at release), C3's version-identity
+         row (filled in by D1's four identifier groups, once D closed
+         -- a later-pass fill-in, not decided when this table was
+         first written). C5's classification rule is closed
+         (provenance alone decides list MEMBERSHIP -- no second
+         source needed for whether a field was defaulted/derived at
+         all), but C5's entry EVIDENCE is open -- see below.
+Open:    C3's remaining rows (signature; unresolved/unknown markers,
+         now blocked on F's coverage-projection decision rather than
+         B2, which has since closed; conformance_plan_digest/
+         observation_digest, F's territory), C4 (schema location,
+         still deferred until C3's remaining rows close), and C5's
          evidence payload (rule/inputs/value_digest -- provenance's
          three-value enum cannot supply these; they come from a
          materialization/derivation execution record this section
-         does not yet specify). Does not block C1/C2/C5's membership
-         rule from being used, but the receipt is not a finished,
+         does not yet specify). Does not block C1/C2/C3-version/C5's
+         membership rule from being used, but the receipt is not a
+         finished,
          implementable artifact until C3/C4/C5-evidence close.
 ```
 
@@ -643,6 +651,13 @@ input_digest                 BOUNDARY.md                  decided
 output_digest                 BOUNDARY.md                  decided
 applied_defaults[]           BOUNDARY.md                  decided -- see C5
 derived_values[]             BOUNDARY.md                  decided -- see C5
+version-identity fields        D1 (four identifier         decided -- see
+(grammar digest,              groups)                     below; D closed
+ primitive release,                                       after this row
+ schema identity,                                         was first
+ validator/engine identity                                reserved. C4
+ -- as logical facts,                                     still owns
+ NOT a wire layout)                                        nesting/shape
 signature                    none (not BOUNDARY.md's      OPEN -- no
                               sketch, not landed Relay     landed or
                               code -- the sketched `proof` sketched
@@ -655,25 +670,32 @@ signature                    none (not BOUNDARY.md's      OPEN -- no
                                                              recovered
                                                              from
                                                              anywhere
-engine.version / grammar_version / primitive_release /
-validator identity           OPEN-QUESTIONS' own C         OPEN -- this
-                              candidate list                is section D
-                                                             (version
-                                                             binding)'s
-                                                             job; C just
-                                                             reserves
-                                                             the field
-unresolved/unknown markers   OPEN-QUESTIONS' own C         OPEN -- B2
-                              candidate list                closed (see
-                                                             B2 above),
-                                                             clearing
-                                                             that
-                                                             blocker, but
-                                                             this row's
-                                                             receipt
-                                                             shape is
-                                                             still not
-                                                             decided here
+unresolved/unknown markers   B1/B2 (coverage axis)        OPEN -- B2
+                                                             closed
+                                                             (missing ≡
+                                                             absent,
+                                                             unknown = a
+                                                             new coverage
+                                                             value), so
+                                                             the VALUE
+                                                             this row
+                                                             would record
+                                                             now has a
+                                                             concrete
+                                                             shape -- but
+                                                             WHETHER
+                                                             coverage
+                                                             projects
+                                                             into the
+                                                             receipt at
+                                                             all is F's
+                                                             own,
+                                                             still-open
+                                                             question
+                                                             (F1/F4); not
+                                                             decided here,
+                                                             not C3's call
+                                                             to make
 conformance_plan_digest      sketched only, deferred       OPEN --
                               (`iac-object-model.md`'s      section F's
                               proof index)                  territory,
@@ -694,11 +716,41 @@ observation_digest           landed, but on a DIFFERENT    OPEN --
                                                              field
 ```
 
-So C3 is decided for the data `BOUNDARY.md`'s own sketch already
-specifies (the two digests, the two provenance-derived lists) and
-explicitly open for everything else — including `signature`, which this
-correction moves from "decided, adopted" to genuinely open, since
-nothing actually grounds it yet.
+**The version-identity row is now CLOSED as to WHICH facts the receipt
+must carry, filled in by D's later closure** (it was only a reservation
+when this table was first written; D1 has since decided the shape).
+**Correction (review-caught): this is not the same as deciding how
+those facts are laid out on the wire.** An earlier draft called this
+"the receipt's version block," implying a single nested object
+(`version: {grammar, primitive_release, schema, engine}`) — a specific
+representation D never decided and C4 hasn't either. D1 closed *which
+logical identity groups must be present* — grammar digest
+(`grammar_sha256`/`grammar_schema_sha256`), primitive release identity
+(release tag + `source_commit`/`build_hash`), domain schema identity
+(logical identity + version + content digest, D1.3's three-part group),
+and validator/engine identity (which implementation produced this
+receipt) — not whether they nest under one `version` key, sit as four
+flat top-level fields, or something else. That layout question belongs
+to C4, same as every other field's placement, and stays open there.
+
+**The `unresolved/unknown markers` row stays open, but its blocker has
+moved.** B2's closure gives `unknown` (and `missing` ≡ `absent`) a
+concrete value to record — but *whether the receipt records coverage
+at all* is explicitly F's own open question (F1/F4: "whether/how
+`MaterializedField.coverage` projects into the receipt"), not C3's to
+decide. Deciding this row here, now that B2 unblocked the value's
+shape, would mean quietly answering F's question from inside C — the
+same category of boundary violation this file has caught and corrected
+several times already (F1 regressing B3, F3 re-asserting coverage in
+the receipt). Left for F.
+
+So C3 is now decided for `BOUNDARY.md`'s own sketch (the two digests,
+the two provenance-derived lists) plus D1's four version-identity
+facts (content, not layout), and explicitly open for `signature`
+(nothing grounds it yet), `unresolved/unknown markers` (blocked on F's
+coverage-projection decision, not B2 anymore), and the two F-territory
+digests. C4 still owns how every one of these facts is actually nested
+and named on the wire.
 
 ### C4. Schema home — partially decided
 
@@ -773,26 +825,30 @@ section invents a shape for.
 
 ### C6. What this does and doesn't close
 
-**Closed:** C1 (sibling artifact), C2 (produced every call), C5's
-classification rule (`provenance` alone decides list membership, no
-second source needed for whether a field was defaulted/derived at all).
+**Closed:** C1 (sibling artifact), C2 (produced every call), C3's
+version-identity row (filled in by D1's four identifier groups, once D
+closed — no new field design, C adopts D's shape), C5's classification
+rule (`provenance` alone decides list membership, no second source
+needed for whether a field was defaulted/derived at all).
 
 **Open:**
-- C3's version-identity fields — section D's job, reserved here, not
-  specified here.
-- C3's unresolved/unknown markers — B2 has since closed (`missing`/
-  `unknown` now have a real shape), clearing that blocker, but this
-  row's actual receipt-field representation is still not decided here.
+- C3's unresolved/unknown markers — B2 closing gave the *value* a real
+  shape, but *whether* coverage projects into the receipt at all is
+  F's own open question (F1/F4), not C3's to decide. Blocked on F now,
+  not B2.
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
-- C4's exact schema location — deferred until C3 is actually complete.
+- C4's exact schema location — deferred until C3 is actually complete
+  (still blocked on `signature` and the two F-territory rows above).
 - **C5's entry evidence** (`rule`/`inputs`/`value_digest`) — the
   three-value `provenance` enum decides *whether* an `applied_defaults`/
   `derived_values` entry exists, but not what goes inside it. That comes
   from a materialization/derivation execution record this section does
   not yet specify — follow-up work for whoever implements the
   `Normalize`/default-application and derivation steps.
+- `signature` — nothing grounds it yet; a future decision, not
+  recovered from anywhere.
 
 ## D — Version binding (closes section D)
 
