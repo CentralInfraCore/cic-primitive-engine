@@ -58,8 +58,9 @@
 //! refused for the price of reading the bytes once.
 
 use crate::error::{code, Error, Result, Stage};
-use saphyr::{LoadableYamlNode, Yaml};
-use saphyr_parser::{Event, Parser};
+use saphyr::{Scalar, Yaml, YamlLoader};
+use saphyr_parser::{Event, Parser, ScalarStyle, Tag};
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +68,27 @@ pub enum Value {
     Null,
     Bool(bool),
     Int(i64),
+    /// A base-10 integer literal that does not fit in `i64` — section A3's
+    /// "exact-digit rendering, `big.Int`-equivalent" requirement for a case
+    /// `i64` cannot hold. Holds the literal's digits **validated but not yet
+    /// normalized** (sign folding, leading-zero stripping, `-0` -> `0` all
+    /// happen at canonicalization, mirroring how `Float`'s `-0.0` is only
+    /// folded when written, not at parse time) — guaranteed to be an
+    /// optional `+`/`-` followed by one or more ASCII digits, nothing else.
+    ///
+    /// # Provenance
+    /// Added after a review on PR #19 found that `saphyr`, this reader's
+    /// YAML parser, silently demotes an integer literal beyond `i64` range
+    /// to a lossy `f64` *before* canonicalization ever sees it — verified
+    /// empirically (`9223372036854775808` parsed to
+    /// `FloatingPoint(9.223372036854776e18)`, not an error, not kept exact).
+    /// Go's own pipeline does not have this gap: `core/nexus/iac/number.go`
+    /// parses the literal's own text through `math/big.Int`, independent of
+    /// any native integer type's width. This variant closes the same gap in
+    /// Rust, parsing the raw scalar text directly (via `saphyr`'s own
+    /// `early_parse(false)` loader mode) rather than trusting `saphyr`'s
+    /// default eager resolution to i64/f64.
+    BigInt(String),
     Float(f64),
     Str(String),
     Seq(Vec<Value>),
@@ -148,6 +170,7 @@ impl Value {
             Value::Null => "null".into(),
             Value::Bool(b) => b.to_string(),
             Value::Int(i) => i.to_string(),
+            Value::BigInt(s) => s.clone(),
             Value::Float(f) => f.to_string(),
             Value::Str(s) => s.clone(),
             Value::Seq(_) => "<sequence>".into(),
@@ -177,7 +200,18 @@ pub fn parse(data: &[u8], stage: Stage, path: &str, what: &str) -> Result<Value>
 
     scan_input(text, stage, path, what)?;
 
-    let docs = Yaml::load_from_str(text).map_err(|e| {
+    // `early_parse(false)`: scalars stay as `Yaml::Representation` (the raw
+    // literal text), instead of `saphyr` eagerly resolving them to
+    // `Integer(i64)`/`FloatingPoint(f64)` right here. Resolution happens
+    // below, in `convert`/`resolve_scalar`, so a base-10 integer literal
+    // beyond `i64` range can be kept exact (`Value::BigInt`) instead of
+    // silently losing precision through `saphyr`'s own `i64`/`f64`
+    // fallback -- see `Value::BigInt`'s own doc comment for why this
+    // matters and how it was found.
+    let mut parser = Parser::new_from_str(text);
+    let mut loader = YamlLoader::<Yaml>::default();
+    loader.early_parse(false);
+    parser.load(&mut loader, true).map_err(|e| {
         Error::new(
             code::MALFORMED_DOCUMENT,
             "R-READ-WELL-FORMED",
@@ -186,6 +220,7 @@ pub fn parse(data: &[u8], stage: Stage, path: &str, what: &str) -> Result<Value>
             format!("{what} is not valid YAML: {e}"),
         )
     })?;
+    let docs = loader.into_documents();
 
     // One document per composition. A second one used to be dropped
     // silently by taking `.next()`, so validation authenticated a PREFIX of the
@@ -209,14 +244,17 @@ pub fn parse(data: &[u8], stage: Stage, path: &str, what: &str) -> Result<Value>
     // An empty document is the empty mapping. `{}`, an empty file and a file
     // holding only a `---` marker are the same input as far as this model is
     // concerned, and the corpus contains more than one of them. A bare `---`
-    // parses as null rather than as no document at all, so both are folded here.
+    // parses as null rather than as no document at all, so both are folded here
+    // -- now checked AFTER resolving (`Representation("~", ...)` isn't
+    // literally `Value::Null` until `resolve_scalar` runs), not before.
     let Some(doc) = docs.into_iter().next() else {
         return Ok(Value::Map(Map::default()));
     };
-    if matches!(doc, Yaml::Value(saphyr::Scalar::Null)) {
+    let value = convert(&doc, stage, path, what)?;
+    if matches!(value, Value::Null) {
         return Ok(Value::Map(Map::default()));
     }
-    convert(&doc, stage, path, what)
+    Ok(value)
 }
 
 /// Scan the document as an event stream and refuse what the composer would
@@ -338,14 +376,16 @@ fn consume_value(stack: &mut [Frame]) {
 }
 
 fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
-    Ok(match y {
-        Yaml::Value(scalar) => convert_scalar(scalar),
-        Yaml::Sequence(items) => Value::Seq(
+    match y {
+        Yaml::Representation(text, style, tag) => {
+            resolve_scalar(text, *style, tag.as_ref(), stage, path, what)
+        }
+        Yaml::Sequence(items) => Ok(Value::Seq(
             items
                 .iter()
                 .map(|i| convert(i, stage, path, what))
                 .collect::<Result<Vec<_>>>()?,
-        ),
+        )),
         Yaml::Mapping(m) => {
             let mut out = Map::default();
             for (k, v) in m {
@@ -353,7 +393,10 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                 // allows `1:` and `true:`, and coercing them would let two
                 // distinct keys collapse into one name — a silent collision in
                 // a structure whose whole purpose is unique addressing.
-                let Yaml::Value(saphyr::Scalar::String(key)) = k else {
+                // Resolved the same way any other scalar is (early_parse is
+                // off for keys too, same as values), then checked for the
+                // String outcome specifically.
+                let Yaml::Representation(key_text, key_style, key_tag) = k else {
                     return Err(Error::new(
                         code::MALFORMED_DOCUMENT,
                         "R-READ-KEY-TYPE",
@@ -362,32 +405,217 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                         format!("{what} has a non-string mapping key; node names are strings"),
                     ));
                 };
-                out.push(key.to_string(), convert(v, stage, path, what)?);
+                let Value::Str(key) =
+                    resolve_scalar(key_text, *key_style, key_tag.as_ref(), stage, path, what)?
+                else {
+                    return Err(Error::new(
+                        code::MALFORMED_DOCUMENT,
+                        "R-READ-KEY-TYPE",
+                        stage,
+                        path,
+                        format!("{what} has a non-string mapping key; node names are strings"),
+                    ));
+                };
+                out.push(key, convert(v, stage, path, what)?);
             }
-            Value::Map(out)
+            Ok(Value::Map(out))
         }
-        // Aliases and tagged nodes are not part of the schema language or the
-        // authoring format. Refusing them keeps the input a tree.
-        _ => {
-            return Err(Error::new(
-                code::MALFORMED_DOCUMENT,
-                "R-READ-TREE-ONLY",
-                stage,
-                path,
-                format!(
+        // Aliases are already refused at the event-scan stage. A tagged
+        // mapping/sequence (a custom, non-core-schema tag — `Yaml::Tagged`)
+        // and anything else not covered above are not part of the schema
+        // language or the authoring format. Refusing them keeps the input
+        // a tree.
+        _ => Err(Error::new(
+            code::MALFORMED_DOCUMENT,
+            "R-READ-TREE-ONLY",
+            stage,
+            path,
+            format!(
                 "{what} uses a YAML construct this model does not read (alias, tag or bad value)"
             ),
-            ))
-        }
-    })
+        )),
+    }
 }
 
-fn convert_scalar(s: &saphyr::Scalar) -> Value {
+/// Resolves a `Yaml::Representation` scalar's raw text into a [`Value`].
+///
+/// Handles, locally, the one case this reader cannot delegate to `saphyr`'s
+/// own resolution without losing precision: an untagged, `Plain`-style,
+/// base-10 integer literal beyond `i64` range (A3, see `Value::BigInt`).
+/// Everything else — `null`/`true`/`false`, floats, `0x`/`0o` integers,
+/// quoted and plain strings, and any explicitly-tagged scalar — is
+/// delegated to `Scalar::parse_from_cow_and_metadata`, exactly what
+/// `early_parse(true)` (this crate's previous, default loading mode) would
+/// have done.
+fn resolve_scalar(
+    text: &str,
+    style: ScalarStyle,
+    tag: Option<&Cow<'_, Tag>>,
+    stage: Stage,
+    path: &str,
+    what: &str,
+) -> Result<Value> {
+    let refuse = || {
+        Error::new(
+            code::MALFORMED_DOCUMENT,
+            "R-READ-TREE-ONLY",
+            stage,
+            path,
+            format!(
+                "{what} uses a YAML construct this model does not read (alias, tag or bad value)"
+            ),
+        )
+    };
+
+    // A custom (non-core-schema) tag on a scalar hits the same rule a
+    // custom-tagged mapping/sequence does in `convert` — tags are not part
+    // of the schema language.
+    if let Some(t) = tag {
+        if !t.is_yaml_core_schema() {
+            return Err(refuse());
+        }
+    }
+
+    // The A3 carve-out. Deliberately narrow: untagged and Plain-style only
+    // — an explicitly-tagged integer (`!!int 9223372036854775808`) is not
+    // covered, a named, narrower scope than the untagged case this gap was
+    // actually found in, not silently widened to cover every possible way
+    // an integer could be spelled.
+    if tag.is_none() && style == ScalarStyle::Plain {
+        if let Some(digits) = base10_integer_literal(text) {
+            return Ok(match digits.parse::<i64>() {
+                Ok(i) => Value::Int(i),
+                Err(_) => Value::BigInt(digits.to_string()),
+            });
+        }
+    }
+
+    match Scalar::parse_from_cow_and_metadata(Cow::Borrowed(text), style, tag) {
+        Some(scalar) => Ok(convert_scalar(&scalar)),
+        None => Err(refuse()),
+    }
+}
+
+/// Whether `s` is shaped like a base-10 integer literal: an optional
+/// leading `+`/`-`, then one or more ASCII digits, nothing else — the same
+/// shape `cic-canonical`'s own `canonical_integer` (and Go's
+/// `big.Int.SetString(s, 10)`) accepts. Returns `s` itself, unchanged
+/// (sign and leading zeros included) — validated, not normalized;
+/// normalization is canonicalization's job (A3), mirroring how a float's
+/// `-0.0` is only folded to `0` when written, not at parse time.
+fn base10_integer_literal(s: &str) -> Option<&str> {
+    let digits = s.strip_prefix(['+', '-']).unwrap_or(s);
+    (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())).then_some(s)
+}
+
+fn convert_scalar(s: &Scalar) -> Value {
     match s {
-        saphyr::Scalar::Null => Value::Null,
-        saphyr::Scalar::Boolean(b) => Value::Bool(*b),
-        saphyr::Scalar::Integer(i) => Value::Int(*i),
-        saphyr::Scalar::FloatingPoint(f) => Value::Float(f.into_inner()),
-        saphyr::Scalar::String(s) => Value::Str(s.to_string()),
+        Scalar::Null => Value::Null,
+        Scalar::Boolean(b) => Value::Bool(*b),
+        Scalar::Integer(i) => Value::Int(*i),
+        Scalar::FloatingPoint(f) => Value::Float(f.into_inner()),
+        Scalar::String(s) => Value::Str(s.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_doc(yaml: &str) -> Value {
+        parse(yaml.as_bytes(), Stage::Read, "$", "document")
+            .unwrap_or_else(|e| panic!("{yaml:?}: {e}"))
+    }
+
+    // Review-caught gap (PR #19): saphyr itself, not just a hypothetical
+    // misuse, silently demotes a base-10 integer literal beyond i64 range
+    // to a lossy f64 before this reader's old code ever saw it -- verified
+    // empirically (9223372036854775808 resolved to
+    // FloatingPoint(9.223372036854776e18)). These vectors are exactly the
+    // ones the review named: the i64 boundary on both sides, the f64
+    // 53-bit mantissa boundary (already exact either way), zero/sign/
+    // leading-zero normalization inputs, and a genuinely large value no
+    // machine integer could ever hold.
+    #[test]
+    fn large_integer_literals_keep_exact_precision() {
+        let cases: &[(&str, Value)] = &[
+            ("9223372036854775807", Value::Int(9_223_372_036_854_775_807)),
+            (
+                "9223372036854775808",
+                Value::BigInt("9223372036854775808".to_string()),
+            ),
+            (
+                "9223372036854775809",
+                Value::BigInt("9223372036854775809".to_string()),
+            ),
+            (
+                "-9223372036854775808",
+                Value::Int(-9_223_372_036_854_775_808),
+            ),
+            (
+                "-9223372036854775809",
+                Value::BigInt("-9223372036854775809".to_string()),
+            ),
+            ("9007199254740992", Value::Int(9_007_199_254_740_992)),
+            ("9007199254740993", Value::Int(9_007_199_254_740_993)),
+            ("000000123", Value::Int(123)),
+            ("-00000123", Value::Int(-123)),
+            ("0", Value::Int(0)),
+            ("-0", Value::Int(0)),
+            (
+                "1234567890123456789012345678901234567890",
+                Value::BigInt("1234567890123456789012345678901234567890".to_string()),
+            ),
+        ];
+        for (literal, want) in cases {
+            let doc = parse_doc(&format!("v: {literal}"));
+            let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+            assert_eq!(got, want, "literal {literal:?}");
+        }
+    }
+
+    // A quoted integer-shaped literal is a string per YAML's own semantics
+    // (ScalarStyle::DoubleQuoted/SingleQuoted), regardless of digit shape --
+    // the A3 carve-out must not override that.
+    #[test]
+    fn quoted_large_integer_is_a_string_not_bigint() {
+        let doc = parse_doc("v: \"9223372036854775808\"");
+        let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+        assert_eq!(got, &Value::Str("9223372036854775808".to_string()));
+    }
+
+    // Hex/octal integers are out of this fix's scope, same as Go's own
+    // big.Int.SetString(s, 10) (base 10 only) -- unchanged from before,
+    // named here so a future reader doesn't assume this was covered.
+    #[test]
+    fn hex_integer_still_resolves_via_saphyr_unchanged() {
+        let doc = parse_doc("v: 0x1A");
+        let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+        assert_eq!(got, &Value::Int(26));
+    }
+
+    // The existing conformance/reader/ vectors only check accept/reject,
+    // not the resulting tree -- re-verified here that ordinary documents
+    // still parse to the exact same Value shape as before this rewrite.
+    #[test]
+    fn ordinary_documents_unaffected() {
+        assert_eq!(parse_doc("a: 1\nb:\n  c: 2"), {
+            let mut inner = Map::default();
+            inner.push("c", Value::Int(2));
+            let mut outer = Map::default();
+            outer.push("a", Value::Int(1));
+            outer.push("b", Value::Map(inner));
+            Value::Map(outer)
+        });
+        assert_eq!(parse_doc("---"), Value::Map(Map::default()));
+        assert_eq!(parse_doc(""), Value::Map(Map::default()));
+        assert_eq!(parse_doc("~"), Value::Map(Map::default()));
+    }
+
+    #[test]
+    fn numeric_looking_map_key_is_still_refused() {
+        let err = parse(b"1: a", Stage::Read, "$", "document").expect_err("must be refused");
+        assert_eq!(err.code, code::MALFORMED_DOCUMENT);
+        assert_eq!(err.rule, "R-READ-KEY-TYPE");
     }
 }
