@@ -49,20 +49,126 @@ receipt
 
 This is `docs/PRIMITIVE-IR.md`'s `Read → Parse → Normalize → Resolve →
 Validate → Canonicalize` pipeline, named for where a receipt attaches.
-Sections A–G below are this pipeline's open decisions, in the order they
-must be closed — each later section assumes the ones before it are settled.
+Sections A0 and A–G below are this pipeline's open decisions, in the order
+they must be closed — each later section assumes the ones before it are
+settled.
 
-## Decision order: A → B → C → D → E → F → G
+## Decision order: A0 → A → B → C → D → E → F → G
 
-Section A must close first: without a canonical byte representation, it is
-not possible to even state objectively whether the Go and Rust
-implementations produced "the same" output.
+Section A0 must close first, ahead of even A: before picking a canonical
+byte format, there is a prior-art question that would make picking one from
+scratch a mistake. Section A must close next — without a canonical byte
+representation, it is not possible to even state objectively whether the
+Go and Rust implementations produced "the same" output.
+
+---
+
+### A0. Existing implementation convergence
+
+**Status:** DECIDED (meta-question) / OPEN (the inventory itself)
+**Blocks:** A — picking a canonical format from scratch would be a mistake if
+a tested one already exists for most of this
+**Decision ref:** this section
+
+CIC-Relay already has a landed, tested implementation of almost this exact
+problem, under different vocabulary, in `core/nexus/iac`
+(`features/feature-011-oci-provider/iac-object-model.md`):
+
+- `key: VALUE ≡ key: {$value: VALUE, $cic: {...}}` (`field.go`, `ExpandField`)
+  — the short/long form expansion this file's whole premise is about, just
+  named `$cic.behavior.mode: {read, write, implemented, visible}` instead of
+  the Access atom's `access`/`modify`/`inherit`/`default_injection`/
+  `conformance`. **Landed, tested.**
+- **spec #1, Canonical Object Encoding** — number normalization
+  (`number.go` ↔ the `cic-canonical` Rust crate, byte-identical vectors,
+  proven) plus map-key order / null-vs-absent (`canonicaljson.go`, Go only,
+  no Rust peer yet).
+- **spec #2, ACL algorithm** (default-deny + owner/group/other + named allow
+  + mask + inherit) — landed, tested, Go only.
+- **spec #4, Observation completeness** (`observed` / `authoritative_absent`
+  / `unobserved`; verdicts `CONFORMANT`/`DRIFT`/`OBSERVED_ABSENT`/
+  `UNOBSERVED`/`NOT_COMPARABLE`) — landed, Go only. This is section B's
+  five-state concern, independently converged on, under different names.
+- **spec #5, stable `field_id`** (survives a path rename) — landed, tested,
+  Go only.
+- A `proof` object-level index (`schema_digest`, `conformance_plan_digest`,
+  `observation_digest`, `object_digest`, `signature`) — this file's
+  "receipt" (section C), independently converged on, Go only.
+- A type-level custody boundary (`sensitive.go`): a secret field's Go type
+  can only ever hold a `SecretRef`, never plaintext, enforced object-wide —
+  a working, proven example of section E's enforcement problem, in Go,
+  which `docs/BOUNDARY.md` had only Rust prior art for.
+
+`iac-object-model.md`'s own audit already flagged the risk this creates:
+*"The surface layer (ConfigSurface/StateSurface/BindingSurface/
+ManagedEntity) ... is not in this repo — it lives in the separate
+schemas.tar / cic-module-oracle-cloud artifact."* The `$cic`/`mode` model and
+the `cic-primitives` Access/Role atom model have never been reconciled —
+two parallel universes over the same problem.
+
+**Meta-decision (closed):** the materialization library is the single
+semantic authority — not `cic-primitives` alone, not `core/nexus/iac` alone.
+`core/nexus/iac` is **migration source and tested reference material**, not
+a second, competing contract to keep alive indefinitely:
+
+```text
+cic-primitive-engine / materialization lib
+        ↓
+one canonical semantics
+        ↓
+Relay · WASM guest (Go) · WASM guest (Rust) · schema tooling · proof chain
+```
+
+Agreed roadmap:
+
+```text
+1. Inventory core/nexus/iac (A0.1-A0.4 below)
+2. Decide what moves over unchanged / adapted / discarded
+3. Write the normative materialization spec (closes A-G)
+4. Implement the library in Go + Rust
+5. Differential conformance (section G)
+6. Migrate Relay onto the library
+7. Remove the superseded core/nexus/iac logic
+```
+
+**Still open — the inventory itself (step 1 above):**
+
+1. **A0.1** — which `core/nexus/iac` elements already encode primitive
+   semantics (belong in the lib, need mapping to the Access/Role vocabulary)?
+2. **A0.2** — which are pure runtime mechanism (stay in Relay, the lib has no
+   opinion — e.g. anything specific to the drift engine's own bookkeeping)?
+3. **A0.3** — which carry semantics that have no counterpart in
+   `cic-primitives` at all today (a real gap on the primitives side, not
+   just a naming difference)?
+4. **A0.4** — where is there an actual conflict (the same concept, modeled
+   two incompatible ways), not just a naming difference?
+
+Starting sketch for the A0.1 mapping — intentionally incomplete, the real
+answer is the inventory pass, not this table:
+
+```text
+Relay IAC                         cic-primitives
+--------------------------------------------------------------
+$cic.behavior.mode.read           Access ?
+$cic.behavior.mode.write          Access ?
+$cic.behavior.mode.implemented    Access.conformance
+$cic.behavior.mode.visible        Access.default_injection ?
+observed                          state / observation semantics
+authoritative_absent              ?
+unobserved                        not_observed
+field_id                          Address / Identity ?
+proof.schema_digest               receipt.schema_digest (section C)
+```
+
+Every `?` and every row with no right-hand side at all is where A0.3/A0.4
+actually live — not guessed here, found by reading the code on both sides.
 
 ---
 
 ### A. Canonical representation
 
-**Status:** OPEN
+**Status:** OPEN — and per A0, closing this starts from `core/nexus/iac`'s
+`number.go`/`cic-canonical`/`canonicaljson.go`, not from a blank page
 **Blocks:** everything below — B through G all assume a canonical form exists
 **Decision ref:** —
 
