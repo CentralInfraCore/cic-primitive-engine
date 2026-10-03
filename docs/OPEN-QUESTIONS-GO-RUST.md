@@ -311,9 +311,14 @@ unrepresentable.
 (`core/nexus/iac`'s `number.go`/`canonicaljson.go`/`digest.go`) as
 normative. Two gaps named, not resolved: Unicode normalization, and
 `TopologySet` element canonical order (the existing Go code flags this one
-itself, as a known placeholder). The Rust side does not yet *implement*
-most of this — that's follow-up work (roadmap step 4), tracked but not
-part of closing this section.
+itself, as a known placeholder). **Update:** the Rust side now
+*implements* all of A1–A7 (`engine/src/canonical.rs`, PR #19) — the
+"not yet implemented" note this line originally carried is stale.
+A review on that PR also found and closed a real gap: `saphyr` was
+silently demoting an integer literal beyond `i64` range to a lossy
+`f64` before canonicalization ever saw it, fixed in `reader.rs` with a
+new `Value::BigInt`. See `MATERIALIZATION-SPEC.md`'s A8 for the full
+account.
 **Blocks:** everything below — B through G all assume a canonical form exists
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#a--canonical-representation-closes-section-a`
 
@@ -337,9 +342,10 @@ inherited limitation, not fixed here. Digest = `sha256:` + lowercase-hex
 SHA-256 of the canonical bytes directly, no further transform.
 
 See `docs/MATERIALIZATION-SPEC.md` for the full write-up, the empirical
-verification detail, and exactly what remains open (Unicode normalization,
-`TopologySet` order, and the fact that the Rust peer for everything except
-number canonicalization still has to be written).
+verification detail, and exactly what remains open (Unicode normalization
+and `TopologySet` order — the Rust peer itself is now written for all of
+A1–A7, `engine/src/canonical.rs`, PR #19; not yet wired into a pipeline
+stage, since `Parse`/`Normalize`/`Resolve`/`Validate` don't exist yet).
 
 ---
 
