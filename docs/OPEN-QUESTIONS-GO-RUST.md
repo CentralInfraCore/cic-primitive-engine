@@ -76,11 +76,27 @@ except validator/engine identity, which is supposed to differ) is the
 comparability gate section G's differential conformance checks before
 comparing output. **E is now PARTIALLY DECIDED** — host-side enforcement
 at a specific, real chokepoint already found in `CIC-Relay/core/cabinet/
-service.go` (E1, E3 closed), with the exact type shape and a real,
-found gap (the dispatch loop's `authContextJson` isn't a genuine actor
-identity yet) left open (E2). **F is next**, though E2's identity gap is
-a standing dependency for anyone implementing E, not just a documentation
-loose end.
+service.go` (E1, E2a, E3 closed), with the type's exact representation,
+the receipt-transport wire shape, and a real, found gap (the dispatch
+loop's `authContextJson` isn't a genuine actor identity yet) left open
+(E2b and beyond) — the identity gap is a standing dependency for anyone
+implementing E, not just a documentation loose end.
+
+**F is now PARTIALLY DECIDED too** — the model already covers output
+symmetry by construction (no new data shape needed: B3's coverage/
+provenance axes, already orthogonal not input-vs-output split, and
+section A's canonical form already serve both; section C's every-call
+receipt *production* is direction-agnostic, though whether coverage
+itself ever gets projected into the receipt's fields is separately
+still open), and `core/nexus/iac`'s comparator
+(`compare.go`/`observation.go`/`conformance.go`) is confirmed migration
+source under A0's existing meta-decision, not a permanent fork — made
+explicit for this axis rather than left looking undecided. Open: the
+comparator has no implementation in the new lib yet, in either language,
+whether/how `MaterializedField.coverage` projects into the receipt, and
+how the materialization receipt relates to the separate conformance/
+drift verdict (a third, distinct proof artifact alongside ProofTrace and
+the receipt) isn't decided. **G is next.**
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -537,9 +553,18 @@ bypass materialization
 
 ### F. Output symmetry
 
-**Status:** OPEN
-**Blocks:** proof-chain completeness — today only the input side is in scope
-**Decision ref:** —
+**Status:** **PARTIALLY DECIDED, not closed.** F1's model claim (B's
+existing coverage/provenance axes already cover output — corrected after
+review caught a regression to an input-vs-output framing B3 was already
+fixed away from) and F2 (the comparator is migration source under A0's
+existing meta-decision, made explicit for this axis) are settled.
+**Open:** whether/how `MaterializedField.coverage` gets projected into
+the receipt (C3 carries no coverage field today — a second overclaim
+review caught in the same paragraph), the comparator/verdict logic's
+actual implementation (in either language), and how the materialization
+receipt relates to the separate conformance/drift verdict artifact.
+**Blocks:** proof-chain completeness
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
 
 ```text
 module observation
@@ -555,18 +580,57 @@ receipt/evidence
 proof chain
 ```
 
-1. `docs/BOUNDARY.md`'s "output is a new claim" principle requires the same
-   normalize/validate/canonicalize treatment on a module's *output*
-   (observation), not just its input. Does the planned Go/Rust resolver pair
-   cover this symmetric path, or is input resolution the only scope for now?
-2. CIC-Relay's `core/nexus/iac/conformance.go` already hand-builds part of
-   this (intent vs. observed comparison, `UNOBSERVED`/`CONFORMANT`/`DRIFT`
-   verdicts) for one vertical slice (OCI), independently of this effort. Does
-   the new resolver eventually replace/drive that code, or do the two stay
-   separate indefinitely? If separate, that is itself a second place the same
-   judgment could silently diverge — worth stating as a deliberate, scoped
-   decision rather than an oversight (cf. D-017's explicit scoping of
-   `deprecated` in cic-primitives).
+1. **Closed, recovered from `BOUNDARY.md`, not newly decided —
+   corrected after review caught two overclaims in this item's first
+   draft:** `BOUNDARY.md`'s own diagram already specifies the output
+   path (`ValidatedMaterializedInput → module → UntrustedModuleOutput →
+   output schema validation → ValidatedObservation/ValidatedConsequence`)
+   and its principle (*"a module's output does not inherit trust from
+   its input"*). The planned resolver's *model* already covers it
+   without new scope — but **not** via an input-vs-output split. An
+   earlier draft said "coverage for output, provenance for input, never
+   both," which regressed exactly the oversimplification B3 was already
+   corrected away from: a derived state field legitimately carries
+   **both** `coverage: observed` and `provenance: derived` at once
+   (`BOUNDARY.md`'s own `effective_state` example). The real split is
+   `coverage` = observation knowledge, `provenance` = value origin — not
+   which direction the data came from. Separately, section A's canonical
+   form has no input/output distinction at all. **Section C's receipt
+   mechanism is direction-agnostic (C2's every-call production applies
+   either way) — but this does not mean the receipt carries a coverage
+   payload.** C3's actually-decided fields are digests plus
+   `applied_defaults[]`/`derived_values[]`; no coverage field exists
+   there today, and `conformance_plan_digest`/`observation_digest`
+   remain exactly as open as C3 already said. What doesn't exist yet, in
+   either language, is the actual comparator/verdict-aggregation logic —
+   today that's Relay's own Go code
+   (`compare.go`/`observation.go`/`conformance.go`), landed and tested
+   but scoped to one OCI vertical slice with no Rust peer.
+2. **Closed, making an existing decision explicit, not re-deciding it:**
+   A0's meta-decision already settled that `core/nexus/iac` is migration
+   source, not a permanent second contract, generally. This section
+   states plainly that `compare.go`/`observation.go`/`conformance.go`
+   fall under that same decision specifically — they do not stay separate
+   indefinitely; they get absorbed per the roadmap's step 6, same as the
+   rest of `core/nexus/iac`'s inventory. Leaving this look undecided for
+   one specific piece of code, when the general principle was already
+   settled, would itself be the kind of silent-divergence risk this
+   question named (cf. D-017's explicit scoping of `deprecated`) — so
+   it's answered here, not left open by omission.
+
+**Also established: three distinct proof-adjacent artifacts, not one.**
+Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
+chain-of-custody (which steps ran, with which I/O hashes), (2) the
+materialization receipt (section C — digests plus provenance-derived
+default/derivation evidence, per what C3/C5 actually decided; **not**
+restated here as already carrying coverage/observation evidence, which
+stays open per this section's own item above), and (3) the
+conformance/drift verdict (`conformance.go` — whether an observed value
+matches a declared intent) are three separate facts. `C3` already
+flagged `conformance_plan_digest`/`observation_digest` as "section F's
+territory, not provenance" for exactly this reason — the verdict is not
+part of the receipt, whatever the receipt eventually turns out to
+include.
 
 ---
 

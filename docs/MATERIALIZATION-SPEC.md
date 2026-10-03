@@ -1086,3 +1086,191 @@ concern as everything else in this effort, not designed further here.
   binding.
 - The guest-side digest-verification SDK shape (Go and Rust) — not
   designed here, just established as necessary.
+
+## F — Output symmetry (PARTIALLY DECIDED, not closed)
+
+```text
+Status: PARTIALLY DECIDED, not closed.
+Closed:  F1-model (B's coverage/provenance axes and A's canonical form
+         already cover output, with NO input-vs-output split -- the
+         real split is observation-knowledge vs. value-origin, and a
+         derived state field legitimately carries both at once, per
+         B3), F1-mechanism (C2's every-call receipt production is
+         direction-agnostic), F2 (core/nexus/iac's compare.go/
+         observation.go/conformance.go are migration source per A0's
+         existing meta-decision, not a permanently separate contract --
+         made explicit for the output axis, not newly decided).
+Open:    whether/how MaterializedField.coverage gets PROJECTED INTO
+         the receipt for an observed field -- C3's decided field set
+         (digests + applied_defaults[]/derived_values[]) carries no
+         coverage payload today, and conformance_plan_digest/
+         observation_digest are explicitly still reserved for this
+         section, unresolved. Also open: the comparator/verdict
+         EXECUTION LOGIC (doesn't exist in the new lib yet, in either
+         language), and how the conformance/drift verdict relates to
+         the receipt (C) and to ProofTrace (E's finding) -- three
+         adjacent, distinct proof artifacts, not one.
+```
+
+### F1. The model already covers output; the executable logic doesn't exist yet
+
+**Recovered, not newly decided:** `docs/BOUNDARY.md`'s own diagram
+already specifies the output path's shape —
+
+```text
+ValidatedMaterializedInput -> module -> UntrustedModuleOutput
+                                      -> output schema validation
+                                      -> ValidatedObservation / ValidatedConsequence
+```
+
+— and states the principle plainly: *"A module's output does not
+inherit trust from its input. An adapter receives a proven contract,
+talks to a real system, and returns a raw observation; that observation
+is validated against the state/operational schema before it may enter
+the CIC state or proof chain."* This was never actually in question;
+what section F has to establish is how *this effort's* machinery (A-E)
+applies to it.
+
+**It already does, without new scope — corrected after review caught a
+regression to B3's pre-correction framing:**
+- **Section B's model is already symmetric, but not along an
+  input-vs-output split.** An earlier draft of this section said
+  "`coverage` for output, `provenance` for input — never both," which is
+  exactly the oversimplification B3 was already corrected away from: a
+  *derived state field* carries **both** `coverage: observed` and
+  `provenance: derived` at once (`BOUNDARY.md`'s own `effective_state`
+  example). The real split is not "which direction" but **what each axis
+  records**: `coverage` is *observation knowledge* (was this field
+  looked at, and what did the look find), `provenance` is *value origin*
+  (authored, defaulted, or derived) — and they cross:
+  ```text
+  raw observation       -> coverage populated, provenance usually absent
+  derived state field    -> coverage populated, provenance: derived
+  authored intent field  -> provenance populated, coverage absent
+  derived intent field   -> provenance: derived, coverage absent
+  ```
+  There is no second data model to invent for output; B already built
+  one model that covers both, correctly, as of the fix already merged —
+  this section's first draft just re-introduced the bug in its own
+  summary of that fix.
+- **Section A's canonical form has no input/output distinction at all** —
+  a canonical value is a canonical value, materialized from an
+  observation or from authored intent, byte-identical rules either way.
+- **Section C's receipt mechanism is direction-agnostic, but this does
+  NOT mean the receipt carries a coverage payload — corrected, a second
+  overclaim in the same paragraph.** C2 decided a receipt is produced on
+  *every materialization call*; nothing in C1-C5 says "input only," so
+  the *mechanism* is symmetric. But C3's actually-decided field set is
+  digests plus `applied_defaults[]`/`derived_values[]` (both derived from
+  `provenance`, per C5) — **it does not define any coverage/observation
+  field at all**, and C3 explicitly reserved
+  `conformance_plan_digest`/`observation_digest` as *this section's*
+  territory, still open. So: `MaterializedField.coverage` (B3) is
+  in-memory state, already decided. Whether — and how — that coverage
+  information gets *projected into the receipt* for an observed field is
+  a **separate, still-open question**, not something this section
+  (or C) has settled.
+
+**What doesn't exist yet, in either language:** the actual comparator
+and verdict-aggregation *logic* — deciding whether an observed value
+conforms to a declared intent, and rolling per-field verdicts up to an
+object verdict. Today this exists only as Relay's own Go code
+(`core/nexus/iac/compare.go`'s `CompareType` exact/numeric comparator,
+`observation.go`'s `ClassifyField`, `conformance.go`'s `Evaluate`/
+`aggregate`) — landed, tested, but scoped to one OCI vertical slice and
+with **no Rust peer at all**. This is the same "model decided, Rust
+implementation doesn't exist yet" shape section A was already honest
+about for canonicalization; F doesn't change that shape, it just
+confirms the comparator is squarely inside it.
+
+### F2. `core/nexus/iac`'s comparator is migration source, not a permanent fork — making A0's existing decision explicit for this axis
+
+A0's meta-decision already settled the general question: *"the
+materialization library is the single semantic authority... `core/
+nexus/iac` is migration source and tested reference material, not a
+second, competing contract to keep alive indefinitely."* This section
+does not re-decide that — it states plainly that the comparator
+specifically falls under it, because `OPEN-QUESTIONS-GO-RUST.md`'s
+original F2 asked this as if it were still open, and leaving an
+already-decided principle looking undecided for one specific piece of
+code is its own kind of drift risk.
+
+So: `compare.go`/`observation.go`/`conformance.go` do not stay separate
+from the new lib indefinitely. They are the inventory for the output
+side exactly as the rest of `core/nexus/iac` was inventory for the input
+side (A0.1) — eventually absorbed per the roadmap's step 6 (migrate
+Relay onto the library), not maintained forever as a second
+implementation of the same judgment. Until that migration, Relay's
+existing OCI vertical slice continues to run on its own code unchanged;
+nothing here requires touching it now.
+
+### F3. Three distinct proof-adjacent artifacts — not one, and not two
+
+Building on the exact distinction E1 already drew between the
+materialization receipt (section C) and ProofTrace's chain-of-custody:
+there are now three artifacts in view, and they must stay distinct:
+
+```text
+1. ProofTrace chain       -- which workflow steps ran, with which
+   (service.go/              input/output hashes, chained
+    proof_trace.go)           (execution audit, not field semantics)
+2. Materialization receipt -- materialization evidence bound to the
+   (section C)                canonical result: today, digests plus
+                               provenance-derived default/derivation
+                               evidence (C3/C5). Whether coverage/
+                               observation evidence ever becomes part
+                               of this artifact is OPEN, not decided
+                               by this section (see F1/F4) -- not
+                               restated as settled here.
+3. Conformance/drift verdict -- intent vs. observed comparison outcome
+   (conformance.go)            (CONFORMANT/DRIFT/OBSERVED_ABSENT/
+                                UNOBSERVED/NOT_COMPARABLE)
+```
+
+**Correction (review-caught, a third occurrence of the same error F1/F4
+already fixed twice in this section):** this subsection's own prose
+originally said the receipt carries "capability/coverage/provenance
+evidence" and "says how its value came to be (defaulted, derived,
+**observed**)" — both quietly re-asserting the coverage-in-receipt claim
+F1/F4 explicitly mark OPEN, in the same document, two headings later.
+Fixed to describe only what C actually decided (digests +
+provenance-derived evidence), with the coverage question named as open
+rather than answered a third time by implication.
+
+`C3` already flagged `conformance_plan_digest`/`observation_digest` as
+"section F's territory, not provenance" — this section confirms why:
+artifact 3 is not a part of artifact 2, whatever artifact 2 eventually
+includes. The conformance verdict says whether an observed value matches
+what was declared; the receipt says what C already specifies today
+(digests, provenance-derived evidence) — not a claim about coverage.
+Related, sequential, and currently computed by overlapping code paths in
+Relay — but not the same fact, and not to be merged into one structure
+for convenience.
+
+### F4. What this does and doesn't close
+
+**Closed:** F1's model claim (B's existing coverage/provenance axes
+already cover output, with no input-vs-output split — corrected after
+review caught a regression to B3's pre-correction framing), F1's
+mechanism claim (C2's receipt production is direction-agnostic), F2
+(the comparator is migration source under A0's existing meta-decision,
+not a permanent fork — explicit, not newly decided), and the
+three-artifact distinction (F3).
+
+**Not closed, deliberately:**
+- **Whether/how `MaterializedField.coverage` gets projected into the
+  receipt** — corrected, a second overclaim an earlier draft made in
+  the same paragraph as the one above. The receipt mechanism being
+  direction-agnostic (C2) does not mean C3's actual field set carries a
+  coverage payload — it doesn't, today, and `conformance_plan_digest`/
+  `observation_digest` remain exactly as open as C3 already said they
+  were.
+- The comparator/verdict logic has no implementation in the new lib at
+  all yet, in either language — this section establishes where it
+  belongs, not its code.
+- How artifact 2 (receipt) and artifact 3 (conformance verdict) relate
+  procedurally — e.g. does computing a verdict require a receipt to
+  already exist, or are they independent outputs of the same
+  materialization call — is not decided here.
+- Whether/how `conformance_plan_digest` (sketched, not landed, per the
+  A0/D correction) ever gets built is not this section's job.
