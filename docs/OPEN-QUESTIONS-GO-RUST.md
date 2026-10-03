@@ -586,15 +586,29 @@ block this)
    (`cic-primitive-engine`), not a new or separate location** — three
    convergent reasons: (a) A0's closed meta-decision that this library
    is the single semantic authority, not a contract split across
-   repos; (b) the already-closed `signature` row (item 5's sibling
-   decision on PR #14) establishing the receipt needs none of the
-   signed-release pipeline that justified splitting `cic-primitives`
-   out from this engine in the first place, so that reason for a split
-   doesn't apply here; (c) `docs/PRIMITIVE-IR.md` — the receipt's own
-   sibling artifact per item 1 — already lives in this repo with nobody
-   ever treating its repo as an open question, an unquestioned
-   precedent for the identical situation. **Still genuinely open:** the
-   exact in-repo path (trivial, non-blocking) and the schema's actual
+   repos — the strongest of the three on its own. (b) **Corrected
+   (review-caught on PR #18):** an earlier pass argued the
+   already-closed `signature` row means the receipt "needs none of" the
+   signed, Vault-backed release pipeline that justified splitting
+   `cic-primitives` out — that overreaches past what item 5 actually
+   closed (only that *this engine* doesn't sign and doesn't decide
+   signer authority; whether the receipt's schema reserves a slot for
+   an externally-populated signature is still open, C4's own call).
+   The sound version doesn't depend on that open question at all:
+   semantic ownership (who defines the receipt's fields) and signature
+   *production* (who, if anyone, signs it) are orthogonal — whichever
+   way the signature-slot question resolves, external signing never
+   transfers ownership of the receipt's semantic schema to whoever
+   signs it, the same way `cic-primitives`' schema isn't owned by Vault
+   just because Vault signs its releases. (c) **Corrected:**
+   `docs/PRIMITIVE-IR.md` is precedent for this repo owning the
+   *contract* for an artifact it produces, not for "a formal schema
+   already lives here" — the file itself opens *"Not specified yet..."*,
+   a required-properties document, not a working schema; no formal
+   schema exists yet for either artifact. The receipt is its sibling
+   per item 1, produced by the identical pipeline — narrower precedent
+   than first stated, but real. **Still genuinely open:** the exact
+   in-repo path (trivial, non-blocking) and the schema's actual
    field-by-field text, which still cannot be written until item 3's
    remaining field-set rows close.
 5. **CLOSED — classification and evidence, both specified; review

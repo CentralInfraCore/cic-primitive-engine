@@ -944,32 +944,51 @@ waiting on F.
 **Decided: the schema lives in this repo (`cic-primitive-engine`), not
 a new or separate location.** Three already-closed or already-stated
 facts converge on this, not a single guess:
-- **A0's meta-decision** (closed): *"the materialization library is the
-  single semantic authority... not a second, competing contract to
-  keep alive indefinitely."* The receipt is produced by, and describes,
-  this engine's own materialization step — hosting its schema anywhere
-  else would mean the authority that defines the receipt's content and
-  the repository that owns its schema disagree about who's in charge of
+- **A0's meta-decision** (closed), the strongest of the three on its
+  own: *"the materialization library is the single semantic
+  authority... not a second, competing contract to keep alive
+  indefinitely."* The receipt is an artifact produced by, and
+  describing, this engine's own materialization semantics — so the
+  schema describing it belongs to the same single authority as
+  everything else that semantics covers. Hosting it anywhere else
+  would mean the authority that defines the receipt's content and the
+  repository that owns its schema disagree about who's in charge of
   it.
-- **`cic-primitives` was split out specifically because it carries a
-  signed, Vault-backed release pipeline** this engine's README itself
-  says does not belong here (*"Vault access · counter-signature
-  policy · git and release workflow"*). C3's own `signature` row (CLOSED
-  earlier in this section) already established that the receipt needs
-  none of that — this engine computes and emits the receipt, never
-  signs it, and any future signing happens entirely externally. The
-  structural reason `cic-primitives` needed its own repository (an
-  independent, signed release lifecycle) does not apply to the receipt
-  schema, so there's no equivalent reason to split it out the same way.
-- **There is already a working precedent for this repo hosting an
-  artifact it produces, with no second-guessing:** `docs/PRIMITIVE-IR.md`
-  defines the engine's *other* output format (the materialized document
-  itself) and lives here, in `cic-primitive-engine/docs/`, without
-  anyone ever treating "which repo should own the IR's schema" as an
-  open question. The receipt is `PRIMITIVE-IR.md`'s own sibling artifact
-  (C1) — produced by the identical pipeline, for the identical
-  consumers. Treating it differently would need a specific, stated
-  reason; none of the three facts above supplies one.
+- **Correction (review-caught on PR #18): a second argument originally
+  claimed the receipt "needs none of" `cic-primitives`' signed,
+  Vault-backed release pipeline — that overreaches past what C3's
+  `signature` row actually closed.** That row closed only that *this
+  engine* does not sign and does not decide signer authority; it left
+  genuinely open whether the receipt's own schema reserves a slot for
+  an externally-populated signature (parallel to `release.sign`) —
+  schema ownership and producer ownership are different facts, per
+  D-015, which is exactly why PR #14 refused to claim the schema
+  "carries no signature field." Claiming the receipt needs *none* of
+  that machinery risks being contradicted the moment C4 decides that
+  slot question either way. **The actually-sound version of this
+  argument doesn't depend on that undecided question at all:** semantic
+  ownership (who defines what the receipt's fields mean) and signature
+  *production* (who, if anyone, ever signs it) are orthogonal.
+  Whichever way C4 eventually decides the signature-slot question,
+  external signing does not transfer ownership of the receipt's
+  *semantic* schema to whatever authority performs that signing — the
+  same way `cic-primitives`' own schema isn't owned by Vault just
+  because Vault signs its releases. This repo defines the semantics
+  either way.
+- **`docs/PRIMITIVE-IR.md` is precedent for this repo owning the
+  contract for an artifact it produces — not for a formal schema
+  already existing here.** Correction (review-caught): `PRIMITIVE-IR.md`
+  itself opens with *"Not specified yet. This file states what the IR
+  must satisfy, so that the constraints are fixed before the
+  representation is"* — it is a required-properties/architectural
+  contract, not a working formal schema; no formal schema exists yet
+  for either artifact. The precedent this actually supports is narrower
+  but still real: the IR's *contract* is already, unquestionably, owned
+  by this repo, and the receipt is `PRIMITIVE-IR.md`'s own sibling
+  artifact (C1) — produced by the identical pipeline, for the identical
+  consumers. Treating the receipt's contract as belonging elsewhere
+  would need a specific, stated reason; none of the three facts above
+  supplies one.
 
 **Still open, and genuinely so — not decided by the above:** the exact
 file path/directory within this repo (a small implementation detail,
@@ -1138,12 +1157,15 @@ closing F1: coverage, including `unknown`, is already committed via
 row needs no field of its own in the receipt), and **C4's WHICH-REPO
 question** (CLOSED — the schema lives in this repo,
 `cic-primitive-engine`, not a new or separate location: A0's single-
-semantic-authority meta-decision, the already-closed `signature` row
-showing the receipt needs none of the signed-release pipeline that
-justified splitting `cic-primitives` out in the first place, and the
-existing, unquestioned precedent of `PRIMITIVE-IR.md` — the receipt's
-own sibling artifact per C1 — already living here with nobody treating
-its repo as an open question).
+semantic-authority meta-decision as the strongest reason on its own;
+semantic ownership and signature *production* being orthogonal, so
+however C4 eventually settles the still-open signature-slot question,
+external signing never transfers ownership of the receipt's semantic
+schema to whoever signs it; and `PRIMITIVE-IR.md` already establishing
+that this repo owns the *contract* for an artifact it produces, the
+receipt's own sibling per C1 — narrower precedent than "a formal
+schema already lives here," since no formal schema exists yet for
+either artifact, but real).
 
 **Open:**
 - C3's `conformance_plan_digest`/`observation_digest` — section F's
