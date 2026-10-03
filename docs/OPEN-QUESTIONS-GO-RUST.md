@@ -55,10 +55,13 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-Section A0 must close first, ahead of even A: before picking a canonical
-byte format, there is a prior-art question that would make picking one from
-scratch a mistake. Section A must close next — without a canonical byte
-representation, it is not possible to even state objectively whether the
+**A0 and A are now closed** (2026-10-03) — see `docs/A0-INVENTORY.md` and
+`docs/MATERIALIZATION-SPEC.md`. **B is next.**
+
+Section A0 closed first, ahead of even A: before picking a canonical byte
+format, there was a prior-art question that would have made picking one
+from scratch a mistake. Section A closed next — without a canonical byte
+representation, it was not possible to even state objectively whether the
 Go and Rust implementations produced "the same" output.
 
 ---
@@ -184,30 +187,39 @@ unrepresentable.
 
 ### A. Canonical representation
 
-**Status:** OPEN — and per A0, closing this starts from `core/nexus/iac`'s
-`number.go`/`cic-canonical`/`canonicaljson.go`, not from a blank page
+**Status:** **DECIDED** — adopts CIC's existing Canonical Object Encoding
+(`core/nexus/iac`'s `number.go`/`canonicaljson.go`/`digest.go`) as
+normative. Two gaps named, not resolved: Unicode normalization, and
+`TopologySet` element canonical order (the existing Go code flags this one
+itself, as a known placeholder). The Rust side does not yet *implement*
+most of this — that's follow-up work (roadmap step 4), tracked but not
+part of closing this section.
 **Blocks:** everything below — B through G all assume a canonical form exists
-**Decision ref:** —
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#a--canonical-representation-closes-section-a`
 
-1. What is the canonical byte representation of the materialized long-form
-   output — a YAML profile, canonical JSON, or a format this engine defines
-   outright? (`PRIMITIVE-IR.md` open question #3, never closed)
-2. Within that choice, pin down explicitly:
-   - key ordering
-   - number/string/bool/null representation (e.g. `16` vs `16.0`, the exact
-     case this engine's `Value` enum already separates `Int`/`Float` for)
-   - Unicode normalization
-   - list/sequence ordering
-   - map canonicalization
-   - the exact bytes that go into the digest (is it the canonical form
-     itself, or a transform of it?)
-3. Is there an existing convention to reuse — e.g. does CIC-Relay's
-   `cic-canonical` crate already define this, or was it built for a
-   different purpose (canonical JSON for the Vault/trust-flow FFI boundary,
-   not for primitive materialization)? Needs checking before assuming reuse.
-4. Byte-equality via a shared conformance corpus, or does each language also
-   need its own written canonical-writer spec independent of test vectors
-   (so a vector gap doesn't silently hide a canonicalization bug)?
+Format: canonical JSON, no inter-token whitespace. Object keys sorted by
+raw UTF-8 byte order (Go's `sort.Strings`, which a Rust `Vec<String>::sort`
+reproduces identically — no new algorithm needed here, only a port).
+Numbers per `number.go`'s proven, byte-identical-with-Rust rules (exact
+integer digits, `-0`→`0`, shortest plain-decimal floats, normalized before
+structural writing, never inline). Strings escape `<`, `>`, `&`, U+2028 and U+2029
+as the literal six-character ASCII sequences `\u003c`, `\u003e`, `\u0026`,
+`\u2028` and `\u2029` respectively (see `MATERIALIZATION-SPEC.md` for the
+full table) — **verified empirically
+in this session**, not assumed: this is Go's default `json.Marshal`
+behavior (inherited by calling it directly), not an RFC 8259 minimum, and
+a Rust writer must replicate it exactly or it will not produce
+byte-identical output for any string containing those characters. No
+Unicode normalization is applied anywhere in the existing pipeline —
+confirmed empirically that a precomposed and a decomposed form of the same
+visual string digest to different bytes; this is named as a known,
+inherited limitation, not fixed here. Digest = `sha256:` + lowercase-hex
+SHA-256 of the canonical bytes directly, no further transform.
+
+See `docs/MATERIALIZATION-SPEC.md` for the full write-up, the empirical
+verification detail, and exactly what remains open (Unicode normalization,
+`TopologySet` order, and the fact that the Rust peer for everything except
+number canonicalization still has to be written).
 
 ---
 
