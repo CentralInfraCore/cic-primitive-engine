@@ -225,9 +225,10 @@ number canonicalization still has to be written).
 
 ### B. Semantic state model
 
-**Status:** **DECIDED**, with one explicit judgment call and one
-explicit new proposal flagged for review (see below) — not everything in
-this section is a recovered fact
+**Status:** **DECIDED** (the three-axis model, the type shape, the A0.4
+conformance resolution, and the two-trigger `default_injection` logic),
+with **two terms left genuinely open** (`missing`, `unknown` — see below)
+rather than guessed at
 **Blocks:** the materialized output's type shape (C, E); `default_injection`
 correctness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-closes-section-b`
@@ -240,9 +241,16 @@ static per device binding), **coverage** (`observed`/`absent`/
 `CoverageState`), and **provenance** (`authored`/`schema_default`/
 `derived`, intent-side only).
 
-Two things flagged, not silently settled:
-- `missing` is treated as the same concept as coverage's `absent` — a
-  judgment call, since neither repo formally distinguishes them.
+Two terms flagged as genuinely open, not silently settled — review
+caught that an earlier draft wrongly resolved the first one:
+- `missing` stays **OPEN**. An earlier draft said it's the same concept
+  as coverage's `absent`; review correctly caught that `BOUNDARY.md`
+  calls all five of its terms "different statements" (not four plus a
+  synonym), and `observation.go`'s actual `absent` (envelope
+  affirmatively says not-there) vs. `unobserved` (envelope says nothing)
+  split has no obvious slot for it either. Neither repo defines it
+  distinctly from the other four — left open on the same footing as
+  `unknown`, not decided.
 - `unknown` is **ungrounded in both repos** — `BOUNDARY.md` names it and
   never defines it, and nothing in `cic-primitives`' decision log or
   `core/nexus/iac` gives it a concrete shape either. The spec offers a
@@ -252,9 +260,19 @@ Two things flagged, not silently settled:
 
 Also resolves A0.4's tri-state/boolean conformance conflict: the library
 carries the full tri-state; Relay's existing `FieldMode.Implemented bool`
-becomes a named **lossy** projection of it until Relay migrates (step 6)
-— and clarifies `default_injection` as a response-time, per-requester ACL
-filter, never a second value stored in the materialized form.
+becomes a named **lossy** projection of it until Relay migrates (step 6).
+
+Clarifies `default_injection` as **two independent triggers, not one** —
+review caught that modeling it as pure ACL-denial erodes D-012's own
+"permission denied ≠ capability missing" distinction: a `not_implemented`
+read returns `default_injection` regardless of ACL (no permission check
+even applies), a permission-denied read returns it separately, and the
+two diverge sharply on write (hard reject vs. permission denied) in a way
+that must never be collapsed. `MaterializedField.value` itself is
+**optional**, not "always present" — review also caught that this
+can't be true for `coverage: absent/unobserved` or
+`capability: not_implemented`, which are definitionally cases with
+nothing real to hold.
 
 Also names a real risk and heads it off: `cic-schema-registry`'s
 `coverage.py` (this session's earlier D-017 work) already uses the word

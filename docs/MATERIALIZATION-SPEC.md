@@ -242,23 +242,28 @@ not_implemented        capability   not_implemented
 (a schema-applied
  default)              provenance   schema_default
 not_observed           coverage     unobserved
-missing                coverage     absent, OR: the key is not present in
-                                     the materialized object at all --
-                                     see the open question below
-unknown                ???          not grounded anywhere in either repo
-                                     -- see below, this is a new proposal,
-                                     not a recovered fact
+missing                OPEN -- see below, not decided here
+unknown                OPEN -- see below, not decided here
 ```
 
-**`missing` needs a named caveat.** `BOUNDARY.md` uses "missing" once, in
-passing (*"a missing observation must not be masked by an invented
-one"*), without formally distinguishing it from `unobserved`/`absent`.
-Grepped both `cic-primitives` and this repo: **no decision record defines
-`missing` as a state distinct from the coverage axis's `absent`.** Treated
-here as the same concept as coverage's `absent` (an observe call looked
-and the field is authoritatively not there) — not a fourth coverage value.
-**This is a judgment call, not a recovered fact — flagging for review
-rather than asserting it quietly.**
+**`missing` stays OPEN — review correctly caught that this needs to,
+not just `unknown`.** An earlier draft of this section said `missing` is
+the same concept as coverage's `absent`. That was wrong to assert as
+settled: `BOUNDARY.md` is explicit that all five of its terms are
+*"five different statements"* — not four-plus-a-synonym — and
+`core/nexus/iac/observation.go` already draws a sharp, deliberate line
+between `absent` (**the observe call looked, and the envelope
+affirmatively lists this path as not there** — `CoverageAbsent`, checked
+against `Observation.AuthoritativeAbsent`) and `unobserved` (**nothing
+was said about this path at all** — the *default* outcome of
+`Coverage()` when a path is in neither list). `missing` is not a proven
+synonym of either: it could mean the raw materialized object simply has
+no key for this field (a presence fact, orthogonal to whether the
+coverage *envelope* says anything), which `absent`'s current definition
+requires an explicit declaration for and would not cover. Grepped both
+`cic-primitives` and this repo for a definition distinct from the other
+four: **none exists.** Left genuinely open, same footing as `unknown`
+below, not decided by this section.
 
 Separately: `missing` has a completely different, already-decided meaning
 one level up, in `cic-schema-registry`'s `coverage.py` (this session's
@@ -303,13 +308,31 @@ status out of the value's own shape.
 
 ```text
 MaterializedField {
-    value:       <canonical value, per section A>
+    value:       Option<canonical value, per section A>
     capability:  implemented | not_implemented | deprecated
-    coverage:    observed | absent | unobserved | unknown   (state/output side only --
-                                                               see note below)
-    provenance:  authored | schema_default | derived          (intent/input side only)
+    coverage:    observed | absent | unobserved | (unknown, proposed)   (state/output side only --
+                                                                           see note below)
+    provenance:  authored | schema_default | derived                     (intent/input side only)
 }
 ```
+
+**`value` is optional — review caught that an earlier draft wrongly
+stated it is "always present internally."** That cannot be true
+alongside the states this very section defines: `coverage: absent`,
+`coverage: unobserved` and `capability: not_implemented` are each cases
+where there is, definitionally, nothing real to hold — D-012 says a
+`not_implemented` field's read side returns `default_injection`
+(typically `null`) precisely *because the device has no value for it*,
+not because one exists and is being hidden. `BOUNDARY.md`'s entire
+defaultability table exists to forbid inventing a value to fill this
+gap (*"a missing observation must not be masked by an invented one"*).
+So `value` is present exactly when there is a real value to materialize
+(an authored intent, an actual observation, a legally-applied schema
+default, or a derived computation) and absent otherwise — never
+synthesized to satisfy a type that demands one. A Rust implementation
+should use an actual `Option<Value>` (or equivalent); a Go
+implementation needs an explicit presence flag or pointer, not a bare
+`Value` that forces a caller to invent a zero-value reading.
 
 **Coverage and provenance are not both populated on every field.**
 Coverage is meaningful on the *observed/state* side (did we see it);
@@ -352,47 +375,86 @@ distinguish `deprecated` from `implemented`, and must not be trusted for
 decisions that care about that distinction (e.g. a UI warning about
 deprecated-field use) until it reads the library's tri-state directly.
 
-### B5. `default_injection` is a response-time filter, not a stored second value
+### B5. `default_injection` has two independent triggers — capability and ACL — which must not be merged
 
-Per `access.yaml`'s own semantic mapping (`miss_behavior: default_injection
-returned when access is denied`; *"fields the requestor cannot access are
-filtered from the... response or returned with their default_injection
-value"*): `default_injection` is **not** a second value held inside
-`MaterializedField` alongside the real one. The materialized form always
-holds the real value and its full B1 metadata; `default_injection` is
-computed **at response-construction time**, parameterized by the
-requesting actor's ACL check (`core/nexus/iac/acl.go`'s `ACL.Allows`,
-already landed) — if the actor fails the read check, the response
-substitutes `default_injection` for that field; the internally-held
-materialized value is never touched or duplicated.
+An earlier draft of this section modeled `default_injection` as purely an
+ACL-denial filter. **Review correctly caught that this erodes the exact
+distinction D-012 exists to protect: permission denied ≠ capability
+missing.** D-012's own table is explicit that these are "two
+fundamentally different cases" with different read *and* write behavior:
 
 ```text
-MaterializedField.value  -- always the real value, always present internally
-  ↓ (at response time, per-requester)
-ACL.Allows(actor, PermRead)?
-  yes → emit MaterializedField.value
-  no  → emit access.default_injection  (from the field's long-form descriptor)
+                    Read                          Write
+---------------------------------------------------------------------------
+Permission missing  default_injection              PERMISSION DENIED
+Not implemented      default_injection              HARD REJECT ("not
+                                                      implemented on device X")
 ```
+
+Both cases return `default_injection` on **read** — so the read side can
+look, at a glance, like one mechanism — but they are reached by two
+independent, unrelated checks, and they diverge sharply on **write**,
+where collapsing them would reintroduce exactly the silent-failure risk
+D-012 was written to prevent (a write to a `not_implemented` field must
+never be treated as merely permission-denied — it is a hard, explicit
+reject, because treating it as anything softer lets an operator believe
+a config was applied when nothing happened on the device).
+
+So the response-time logic is two independent gates, evaluated
+separately, not one ACL check with a single fallback:
+
+```text
+Read:
+  capability == not_implemented?
+    yes → emit access.default_injection   (device-capability gate; ACL is
+                                            not even consulted -- there is
+                                            nothing on the device to gate
+                                            access to)
+    no  → ACL.Allows(actor, PermRead)?
+            yes → emit MaterializedField.value
+            no  → emit access.default_injection   (permission gate)
+
+Write:
+  capability == not_implemented?
+    yes → HARD REJECT ("field not implemented on device X")   -- never
+                                                                  silently
+                                                                  dropped
+                                                                  (D-012)
+    no  → ACL.Allows(actor, PermWrite)?
+            yes → accept the write
+            no  → PERMISSION DENIED
+```
+
+`default_injection` itself is still **not** a second value held inside
+`MaterializedField` alongside the real one — it is computed at
+response-construction time from the field's long-form descriptor, per
+whichever gate triggered it, parameterized by the requesting actor only
+for the ACL gate (the capability gate does not depend on *who* is
+asking at all). The internally-held materialized value (B3, now
+`Option<Value>`) is never touched or duplicated by either gate.
 
 ### B6. What this does and doesn't close
 
-**Closed:** the three-axis model (B1), the mapping of `BOUNDARY.md`'s
-named terms onto it with one explicit judgment call (`missing` ≡
-coverage's `absent`) and one explicit new proposal offered for review
-(`unknown` as a fourth coverage value), the materialized-type shape (B3),
-the resolution of A0.4's conformance conflict as a named lossy projection
-(B4), and `default_injection`'s place as a response-time filter, not
-stored state (B5).
+**Closed:** the three-axis model (B1), the materialized-type shape with
+`value` correctly optional rather than always-present (B3), the
+resolution of A0.4's conformance conflict as a named lossy projection
+(B4), and `default_injection`'s two independent triggers — capability and
+ACL, kept separate on both read and write per D-012 (B5).
 
-**Not closed, deliberately:**
-- The `unknown` proposal in B2 is explicitly flagged as unverified
-  reasoning, not a recovered fact — review before treating it as settled.
+**Not closed, deliberately — two genuinely open terms, not one:**
+- **`missing`** (B2) — review correctly caught that an earlier draft
+  wrongly collapsed this into coverage's `absent`. `BOUNDARY.md` calls all
+  five of its terms "different statements," and `observation.go`'s actual
+  `absent`/`unobserved` split doesn't have an obvious slot for it either.
+  Left genuinely open.
+- **`unknown`** (B2) — offered as a reasoned candidate, explicitly not a
+  recovered fact. Review before treating it as settled.
 - Section C (receipt schema) still has to decide how `provenance`
   (B1/B3) relates to the receipt's own `applied_defaults`/`derived_values`
   fields — are they the same data surfaced twice, or does the receipt
   derive from the per-field provenance, or vice versa? Not decided here.
 - Section E (boundary enforcement) still has to decide what prevents a
   module from reading `MaterializedField.value` directly, bypassing B5's
-  response-time `default_injection` substitution, for a module that is
-  itself an untrusted requester (not just the external API caller this
-  section assumed). Not decided here.
+  response-time gates, for a module that is itself an untrusted requester
+  (not just the external API caller this section assumed). Not decided
+  here.
