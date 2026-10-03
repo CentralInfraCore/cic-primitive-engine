@@ -74,9 +74,12 @@ identifier groups filled it in, once D closed — see below), C5 is now
 closed in full (classification — provenance alone decides list
 membership — **and** the entry-evidence payload: `DefaultEvidence
 {rule, value_digest}` for schema defaults, `DerivedEvidence{rule,
-inputs}` for derivations, produced inline by the same materialization
-step that applies the default or runs the derivation, never folded
-into B3's closed `provenance` enum), and C3's remaining rows
+inputs, value_digest}` for derivations, produced inline by the same
+materialization step that applies the default or runs the derivation,
+never folded into B3's closed `provenance` enum — `inputs` is the
+exact paths that invocation actually read, not a static property
+declared by the rule's definition, and `value_digest` keeps the two
+evidence shapes symmetric), and C3's remaining rows
 (`signature`; `unresolved/unknown markers`;
 `conformance_plan_digest`/`observation_digest`) plus C4 (schema home)
 are reserved for F or genuinely ungrounded, not guessed at. C3's
@@ -388,10 +391,15 @@ written), and C5 in full are settled. C5 closes both its
 `applied_defaults`/`derived_values` entry exists — no second source
 needed for that yes/no) **and** its entry *evidence*: `rule`/
 `value_digest` for a schema default (`DefaultEvidence`) and `rule`/
-`inputs` for a derivation (`DerivedEvidence`), produced inline by the
-same materialization step that applies the default or runs the
-derivation — a C-owned companion fact, never folded into B3's closed
-`provenance` enum. C3's remaining rows (`signature`; `unresolved/unknown
+`inputs`/`value_digest` for a derivation (`DerivedEvidence`), produced
+inline by the same materialization step that applies the default or
+runs the derivation — a C-owned companion fact, never folded into B3's
+closed `provenance` enum. `inputs` records the exact paths that
+specific invocation actually read, not a static property declared by
+the rule's own definition; `value_digest` is present on both evidence
+shapes so a `derived_values` entry is auditable on its own, the same
+way an `applied_defaults` entry already is. C3's remaining rows
+(`signature`; `unresolved/unknown
 markers`, now blocked on F's coverage-projection decision rather than
 B2, which has since closed; `conformance_plan_digest`/
 `observation_digest`, F's territory) and C4 (schema home, still
@@ -483,11 +491,25 @@ longer blocks this)
    schema default (`rule` a literal, unversioned `"schema-default"`
    constant — the corpus shows exactly one default-application
    algorithm, not a family of named rules), `DerivedEvidence{rule,
-   inputs}` when a derivation step runs (`rule` a stable, versioned
-   string per `BOUNDARY.md`'s own `effective-state-v1` example;
-   `inputs` a static list declared by the rule's own definition, not
-   computed dynamically per call). Neither shape modifies B3's already-
-   closed `provenance` enum — the evidence sits beside the
+   inputs, value_digest}` when a derivation step runs (`rule` a stable,
+   versioned string per `BOUNDARY.md`'s own `effective-state-v1`
+   example). **A third overclaim, caught on review of the PR that
+   closed this item:** the first draft defined `inputs` as a *static*
+   list declared by the rule's own definition, and gave `DerivedEvidence`
+   no `value_digest` at all (asymmetric with `DefaultEvidence`).
+   Neither survives — `BOUNDARY.md`'s single example happens to read a
+   fixed pair of paths every time, but that is a property of that one
+   rule, not a constraint on every future rule (a selector-based
+   aggregation's consumed set can vary by invocation); corrected so
+   `inputs` always records the exact paths THIS invocation actually
+   read, which also still matches the one existing example, exactly.
+   `value_digest` was added to `DerivedEvidence` so a single
+   `derived_values` entry is auditable on its own — the receipt's
+   top-level `output_digest` already binds the whole canonical output,
+   but cannot verify one entry without re-canonicalizing and extracting
+   that path from the full document, the same gap a per-entry digest
+   closes for `applied_defaults` already. Neither shape modifies B3's
+   already-closed `provenance` enum — the evidence sits beside the
    classification, the same way C1 keeps the receipt beside the
    materialized data rather than embedding it. The receipt is a
    deterministic projection of both: `provenance` decides which list an

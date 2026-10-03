@@ -568,9 +568,11 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          row (filled in by D1's four identifier groups, once D closed),
          C5 in full (classification -- provenance alone decides list
          MEMBERSHIP -- AND evidence: DefaultEvidence{rule,
-         value_digest} / DerivedEvidence{rule, inputs}, produced
-         inline by the same step that applies a default or runs a
-         derivation, never folded into B3's closed provenance enum).
+         value_digest} / DerivedEvidence{rule, inputs, value_digest},
+         produced inline by the same step that applies a default or
+         runs a derivation, never folded into B3's closed provenance
+         enum; inputs is what THIS invocation actually read, not a
+         static rule-definition property).
 Open:    C3's remaining rows (signature; unresolved/unknown markers,
          blocked on F's coverage-projection decision, not B2 or C5;
          conformance_plan_digest/observation_digest, F's territory),
@@ -849,22 +851,42 @@ When Normalize applies a schema default to a field:
 When Resolve/a derivation step computes a field's value from other
 fields:
   it already knows which named computation ran and which field paths
-  fed it (BOUNDARY.md's own example: "effective-state-v1" from
-  admin_state/oper_state). It hands the receipt-builder:
+  it actually read to produce this result (BOUNDARY.md's own example:
+  "effective-state-v1" from admin_state/oper_state). It hands the
+  receipt-builder:
 
     DerivedEvidence { rule: "effective-state-v1", inputs: [<the exact
-                       field paths the rule reads>] }
+                       field paths this invocation actually read>],
+                       value_digest: <A7 digest of the derived value> }
 
   Rule identifiers are stable, versioned strings (name + "-v" + number,
   per BOUNDARY.md's own example) -- a rule's logic may evolve under a
   NEW name/version without silently changing what an old receipt's
   entry means, the same versioning discipline D1 applies to grammar
-  and schema identity. `inputs` is a STATIC list declared as part of
-  the rule's own definition (which paths this named computation always
-  reads), not computed dynamically per invocation -- the only corpus
-  example (effective_state) has a fixed input set, and a
-  data-dependent input list is a real extension but not something any
-  evidence requires for v1.
+  and schema identity. `inputs` records the exact paths THIS
+  INVOCATION actually consumed, not a static property declared once by
+  the rule's definition -- the only corpus example (effective_state)
+  happens to read a fixed pair of paths every time, so for it the two
+  coincide, but that is a property of this one rule, not a constraint
+  this decision places on every future rule. A rule whose consumed set
+  varies by invocation (e.g. "aggregate all members matching selector
+  X") still produces evidence the same way: `inputs` is whatever paths
+  that specific run actually read, because the evidence's job is to
+  prove what fed THIS result, not to restate what the rule could in
+  principle read.
+
+  `value_digest` makes `DerivedEvidence` symmetric with
+  `DefaultEvidence` rather than silently lacking it: the receipt's
+  top-level `output_digest` (BOUNDARY.md's receipt skeleton) already
+  binds the complete canonical output, but that is a whole-document
+  commitment -- it cannot be used to verify one specific derived
+  entry's value without re-canonicalizing and extracting that path
+  from the full document. A per-entry `value_digest`, exactly like
+  `applied_defaults` already has, lets a single `derived_values` entry
+  be audited on its own. `rule` + `inputs` establish *causality* (what
+  produced this entry); `value_digest` establishes *what it produced*
+  -- two different, both useful, facts, not a redundant restatement of
+  `output_digest`.
 
 The receipt-builder then projects: walking every materialized field,
 `provenance: schema_default` contributes one `applied_defaults` entry
@@ -887,9 +909,13 @@ version-identity row (filled in by D1's four identifier groups, once D
 closed — no new field design, C adopts D's shape), **C5 in full**
 (classification — `provenance` alone decides list membership — and
 evidence — `DefaultEvidence{rule, value_digest}` / `DerivedEvidence{
-rule, inputs}`, produced inline by the same materialization step that
-applies a default or runs a derivation, kept as a C-owned companion
-fact rather than folded into B3's already-closed `provenance` enum).
+rule, inputs, value_digest}`, produced inline by the same
+materialization step that applies a default or runs a derivation,
+kept as a C-owned companion fact rather than folded into B3's already-
+closed `provenance` enum; `inputs` is the actual paths this invocation
+read, not a static rule-definition property, and `value_digest` keeps
+both evidence shapes symmetric rather than leaving derived entries
+unverifiable on their own).
 
 **Open:**
 - C3's unresolved/unknown markers — B2 closing gave the *value* a real
