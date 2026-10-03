@@ -55,8 +55,15 @@ settled.
 
 ## Decision order: A0 → A → B → C → D → E → F → G
 
-**A0 and A are now closed** (2026-10-03) — see `docs/A0-INVENTORY.md` and
-`docs/MATERIALIZATION-SPEC.md`. **B is next.**
+**A0 and A are now closed; B is PARTIALLY DECIDED, not closed**
+(2026-10-03) — see `docs/A0-INVENTORY.md` and
+`docs/MATERIALIZATION-SPEC.md`. B's `missing`/`unknown` question (B2)
+remains open and could still change B1's three-axis count — review
+caught that an earlier version of this file claimed B was fully closed
+while its own B2 was marked OPEN, a real contradiction, not an
+admin detail. **C may proceed in parallel** on the parts that don't
+depend on B2 (B1/B3/B4/B5 are stable enough to build on), but section B
+itself does not close until B2 does.
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -225,25 +232,66 @@ number canonicalization still has to be written).
 
 ### B. Semantic state model
 
-**Status:** OPEN
+**Status:** **PARTIALLY DECIDED, not closed.** B1 (the axis model, modulo
+below)/B3 (type shape)/B4 (A0.4 conformance resolution)/B5
+(two-trigger `default_injection`) are settled. B2 (`missing`, `unknown`)
+is **OPEN** and blocks full closure — review caught that an earlier
+version of this status line said "DECIDED" while the spec's own B2
+said OPEN, a real contradiction. Resolving `missing` may even add a
+**fourth axis** (field-value presence/existence), which would revise
+B1, not just fill in a blank — so B1 itself is not 100% final either
+until B2 closes.
 **Blocks:** the materialized output's type shape (C, E); `default_injection`
-correctness
-**Decision ref:** —
+correctness; full closure of this section
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#b--semantic-state-model-partially-decided-not-closed`
 
-`docs/BOUNDARY.md` names five distinct statements that must never collapse
-into one: `missing`, `unknown`, `not_observed`, `not_implemented`, and a
-schema-applied default. For each:
+`docs/BOUNDARY.md`'s "five distinct statements" are not five values of
+one enum — they're points on **three separate, orthogonal axes**:
+**capability** (D-012's `implemented`/`not_implemented`/`deprecated`,
+static per device binding), **coverage** (`observed`/`absent`/
+`unobserved`, dynamic per observe call, already landed in Go as
+`CoverageState`), and **provenance** (`authored`/`schema_default`/
+`derived`, intent-side only).
 
-1. Which of these is a **data value**, which is **metastate**, which is
-   **provenance**, and which is a **capability claim** (e.g. `not_implemented`
-   is D-012's hard-reject capability statement, not a data value at all)?
-2. How does this surface in the materialized output's type — a tagged union
-   per field, a side-channel status map, or something else?
-3. How does `access.default_injection` (what a requester *without* access
-   sees) stay distinct from the field's real internal state in the same
-   output — two separate fields, or a view-dependent filter applied only at
-   serialization/response time (never present in the internally-held
-   materialized form at all)?
+Two terms flagged as genuinely open, not silently settled — review
+caught that an earlier draft wrongly resolved the first one:
+- `missing` stays **OPEN**. An earlier draft said it's the same concept
+  as coverage's `absent`; review correctly caught that `BOUNDARY.md`
+  calls all five of its terms "different statements" (not four plus a
+  synonym), and `observation.go`'s actual `absent` (envelope
+  affirmatively says not-there) vs. `unobserved` (envelope says nothing)
+  split has no obvious slot for it either. Neither repo defines it
+  distinctly from the other four — left open on the same footing as
+  `unknown`, not decided.
+- `unknown` is **ungrounded in both repos** — `BOUNDARY.md` names it and
+  never defines it, and nothing in `cic-primitives`' decision log or
+  `core/nexus/iac` gives it a concrete shape either. The spec offers a
+  best-reasoned candidate (a fourth coverage value, for "the device
+  reported an indeterminate value," distinct from an affirmed absence)
+  explicitly as a new proposal for review, not a recovered fact.
+
+Also resolves A0.4's tri-state/boolean conformance conflict: the library
+carries the full tri-state; Relay's existing `FieldMode.Implemented bool`
+becomes a named **lossy** projection of it until Relay migrates (step 6).
+
+Clarifies `default_injection` as **two independent triggers, not one** —
+review caught that modeling it as pure ACL-denial erodes D-012's own
+"permission denied ≠ capability missing" distinction: a `not_implemented`
+read returns `default_injection` regardless of ACL (no permission check
+even applies), a permission-denied read returns it separately, and the
+two diverge sharply on write (hard reject vs. permission denied) in a way
+that must never be collapsed. `MaterializedField.value` itself is
+**optional**, not "always present" — review also caught that this
+can't be true for `coverage: absent/unobserved` or
+`capability: not_implemented`, which are definitionally cases with
+nothing real to hold.
+
+Also names a real risk and heads it off: `cic-schema-registry`'s
+`coverage.py` (this session's earlier D-017 work) already uses the word
+`missing` for an unrelated, already-decided concept — a schema-evolution
+violation (a field absent across schema *versions*), not an instance's
+observed-object state. Called out explicitly so the two don't get
+conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 
 ---
 
