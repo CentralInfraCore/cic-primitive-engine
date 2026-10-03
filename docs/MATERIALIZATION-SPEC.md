@@ -522,14 +522,17 @@ kept separate on both read and write per D-012).
 ```text
 Status: PARTIALLY DECIDED, not closed.
 Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
-         materialization, not just at release), C5 (applied_defaults/
-         derived_values are DERIVED from B3's per-field provenance, not
-         independently maintained data).
-Open:    C3 (the full v1 field list) and C4 (where the receipt's own
-         schema lives) are only PARTIALLY decided -- both have a part
-         that depends on sections not yet closed. Does not block C1/
-         C2/C5 from being used, but the receipt is not a finished,
-         implementable artifact until C3/C4 close.
+         materialization, not just at release). C5's classification
+         rule is closed (provenance alone decides list MEMBERSHIP --
+         no second source needed for whether a field was defaulted/
+         derived at all), but C5's entry EVIDENCE is open -- see below.
+Open:    C3 (full v1 field list), C4 (schema location), and C5's
+         evidence payload (rule/inputs/value_digest -- provenance's
+         three-value enum cannot supply these; they come from a
+         materialization/derivation execution record this section
+         does not yet specify). Does not block C1/C2/C5's membership
+         rule from being used, but the receipt is not a finished,
+         implementable artifact until C3/C4/C5-evidence close.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -663,24 +666,67 @@ materializes and proves") or needs its own location is not yet decided,
 and shouldn't be until C3's field list is actually complete — schema-ing
 a partially-known field set would bake in gaps.
 
-### C5. `applied_defaults`/`derived_values` are derived from B3's per-field provenance, not a second source
+### C5. `provenance` is the classification source; the entry's evidence is a separate record — not the same thing
 
-**Decision:** the receipt does not independently track which fields were
-defaulted or derived — it is **computed from** `MaterializedField.provenance`
-(B3), already decided and already present per field. Walking every
-materialized field: a `provenance: schema_default` field contributes one
-`applied_defaults` entry; a `provenance: derived` field contributes one
-`derived_values` entry. This closes `BOUNDARY.md`'s implicit ambiguity
-(it shows both the per-field idea and the receipt's aggregate lists
-without stating which drives which) in the direction that avoids a
-second, independently-maintained source of the same fact — exactly the
-two-sources-of-truth risk this whole effort exists to prevent (cf. A0's
-own framing: two implementations of the same fact silently diverging).
+**Correction (review-caught): the previous wording overclaimed what the
+three-value `provenance` enum alone can produce.** It said the receipt's
+`applied_defaults`/`derived_values` entries are "computed from
+`MaterializedField.provenance`," as if the enum were sufficient on its
+own. It isn't: `provenance: derived` tells you *that* a field was
+derived, not `BOUNDARY.md`'s required evidence for *how* —
+
+```yaml
+derived_values:
+  - path: "$.state.effective_state"
+    rule: effective-state-v1
+    inputs: ["$.state.admin_state", "$.state.oper_state"]
+```
+
+— `rule` and `inputs` (and, for `applied_defaults`, `rule` and
+`value_digest`) are not in the enum and cannot be reconstructed from it.
+The same gap applies, smaller, to `applied_defaults`: `schema_default`
+says a default was applied, not which rule applied it or what the
+resulting value's digest is.
+
+**Decision, corrected:** two distinct things, not one —
+
+```text
+classification truth   -> MaterializedField.provenance (B3) --
+                           authoritative for WHETHER a field was
+                           authored, defaulted, or derived
+derivation evidence     -> the materialization/derivation execution
+                           record (rule applied, its inputs, the
+                           resulting value's digest) -- produced by
+                           whichever engine step actually applied the
+                           default or ran the derivation, not stored
+                           in the enum
+receipt                 -> a deterministic projection of BOTH: walking
+                           every MaterializedField, `provenance`
+                           decides WHETHER an entry exists at all
+                           (schema_default -> applied_defaults entry;
+                           derived -> derived_values entry), and the
+                           execution record supplies that entry's
+                           payload
+```
+
+This still avoids a second, independently-maintained source for the
+yes/no classification itself (`provenance` alone decides membership in
+either list — no separate bookkeeping needed to answer "was this field
+defaulted/derived at all," which is the two-sources-of-truth risk this
+whole effort exists to prevent, cf. A0). What it no longer claims is
+that the enum also supplies the entry's evidence payload — that was
+never true, and a Rust or Go implementation that tried to synthesize
+`rule`/`inputs`/`value_digest` from the bare enum would have nothing to
+work from. The execution record this evidence comes from is not yet
+specified — that's follow-up work for whoever implements the
+`Normalize`/default-application and derivation steps, not something this
+section invents a shape for.
 
 ### C6. What this does and doesn't close
 
-**Closed:** C1 (sibling artifact), C2 (produced every call), C5 (derived
-from B3, not duplicated).
+**Closed:** C1 (sibling artifact), C2 (produced every call), C5's
+classification rule (`provenance` alone decides list membership, no
+second source needed for whether a field was defaulted/derived at all).
 
 **Open:**
 - C3's version-identity fields — section D's job, reserved here, not
@@ -691,3 +737,9 @@ from B3, not duplicated).
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
 - C4's exact schema location — deferred until C3 is actually complete.
+- **C5's entry evidence** (`rule`/`inputs`/`value_digest`) — the
+  three-value `provenance` enum decides *whether* an `applied_defaults`/
+  `derived_values` entry exists, but not what goes inside it. That comes
+  from a materialization/derivation execution record this section does
+  not yet specify — follow-up work for whoever implements the
+  `Normalize`/default-application and derivation steps.

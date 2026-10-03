@@ -62,8 +62,9 @@ remains open and could still change B1's three-axis count — review
 caught that an earlier version of this file claimed B was fully closed
 while its own B2 was marked OPEN, a real contradiction, not an
 admin detail. C built on B's closed parts (B1/B3/B4/B5) without waiting
-for B2, and is itself now partially decided: C1/C2/C5 are settled, but
-C3 (field list) and C4 (schema home) each have a part that's really
+for B2, and is itself now partially decided: C1/C2 are settled, C5's
+classification rule is settled but its entry-evidence payload is open,
+and C3 (field list)/C4 (schema home) each have a part that's really
 section D's, F's, or B2's job, reserved rather than guessed at. **D is
 next**, and also unblocks the version-identity fields C3 reserved for it.
 
@@ -309,16 +310,19 @@ conflated the way `canonicalNumber`/`normalizeNumbers` did in section A.
 ### C. Receipt schema
 
 **Status:** **PARTIALLY DECIDED, not closed** — same posture as B. C1
-(sibling artifact, not IR-embedded), C2 (produced every materialization
-call), and C5 (the receipt's `applied_defaults`/`derived_values` are
-*derived from* B3's per-field `provenance`, not a second, independently
-maintained source) are settled. C3 (full v1 field list) and C4 (schema
-home) are only partially decided — each has a part that's really another
-section's job (D for version-identity fields, F for
-`conformance_plan_digest`/`observation_digest`, B2 for
+(sibling artifact, not IR-embedded) and C2 (produced every
+materialization call) are settled. C5's *classification* rule is settled
+(`provenance` alone decides whether an `applied_defaults`/
+`derived_values` entry exists — no second source needed for that
+yes/no), but C5's entry *evidence* (`rule`/`inputs`/`value_digest`) is
+open: the three-value `provenance` enum cannot supply it, and the
+execution record it would come from isn't specified yet. C3 (full v1
+field list) and C4 (schema home) are only partially decided — each has a
+part that's really another section's job (D for version-identity fields,
+F for `conformance_plan_digest`/`observation_digest`, B2 for
 unresolved/unknown markers), reserved here rather than guessed at.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending D, F and B2
+closure pending D, F, B2, and C5's evidence-record specification
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed--same-posture-as-b`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -359,18 +363,28 @@ closure pending D, F and B2
    category error `BOUNDARY.md`'s regress argument (item 1) exists to
    avoid. Whether it lives in this repo instead, or needs its own
    location, is deferred until item 3's field list is actually complete.
-5. **Closed, scope widened after review:** `applied_defaults`/
-   `derived_values` are **computed from** `MaterializedField.provenance`
-   (B3) per field, not independently tracked — the same
-   two-sources-of-truth risk A0 found elsewhere, closed here by
-   construction. Review caught that B3's `provenance` was wrongly scoped
-   "intent/input side only," which cannot produce `BOUNDARY.md`'s own
+5. **Classification closed; evidence open — review caught an
+   overclaim here too.** B3's `provenance` was first wrongly scoped
+   "intent/input side only," which couldn't produce `BOUNDARY.md`'s own
    state-side `derived_values` example (`$.state.effective_state`,
-   derived from `$.state.admin_state`/`$.state.oper_state`). B3 corrected:
-   `authored`/`schema_default` remain intent-side only (the latter is
-   also independently forbidden state-side by B1's own defaultability
-   rules), but `derived` can occur on either side — a state field can
-   simultaneously carry `coverage: observed` and `provenance: derived`.
+   derived from `$.state.admin_state`/`$.state.oper_state`). Fixed:
+   `authored`/`schema_default` stay intent-side only (the latter also
+   independently forbidden state-side by B1's defaultability rules), but
+   `derived` can occur on either side — a state field can carry both
+   `coverage: observed` and `provenance: derived` at once. **Then a
+   second overclaim**, in C5 itself: saying the receipt's
+   `applied_defaults`/`derived_values` entries are "computed from
+   `provenance`" implied the enum alone is sufficient. It isn't —
+   `provenance: derived` says *that* a field was derived, not
+   `BOUNDARY.md`'s required `rule`/`inputs` (or, for `applied_defaults`,
+   `rule`/`value_digest`), which the enum has no room for. Corrected to
+   two distinct things: `provenance` is the **authoritative
+   classification** (decides list membership, avoiding a second source
+   for that fact — the real two-sources-of-truth risk A0 cares about),
+   while the entry's **evidence payload** comes from a separate
+   materialization/derivation execution record this section does not
+   yet specify. The receipt is a deterministic projection of both, not
+   of `provenance` alone.
 
 The receipt is not a byproduct. If the CIC proof chain is to mean anything
 here, the materialization receipt **is** the evidence that the custody
