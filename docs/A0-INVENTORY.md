@@ -20,7 +20,7 @@ iac-object-model.md`.
 | `field.go` — `ExpandField`/`Field`/`FieldMode` | `key: VALUE` ↔ `key: {value, default, mode: {read,write,implemented,visible}}` — the short/long form expansion | `access.yaml`'s `key: value` ↔ `key: {value, access, modify, inherit, default_injection, conformance}` | **Not a 1:1 rename.** Relay's form is *simpler* — no ACL embedded, no `default_injection`, no `inherit`. `mode.implemented` (bool) partially covers `conformance`, but see A0.4 — it's missing a state. |
 | `digest.go` (`SpecDigest`) + `number.go` (`canonicalNumber`) + `canonicaljson.go` | Canonicalize → SHA-256; number normalization has a **proven Go/Rust pair** (`number.go` ↔ `cic-canonical` crate, byte-identical vectors) | Section A's whole question | Directly answers most of section A1/A2. Number normalization has Rust parity; **key-ordering (`canonicaljson.go`) does not yet have a Rust peer** — that gap is real follow-up work, not a fresh design. |
 | `collection.go` — `CollectionTopology` (atomic/set/map) + `ElementKey` | List-element identity by topology, explicit keys for `map` | `shape.yaml`'s `collection_variant` + `item_key` (confirmed this session, and in `primitives/@v0.2.0`'s release notes: "every list has a key... two or more key fields require an explicit `item_key`") | Strong, concrete mapping. `TopologySet`'s `ElementKey` is explicitly a placeholder "until the CIC Canonical Object Encoding lands" — i.e. it already knows it depends on section A. |
-| `node.go` — `Value`/`ValueKind`/`Node{Value, Meta}` | A discriminated, private-field value type; a module can only build one through constructors; `Validate()` enforces the secret boundary structurally | `docs/BOUNDARY.md`'s `Materialized<T>`/`Validated<T>` | **This is section E's enforcement pattern, already built and working in Go.** `BOUNDARY.md` said the Rust-side guarantee is "only approximately" achievable in Go — this is evidence it's achievable further than assumed, at least for one invariant (secret boundary). Worth studying before assuming Go needs a weaker mechanism. |
+| `node.go` — `Value`/`ValueKind`/`Node{Value, Meta}` | `Value` is a discriminated, private-field type — a module can only build one through its constructors, so its kind/payload can't be inconsistent. `Node{Value, Meta}` itself, however, has **exported** fields (`Node{Value: ..., Meta: ...}` is a legal literal anywhere), and `Validate()` is an explicit, separate call — nothing in the type forces it to run. | `docs/BOUNDARY.md`'s `Materialized<T>`/`Validated<T>` | **Partial prior art for section E, not the full guarantee.** `Value` genuinely gives the same "cannot represent an inconsistent value" property `BOUNDARY.md` wants. `Node` does not yet give the stronger "an unvalidated object cannot reach a module" property — that gap is exactly section E's open question, not something this file already answers. Corrected 2026-10-03 after review caught the original overclaim. |
 | `reference.go` — `FieldRef{Target, Kind}` | A field's value may be a pointer to another resource by name | `atomic_ref`/`aggregate_ref` (schema-structural references) | Partial match only — Relay's reference is **instance data** (a field's authored value points at another resource by name), `atomic_ref`/`aggregate_ref` are **schema-structural** (which kernel atom backs a field's category). Different axis; needs real reconciliation, not a rename. Borderline A0.1/A0.3. |
 
 ## A0.2 — Pure runtime mechanism (stays in Relay; the lib has no opinion)
@@ -122,8 +122,11 @@ rename) — replacing the placeholder mapping sketch in
 - Section B (semantic state model) has to resolve A0.4 item 1
   (tri-state vs. boolean conformance) as part of closing it, or it will
   under-specify a state `cic-primitives` already relies on.
-- Section E (boundary enforcement) has real, working Go prior art now
-  (`node.go`'s `Node`/`Value`) — worth reusing the pattern rather than
-  assuming Go needs a weaker mechanism than Rust.
+- Section E (boundary enforcement) has partial Go prior art now
+  (`node.go`'s `Value`, constructor-gated and internally consistent) —
+  worth reusing. `Node` itself is not an example of the full guarantee:
+  its fields are exported and `Validate()` is an opt-in call, not a
+  type-level force, so "an unvalidated object cannot reach a module" is
+  still unanswered by the existing code, not already solved by it.
 - A0.4 items 2 and 4 (ACL model, `default_injection`) are open design
   questions for whoever closes sections B/C/E, not resolved here.

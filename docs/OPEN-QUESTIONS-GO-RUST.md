@@ -145,9 +145,12 @@ cross-checked against all 8 `cic-primitives` atomic schemas. Summary:
 1. **A0.1 (migrate candidates)** — `field.go`'s short/long expansion,
    `digest.go`/`number.go`/`canonicaljson.go`'s canonical pipeline,
    `collection.go`'s topology (maps cleanly to `shape.collection_variant`/
-   `item_key`), `node.go`'s `Value`/`Node` type-boundary pattern (working
-   Go prior art for section E), `reference.go`'s `FieldRef` (partial match
-   only — instance-level, not schema-structural like `atomic_ref`).
+   `item_key`), `node.go`'s `Value` type (constructor-gated, internally
+   consistent — partial Go prior art for section E; `Node` itself still has
+   exported fields and an opt-in `Validate()`, so the full "unvalidated
+   object cannot reach a module" guarantee is not yet answered by it),
+   `reference.go`'s `FieldRef` (partial match only — instance-level, not
+   schema-structural like `atomic_ref`).
 2. **A0.2 (stays in Relay)** — `loader.go`, the three `IaCSource`
    implementations (`source_file.go`/`source_git.go`/`source_upstream.go`),
    `validator.go` (Cabinet-registry graph resolution), and `core/nexus/drift`
@@ -172,8 +175,10 @@ cross-checked against all 8 `cic-primitives` atomic schemas. Summary:
 None of A–G are closed by this inventory. It replaces guessing with a
 grounded starting point — in particular, section B cannot close without
 resolving the tri-state/boolean conformance conflict, and section E has
-real working Go prior art (`node.go`) worth reusing rather than assuming Go
-needs a weaker mechanism than Rust.
+partial Go prior art (`node.go`'s `Value`) worth reusing, but not yet a
+full answer: `Node` itself is still an exported-field struct with an
+opt-in `Validate()`, not a type that makes an unvalidated object
+unrepresentable.
 
 ---
 
