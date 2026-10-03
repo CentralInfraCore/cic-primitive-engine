@@ -1907,16 +1907,67 @@ naturally belong to — folding it into B, in particular, would wrongly
 imply it fits inside B1's already-closed three-axis count, which it
 does not necessarily do.
 
-**Recovered, not newly decided:** `PRIMITIVE-IR.md`'s open question #2
-asks *"Does the IR carry unresolved references explicitly, or is
-resolution total?"* `BOUNDARY.md`'s own Constructors section already
-answers this, as one of `Validated<Materialized<PrimitiveDocument>>`'s
-own stated guarantees: *"every reference is resolved or explicitly
-unresolved."* Not "every reference IS resolved" — the type names and
-permits the other outcome. **Resolution is not required to be total
-for a document to be valid; an explicitly-unresolved reference is a
-legitimate, representable materialized state, not a failure mode that
-blocks materialization.**
+**Answered, but by reconciling a real internal tension in
+`BOUNDARY.md` — not a clean, uninterpreted recovery.** `PRIMITIVE-IR.md`'s
+open question #2 asks *"Does the IR carry unresolved references
+explicitly, or is resolution total?"* `BOUNDARY.md`'s own Constructors
+section states, as one of `Validated<Materialized<PrimitiveDocument>>`'s
+guarantees: *"every reference is resolved or explicitly unresolved."*
+Not "every reference IS resolved" — the type names and permits the
+other outcome. **Correction (review-caught on PR #17): citing that
+sentence alone and calling the question "recovered, not newly decided"
+overstated it** — `BOUNDARY.md` contains two *other* sentences that, on
+a first read, pull the other way:
+- the forbidden-states list: *"the states below must not be
+  representable on the module side... an object with references still
+  unresolved"*;
+- materialized validation's own requirement: *"references resolvable."*
+
+If "unresolved" in the forbidden list and "explicitly unresolved" in
+the constructor guarantee are the *same* state, `BOUNDARY.md`
+contradicts itself outright — forbidding on one page exactly what it
+guarantees as acceptable on the next. **Resolving that, not assuming
+it away, is this addendum's actual decision:** the forbidden list's
+*"references still unresolved"* describes resolution **as an
+in-progress, incomplete process state** — the same register as its
+list-mates *"a partially interpreted document"* and *"defaults still
+unapplied"*, every one of them a thing that hasn't finished happening
+yet. The constructor's *"explicitly unresolved"* is a different thing
+entirely: resolution **ran to completion** and reached a determinate,
+terminal answer — *this reference does not bind to anything* — the
+same way a terminated computation that returns `None` is not "still
+running." So:
+
+```text
+still unresolved       -- resolution incomplete/pending -- FORBIDDEN
+                           at the module boundary
+explicitly unresolved  -- resolution ran, terminal answer: no binding
+                           -- a legitimate materialized outcome
+resolved                -- resolution ran, terminal answer: bound
+                           -- a legitimate materialized outcome
+```
+
+**`references resolvable` is named explicitly as ambiguous wording,
+not silently read past.** Taken at face value ("every reference CAN be
+resolved," i.e. must succeed), it flatly contradicts the constructor
+guarantee one section up, which names a second legitimate outcome by
+name. This decision reads `resolvable` as shorthand for *"resolution
+has reached a terminal result"* (bound or explicitly not), not as *"the
+target must exist"* — favoring the constructor guarantee's more
+specific, explicit wording over materialized validation's looser
+restatement of the same requirement, on the reasoning that the
+constructor is the actual type-level contract `ModuleInput` enforces,
+and the validation bullet is describing that same contract in prose,
+not adding a stricter one. This is **this document's own reading**,
+not a fact `BOUNDARY.md` states unambiguously; if `BOUNDARY.md` is
+ever revised, tightening `resolvable`'s wording there would remove the
+need for this reconciliation entirely.
+
+**With that distinction drawn: resolution is not required to be total
+for a document to be valid.** An explicitly-unresolved reference,
+reached as resolution's own terminal, determinate output — not a
+pending or incomplete state — is a legitimate, representable
+materialized outcome, not a failure mode that blocks materialization.
 
 **Named so it is not conflated with a different, separate gap:** this
 is not `cic-primitives`' own D-014, which left reference
@@ -1935,7 +1986,10 @@ document has already named and avoided elsewhere
 **What this does NOT decide, and should not be read as deciding:**
 exactly how "explicitly unresolved" is represented — whether it is a
 new value on an existing axis, a dedicated field, or something B1's
-three-axis model would need revisiting to accommodate. Recovering that
-the *outcome* must be representable at all is not the same as having
+three-axis model would need revisiting to accommodate. Settling that
+the *outcome* must be representable at all, and distinguishing it from
+an in-progress "still unresolved" state, is not the same as having
 designed its representation; that remains genuinely open, for whoever
-picks it up next.
+picks it up next. Nor does this touch `BOUNDARY.md` itself — the
+reconciliation above is this document's own reading of an existing
+tension, recorded here, not an edit to the source it reads.
