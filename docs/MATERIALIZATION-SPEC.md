@@ -1274,3 +1274,129 @@ three-artifact distinction (F3).
   materialization call — is not decided here.
 - Whether/how `conformance_plan_digest` (sketched, not landed, per the
   A0/D correction) ever gets built is not this section's job.
+
+## G — Differential conformance (PARTIALLY DECIDED, not closed)
+
+```text
+Status: PARTIALLY DECIDED, not closed -- and cannot fully close until
+B2, C3's open fields/evidence record, and F's comparator implementation
+do. This section fixes the comparison HARNESS's structure and two
+scoping questions; it does not, and cannot yet, specify full test
+coverage.
+
+Closed:  G1 (the existing conformance/ corpus is extended, not
+         duplicated), G2 (check_grammar.py stays out -- confirmed
+         deliberate, not a gap), the harness structure (G3): gate
+         first using D2's comparability check, then compare canonical
+         bytes (A), then compare receipt semantics excluding engine
+         identity (D1.4's forward note) -- three separate questions,
+         never one byte-equality check on everything.
+Open:    full coverage. Anything touching B2 (missing/unknown), C3's
+         still-open fields or C5's evidence record, or F's
+         not-yet-implemented comparator is explicitly out of the
+         harness's scope until those sections close -- not silently
+         skipped.
+```
+
+### G1. Extend the existing corpus; don't build a parallel one
+
+**Decision:** `conformance/` already holds a language-independent
+vector corpus (`input.yaml`/`expected.yaml` pairs, today one group:
+`reader/`) with a harness that enforces it can't trivially pass (empty
+corpus fails; a group with no accepted vector fails) — `engine/tests/
+conformance.rs`, verified directly, not assumed. This effort adds a new
+group (e.g. `conformance/materialization/`) to the same corpus,
+governed by the same harness properties, rather than building a second,
+parallel vector mechanism. The corpus's own README already states the
+reason to do this, not invent a new one: *"a corpus proves what it
+contains... differential execution finds what nobody thought to write
+down"* — one corpus, one harness, extended, not duplicated.
+
+### G2. `cic-primitives`' grammar checker stays out — confirmed deliberate, not re-decided
+
+**Recovered, not newly decided:** sections A0 and F already established
+that `check_grammar.py` validates **static schema structure** (is
+`role: config` legal, are structural positions closed correctly) — an
+authoring-time concern — while this effort's materialization lib
+resolves **value instances** at runtime. These are different axes, not
+competing implementations of the same fact, so there is nothing for
+`check_grammar.py` to differentially agree or disagree with the Go/Rust
+materialization pair about. It does not join as a third oracle. Stated
+here explicitly so the split reads as a decision, not an omission.
+
+### G3. The comparison harness: three separate questions, not one
+
+Per D1.4's own forward note (written when D1 introduced the one
+identifier — validator/engine identity — that's supposed to differ):
+*"'compare the receipts' cannot mean byte-for-byte identity of the whole
+receipt... G will need to separate (a) the materialized value bytes, (b)
+the receipt's semantic content excluding this field, and (c) this field
+itself — three different equality questions, not one."* This section
+fixes that structure:
+
+```text
+For each conformance vector, given a Go-side and a Rust-side result:
+
+1. COMPARABILITY GATE (section D2) -- checked first, always:
+   grammar digest, primitive release identity, schema identity/
+   version/digest, and authored input digest MUST match between the
+   two sides. Validator/engine identity MUST differ (D1.4) and is
+   never part of this check.
+     -> mismatch on a MUST-match identifier: verdict = NOT_COMPARABLE.
+        Stop here. This is not a divergence -- the two sides answered
+        different questions.
+
+2. VALUE EQUALITY (section A) -- only reached if gated above passed:
+   canonical materialized bytes, compared directly.
+     -> mismatch: verdict = DIVERGENCE.
+
+3. RECEIPT SEMANTIC EQUALITY (sections C, D1.4) -- only reached if (2)
+   matched: canonicalize both receipts with the validator/engine
+   identity field removed first (per D1.4 -- that field is SUPPOSED to
+   differ, and comparing it would always fail for the wrong reason),
+   then compare the resulting canonical bytes (section A's format,
+   reused, not a new comparison algorithm).
+     -> mismatch: verdict = DIVERGENCE.
+
+Neither step 2 nor step 3 is reached for a vector that exercises a
+field whose semantics are not yet decided (B2's missing/unknown, C3's
+still-open fields, C5's evidence record) -- such a vector is OUT OF
+SCOPE for this harness today, named as a gap, not silently treated as
+passing or skipped without record.
+```
+
+This gives differential conformance its own verdict vocabulary
+(`NOT_COMPARABLE` / `DIVERGENCE` / implicit match when neither fires) —
+**deliberately not** `conformance.go`'s `CONFORMANT`/`DRIFT`/
+`OBSERVED_ABSENT`/`UNOBSERVED`/`NOT_COMPARABLE` vocabulary (F3, artifact
+3), which answers a different question (does an *observed* value match
+a *declared intent*) than this one does (do *two implementations*
+produce the same materialization for the *same* input). Sharing the
+term `NOT_COMPARABLE` across both is a coincidence of English, not a
+shared concept — named here before it causes the same kind of
+conflation E1 and F3 already had to correct twice.
+
+### G4. What this does and doesn't close
+
+**Closed:** G1 (corpus extended, not duplicated), G2 (grammar checker
+confirmed out of scope, deliberately), G3 (the three-question harness
+structure, reusing D2's gate and A's canonical comparison rather than
+inventing new mechanisms).
+
+**Not closed, and cannot be yet:**
+- Full test coverage — blocked on B2 (`missing`/`unknown`), C3's
+  still-open fields, C5's evidence-record shape, and F's
+  comparator/verdict implementation (doesn't exist in the new lib in
+  either language). The harness structure is ready to run the moment
+  those close; it cannot run completely before they do.
+- The actual Go and Rust implementations this harness would exercise —
+  this document specifies what they must agree on, not their code.
+- Whether `NOT_COMPARABLE`/`DIVERGENCE` need richer sub-classification
+  (e.g. which specific identifier mismatched) is left to whoever
+  implements the harness, not fixed here.
+
+**This closes the first pass through A-G.** Every section now has at
+least a decided core; B, C, E and F remain explicitly partial, each with
+named, specific open items rather than an unexamined "TBD." The next
+work is closing those named items — B2, C3's reservations, E2b, F's
+comparator — not starting new sections.
