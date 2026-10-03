@@ -572,14 +572,19 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          produced inline by the same step that applies a default or
          runs a derivation, never folded into B3's closed provenance
          enum; inputs is what THIS invocation actually read, not a
-         static rule-definition property).
-Open:    C3's remaining rows (signature; unresolved/unknown markers,
-         blocked on F's coverage-projection decision, not B2 or C5;
+         static rule-definition property), and C3's `signature` row
+         (CLOSED as out-of-scope -- this engine's own README excludes
+         Vault access/counter-signature policy, and cic-primitives'
+         D-015 shows signing is a separate, external, post-hoc step in
+         this ecosystem, never a field the artifact-producing logic
+         itself carries).
+Open:    C3's remaining rows (unresolved/unknown markers, blocked on
+         F's coverage-projection decision, not B2 or C5;
          conformance_plan_digest/observation_digest, F's territory),
          and C4 (schema location, still deferred until C3's remaining
-         rows close). Does not block C1/C2/C3-version/C5 from being
-         used, but the receipt is not a finished, implementable
-         artifact until C3/C4 close.
+         rows close). Does not block C1/C2/C3-version/C5/C3-signature
+         from being used, but the receipt is not a finished,
+         implementable artifact until C3/C4 close.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -655,18 +660,18 @@ version-identity fields        D1 (four identifier         decided -- see
  validator/engine identity                                reserved. C4
  -- as logical facts,                                     still owns
  NOT a wire layout)                                        nesting/shape
-signature                    none (not BOUNDARY.md's      OPEN -- no
-                              sketch, not landed Relay     landed or
-                              code -- the sketched `proof` sketched
-                              index that would carry this  precedent
-                              is itself deferred, per       exists for
-                              iac-object-model.md)          this field;
-                                                             a future
-                                                             decision,
-                                                             not
-                                                             recovered
-                                                             from
-                                                             anywhere
+signature                    this engine's own README      CLOSED --
+                              ("what does not belong        this receipt
+                              here": Vault access,          schema
+                              counter-signature policy)     carries NO
+                              + cic-primitives D-015        signature
+                              (release.sign produced by     field at
+                              a separate _vault_sign()      all; see
+                              call, by a different           prose below
+                              authority, after build_hash
+                              -- never by the
+                              artifact-producing logic
+                              itself)
 unresolved/unknown markers   B1/B2 (coverage axis)        OPEN -- B2
                                                              closed
                                                              (missing ≡
@@ -741,13 +746,45 @@ same category of boundary violation this file has caught and corrected
 several times already (F1 regressing B3, F3 re-asserting coverage in
 the receipt). Left for F.
 
+**The `signature` row is now CLOSED — not by finding a precedent for
+adding it, but by finding that this repo's own boundary already
+excludes it.** This repo's own `README.md`, under "What does not
+belong here," names *"Vault access · counter-signature policy · git
+and release workflow..."* as explicitly out of scope for this engine.
+A cryptographic signature over the receipt requires exactly the first
+two of those — Vault access to produce a signature, and a
+counter-signature policy for who is authorized to sign and when.
+**Decision: the materialization receipt schema does not define a
+`signature` field.** This engine computes and emits the receipt; it
+does not sign it.
+
+This is not merely "unscoped" — `cic-primitives`' own release bundle
+shows exactly how signing actually attaches to an artifact in this
+ecosystem, confirming what a receipt signature would look like IF one
+is ever layered on from outside: the bundle carries a `release.sign`
+field, but it is populated by `_vault_sign()`, a separate call made by
+a different authority AFTER the bundle's own `build_hash` is computed
+— never by the compiler's own build logic (`tools/compiler.py`, D-015).
+D-015 also states the self-referential exclusion rule any future
+receipt signature would have to inherit: `release.sign` and
+`release.build_hash` cannot be inside their own signature, and
+`cic_countersign` is applied after signing, by yet another authority,
+covering `build_hash` transitively rather than the reverse. If a
+signed receipt is ever needed — for proof-chain integration into
+something like `cic-countersign`/CICSourceCA — that is an external,
+post-hoc signing step over this engine's `output_digest`, exactly the
+way `release.sign` sits outside `tools/compiler.py`'s own build. It is
+not a field this receipt schema specifies, carries, or waits to be
+filled in.
+
 So C3 is now decided for `BOUNDARY.md`'s own sketch (the two digests,
-the two provenance-derived lists) plus D1's four version-identity
-facts (content, not layout), and explicitly open for `signature`
-(nothing grounds it yet), `unresolved/unknown markers` (blocked on F's
-coverage-projection decision, not B2 anymore), and the two F-territory
-digests. C4 still owns how every one of these facts is actually nested
-and named on the wire.
+the two provenance-derived lists), D1's four version-identity facts
+(content, not layout), C5's evidence shapes, and `signature` (CLOSED
+as out-of-scope — this engine's receipt never carries one). What
+remains open is `unresolved/unknown markers` (blocked on F's
+coverage-projection decision, not B2 anymore) and the two F-territory
+digests. C4 still owns how every one of the closed facts is actually
+nested and named on the wire.
 
 ### C4. Schema home — partially decided
 
@@ -915,7 +952,12 @@ kept as a C-owned companion fact rather than folded into B3's already-
 closed `provenance` enum; `inputs` is the actual paths this invocation
 read, not a static rule-definition property, and `value_digest` keeps
 both evidence shapes symmetric rather than leaving derived entries
-unverifiable on their own).
+unverifiable on their own), and C3's `signature` row (CLOSED as
+out-of-scope — this repo's own README excludes Vault access/counter-
+signature policy, and cic-primitives' D-015 confirms signing is always
+a separate, external, post-hoc step on top of an artifact's own
+digest, never a field the artifact-producing logic itself carries; the
+receipt schema defines no `signature` field).
 
 **Open:**
 - C3's unresolved/unknown markers — B2 closing gave the *value* a real
@@ -926,9 +968,9 @@ unverifiable on their own).
   territory (intent/state comparison), named so it isn't dropped, not
   claimed as settled.
 - C4's exact schema location — deferred until C3 is actually complete
-  (still blocked on `signature` and the two F-territory rows above).
-- `signature` — nothing grounds it yet; a future decision, not
-  recovered from anywhere.
+  (now blocked only on the two F-territory rows above; `signature` no
+  longer blocks it, since it closed as "never a receipt field" rather
+  than "a field whose shape is still pending").
 
 ## D — Version binding (closes section D)
 
