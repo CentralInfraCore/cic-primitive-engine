@@ -70,9 +70,11 @@ section D's, F's, or B2's job, reserved rather than guessed at.
 **D is now closed too** — four identifiers, not one or two (grammar
 digest, primitive release identity, schema version, validator/engine
 identity), filling the version-identity row C3 reserved for it. Go and
-Rust release independently; grammar digest is the compatibility gate
-section G's differential conformance checks before comparing output.
-**E is next.**
+Rust release independently; the full semantic-input identity (grammar
+digest + primitive release + schema version + input digest, everything
+except validator/engine identity, which is supposed to differ) is the
+comparability gate section G's differential conformance checks before
+comparing output. **E is next.**
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -424,15 +426,28 @@ identifiers, not one or two:
 4. **Validator/engine identity** — which implementation (Go vs. Rust)
    and its own version produced this materialization — required so
    section G's differential conformance can tell the two sides apart at
-   all.
+   all. **This is also the one identifier that is supposed to differ**
+   between the two sides of a differential test — forward note for
+   section G: "compare the receipts" has to mean three separate
+   equality questions (materialized-value bytes, receipt semantics
+   excluding this field, and this field itself), not one byte-equality
+   check.
 
-**D2, also decided:** the Go and Rust libraries release independently,
-not in lockstep — but both must declare their grammar digest (item 1),
-and section G's differential conformance checks that digest match
-*before* comparing output bytes. A digest mismatch means the comparison
-is invalid, not that a divergence was found — directly resolving the
-risk this section's own question 2 named (a mismatched pair producing
-"same-looking" but differently-sourced output).
+**D2, corrected after review:** grammar digest alone is **not**
+sufficient as the comparability gate — an earlier version of this
+section gated only on grammar digest match, which review caught misses
+that items 2 and 3 above vary *independently* of the grammar: two
+implementations could share an identical grammar digest while
+materializing against different primitive releases or different domain
+schema versions, and any byte difference between them would reflect
+different semantic input, not implementation divergence — backwards
+from what section G exists to measure. Corrected: the Go and Rust
+libraries still release independently, not in lockstep, but **every**
+semantic-input identifier must match before comparison — grammar digest,
+primitive release identity, schema version/digest, and the authored
+input digest (section A) — with validator/engine identity explicitly
+excluded from the gate, since it's supposed to differ. Any gate mismatch
+is `NOT COMPARABLE`, never reported as a found divergence.
 
 **Concrete, immediate consequence (not done by this section, flagged as
 follow-up):** this engine's own `dependency.yaml` has tracked

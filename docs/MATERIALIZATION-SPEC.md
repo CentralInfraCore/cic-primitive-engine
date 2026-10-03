@@ -789,28 +789,65 @@ to catch.
    for section G's differential conformance: a receipt has to say which
    side produced it, or two receipts that happen to look alike cannot be
    told apart as "the Go implementation" vs "the Rust implementation,"
-   which defeats the entire point of running both.
+   which defeats the entire point of running both. **This is also the
+   one identifier that is *supposed* to differ** between the two sides
+   under a differential test — a forward note for section G, not solved
+   here: "compare the two receipts" cannot mean byte-for-byte identity of
+   the *whole* receipt, since this field is defined to disagree by
+   design. G will need to separate (a) the materialized *value* bytes
+   (section A, expected identical), (b) the receipt's semantic content
+   excluding this field (expected equivalent), and (c) this field itself
+   (expected to differ) — three different equality questions, not one.
 
 These four fill C3's reserved `grammar_version`/`primitive_release`/
 `schema_version`/validator-identity row.
 
-### D2. Go and Rust release independently; grammar digest is the compatibility gate
+### D2. Go and Rust release independently; full semantic-input identity is the comparability gate
 
-**Decision:** the Go library and the Rust library do **not** need to
-release in version lockstep (one library can be at v0.3.0 while the
-other is at v0.1.7) — but **both must declare the grammar digest (D1.1)
-they implement**, in their own version metadata, not just a semver
-string. Before section G's differential conformance compares two
-implementations' output, it first compares their declared `grammar_sha256`/
-`grammar_schema_sha256`. A mismatch means **the comparison is invalid**,
-not that a divergence was found — the two sides would be answering
-different questions, and a byte-for-byte difference (or, worse, an
-accidental byte-for-byte match) would prove nothing about whether the
-implementations actually agree on the same rules. This is the concrete
-mechanism that resolves the risk `OPEN-QUESTIONS-GO-RUST.md` named for
-D2 before this section closed: *"so a mismatched pair is detectable
-rather than silently producing 'same-looking' but differently-sourced
-output."*
+**Correction (review-caught): grammar digest alone is not sufficient.**
+An earlier draft gated differential conformance on grammar digest match
+alone. That's necessary but not enough: D1 itself establishes that
+primitive release identity (D1.2) and schema version (D1.3) vary
+*independently* of the grammar digest (D1.1) — so two implementations
+could share an identical grammar digest while one materializes against
+`primitives/@v0.2.0`'s `storage-resource.v1.2.0` and the other against
+`primitives/@v0.2.1`'s `storage-resource.v1.3.0`. Any byte difference
+between them would reflect **different semantic input**, not
+implementation divergence — exactly backwards from what section G's
+differential conformance exists to measure, and in direct conflict with
+this file's own target equation for it: *"same authored input + same
+schema/primitives version = same canonical materialized bytes + same
+receipt semantics."* "Same schema/primitives version" was always part of
+that equation; gating on grammar digest alone silently dropped it.
+
+**Decision, corrected:** the Go library and the Rust library do **not**
+need to release in version lockstep (one can be at v0.3.0 while the
+other is at v0.1.7) — but before section G compares two implementations'
+output, **every semantic-input identifier must match, except the one
+that is supposed to differ**:
+
+```text
+MUST match (comparability gate):
+  - grammar_sha256 / grammar_schema_sha256        (D1.1)
+  - primitive release identity                     (D1.2)
+  - domain schema identity + version/digest         (D1.3)
+  - authored input digest                          (section A)
+
+MUST differ, by design -- never part of the gate:
+  - validator/engine identity                       (D1.4)
+
+If any MUST-match identifier differs:
+  verdict = NOT COMPARABLE
+  (never reported as "divergence found" -- the two sides answered
+  different questions, so a byte match would prove nothing and a byte
+  difference would prove nothing either)
+```
+
+This is the concrete mechanism that resolves the risk
+`OPEN-QUESTIONS-GO-RUST.md` named for D2 before this section closed: *"so
+a mismatched pair is detectable rather than silently producing
+'same-looking' but differently-sourced output."* Grammar digest alone
+answered a narrower question than that risk actually names.
 
 ### D3. A concrete, immediate consequence for this repo
 
@@ -832,8 +869,13 @@ alongside the tag (per D1.1) rather than the tag alone.
 ### D4. What this does and doesn't close
 
 **Closed:** the four-identifier model (D1), replacing PRIMITIVE-IR.md's
-"one or two" framing; independent Go/Rust release with grammar-digest
-compatibility checking as the gate (D2).
+"one or two" framing; independent Go/Rust release, with the full
+semantic-input identity (grammar digest + primitive release identity +
+schema version/digest + authored input digest) as the comparability
+gate — not grammar digest alone, corrected after review caught that an
+earlier draft's narrower gate would have let two implementations
+materializing genuinely different schema/release versions be compared
+as if a byte difference meant divergence (D2).
 
 **Not closed, deliberately:**
 - The receipt's exact field layout for these four identifiers (e.g.
@@ -842,6 +884,11 @@ compatibility checking as the gate (D2).
   this section only fixes what the four facts *are*, not their wire
   shape.
 - Section G (differential conformance) still has to specify exactly
-  *how* a grammar-digest mismatch is reported — a hard failure, a
-  skipped comparison with a warning, or something else. D2 only
-  establishes that it must be distinguishable from an actual divergence.
+  *how* a comparability-gate mismatch is reported (a hard failure, a
+  skipped comparison with a warning, or something else), and — flagged
+  in D1.4 — has to separate three different equality questions
+  (materialized-value bytes, receipt semantics excluding engine
+  identity, and engine identity itself) rather than treating "compare
+  the receipts" as one single byte-equality check. D2 only establishes
+  that a gate mismatch must be distinguishable from an actual
+  divergence; G has to build the actual comparison logic.
