@@ -743,3 +743,105 @@ second source needed for whether a field was defaulted/derived at all).
   from a materialization/derivation execution record this section does
   not yet specify — follow-up work for whoever implements the
   `Normalize`/default-application and derivation steps.
+
+## D — Version binding (closes section D)
+
+**Decision:** `PRIMITIVE-IR.md`'s open question #4 — *"how does an IR
+version relate to the `cic-primitives` schema version? One number or
+two?"* — is answered **neither**: there are **four** independently
+varying identifiers, not one or two, because each can change without
+the others changing. Collapsing them into one or two numbers would hide
+exactly the kind of mismatch section G's differential conformance exists
+to catch.
+
+### D1. The four identifiers
+
+1. **Grammar digest** — which version of the atom-grammar *rules* this
+   materialization was checked against. Not a semver tag alone:
+   `cic-primitives`' own release pipeline already computes this as a
+   **file-content digest**, not a version number, per D-015's envelope-v2
+   provenance block (`tools/compiler.py`'s `_collect_provenance()`,
+   landed and run on every release — verified directly in the source,
+   not assumed, after this session's earlier `proof`/A0 mistake):
+   ```text
+   grammar_sha256         sha256 of proposals/atom-grammar/check_grammar.py
+   grammar_schema_sha256  sha256 of proposals/atom-grammar/instance-grammar.schema.yaml
+   ```
+   A tag like `primitives/@v0.2.0` can be ambiguous about exactly which
+   commit it was cut from if ever re-pointed; a content digest cannot.
+   This section adopts these two digests by name, not reinvented ones.
+2. **Primitive release identity** — which signed `cic-primitives` release
+   bundle the atoms (Access, Role, Shape, ...) came from: the release tag
+   (`primitives/@v0.2.0`) plus its own `provenance.source_commit` and
+   `release.build_hash`. Distinct from (1): the grammar *rules* a release
+   enforces and the *release artifact itself* are different facts — a
+   release could in principle re-sign the same grammar under a new
+   envelope without the rules changing.
+3. **Schema version** — an individual *domain* schema's own version
+   (e.g. `storage-resource.v1.2.0`), which varies **per schema**,
+   independently of the grammar it's written against. A schema can
+   bump its own version (new field, narrowed conformance, ...) without
+   the grammar changing at all, and vice versa — the grammar can move to
+   v0.3.0 while every existing domain schema stays exactly where it was.
+4. **Validator/engine identity** — which *implementation* materialized
+   this data, and its own version: e.g. `cic-primitive-engine-rust
+   v0.1.0` vs `cic-primitive-engine-go v0.1.0`. Required specifically
+   for section G's differential conformance: a receipt has to say which
+   side produced it, or two receipts that happen to look alike cannot be
+   told apart as "the Go implementation" vs "the Rust implementation,"
+   which defeats the entire point of running both.
+
+These four fill C3's reserved `grammar_version`/`primitive_release`/
+`schema_version`/validator-identity row.
+
+### D2. Go and Rust release independently; grammar digest is the compatibility gate
+
+**Decision:** the Go library and the Rust library do **not** need to
+release in version lockstep (one library can be at v0.3.0 while the
+other is at v0.1.7) — but **both must declare the grammar digest (D1.1)
+they implement**, in their own version metadata, not just a semver
+string. Before section G's differential conformance compares two
+implementations' output, it first compares their declared `grammar_sha256`/
+`grammar_schema_sha256`. A mismatch means **the comparison is invalid**,
+not that a divergence was found — the two sides would be answering
+different questions, and a byte-for-byte difference (or, worse, an
+accidental byte-for-byte match) would prove nothing about whether the
+implementations actually agree on the same rules. This is the concrete
+mechanism that resolves the risk `OPEN-QUESTIONS-GO-RUST.md` named for
+D2 before this section closed: *"so a mismatched pair is detectable
+rather than silently producing 'same-looking' but differently-sourced
+output."*
+
+### D3. A concrete, immediate consequence for this repo
+
+This engine's own `dependency.yaml` has carried an open obligation since
+2026-08-13: it tracks `cic-primitives` at `main`, unpinned, specifically
+because the grammar it anticipated (three-axis Role, reference
+annotation) wasn't in any release tag yet. `primitives/@v0.2.0`
+(2026-09-06) now contains exactly that grammar — confirmed earlier this
+session by direct comparison, not assumed. `dependency.yaml`'s own stated
+closing condition (*"cic-primitives releases the current grammar... `tag:`
+here becomes that release tag, `pinned:` becomes true"*) is now satisfied.
+**This section does not flip that file** — it's a config change, not a
+decision document, and stays out of this PR's scope per this file's own
+convention — but closing D makes it a mechanical, low-risk follow-up
+with no remaining judgment call: pin `tag: primitives/@v0.2.0`,
+`pinned: true`, and record `grammar_sha256`/`grammar_schema_sha256`
+alongside the tag (per D1.1) rather than the tag alone.
+
+### D4. What this does and doesn't close
+
+**Closed:** the four-identifier model (D1), replacing PRIMITIVE-IR.md's
+"one or two" framing; independent Go/Rust release with grammar-digest
+compatibility checking as the gate (D2).
+
+**Not closed, deliberately:**
+- The receipt's exact field layout for these four identifiers (e.g.
+  nested under a `version:` block vs. four flat fields) is not fixed
+  here — C4 (schema home) still has to produce the actual schema, and
+  this section only fixes what the four facts *are*, not their wire
+  shape.
+- Section G (differential conformance) still has to specify exactly
+  *how* a grammar-digest mismatch is reported — a hard failure, a
+  skipped comparison with a warning, or something else. D2 only
+  establishes that it must be distinguishable from an actual divergence.

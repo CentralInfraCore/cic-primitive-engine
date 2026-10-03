@@ -65,8 +65,14 @@ admin detail. C built on B's closed parts (B1/B3/B4/B5) without waiting
 for B2, and is itself now partially decided: C1/C2 are settled, C5's
 classification rule is settled but its entry-evidence payload is open,
 and C3 (field list)/C4 (schema home) each have a part that's really
-section D's, F's, or B2's job, reserved rather than guessed at. **D is
-next**, and also unblocks the version-identity fields C3 reserved for it.
+section D's, F's, or B2's job, reserved rather than guessed at.
+
+**D is now closed too** — four identifiers, not one or two (grammar
+digest, primitive release identity, schema version, validator/engine
+identity), filling the version-identity row C3 reserved for it. Go and
+Rust release independently; grammar digest is the compatibility gate
+section G's differential conformance checks before comparing output.
+**E is next.**
 
 Section A0 closed first, ahead of even A: before picking a canonical byte
 format, there was a prior-art question that would have made picking one
@@ -394,19 +400,48 @@ boundary (section E) held — not optional metadata beside it.
 
 ### D. Version binding
 
-**Status:** OPEN
-**Blocks:** differential conformance (G); the same false-provenance failure
-mode this engine's own still-unpinned `dependency.yaml` already names
-**Decision ref:** —
+**Status:** **DECIDED**
+**Blocks:** differential conformance (G) — now unblocked; C3's reserved
+version-identity fields — now filled
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#d--version-binding-closes-section-d`
 
-1. Does the materialized output reference the `cic-primitives` grammar
-   version as one number or two (engine version and schema version kept
-   separate)? (`PRIMITIVE-IR.md` open question #4)
-2. Do the Go and Rust libraries release in lockstep (one version number
-   covers both), or independently — and if independently, how does each
-   declare which grammar version it implements, so a mismatched pair is
-   detectable rather than silently producing "same-looking" but
-   differently-sourced output?
+`PRIMITIVE-IR.md`'s "one number or two?" framing (open question #4) is
+answered **neither** — there are **four** independently varying
+identifiers, not one or two:
+
+1. **Grammar digest** — `grammar_sha256`/`grammar_schema_sha256`, file
+   content hashes of the atom-grammar checker and its schema, not a
+   semver tag alone. Adopted by name from `cic-primitives`' own,
+   already-landed D-015 envelope-v2 provenance block
+   (`tools/compiler.py`'s `_collect_provenance()`, verified directly in
+   source — run on every real release, not a sketch).
+2. **Primitive release identity** — the signed release tag
+   (`primitives/@v0.2.0`) plus its own `source_commit`/`build_hash`;
+   distinct from (1) because the rules a release enforces and the
+   release artifact itself are different facts.
+3. **Schema version** — an individual domain schema's own version,
+   varying per schema, independently of the grammar.
+4. **Validator/engine identity** — which implementation (Go vs. Rust)
+   and its own version produced this materialization — required so
+   section G's differential conformance can tell the two sides apart at
+   all.
+
+**D2, also decided:** the Go and Rust libraries release independently,
+not in lockstep — but both must declare their grammar digest (item 1),
+and section G's differential conformance checks that digest match
+*before* comparing output bytes. A digest mismatch means the comparison
+is invalid, not that a divergence was found — directly resolving the
+risk this section's own question 2 named (a mismatched pair producing
+"same-looking" but differently-sourced output).
+
+**Concrete, immediate consequence (not done by this section, flagged as
+follow-up):** this engine's own `dependency.yaml` has tracked
+`cic-primitives` at unpinned `main` since 2026-08-13, specifically
+because the anticipated grammar wasn't in any release tag yet.
+`primitives/@v0.2.0` now contains exactly that grammar (confirmed earlier
+this session). `dependency.yaml`'s own stated closing condition is now
+satisfied — pinning it is a mechanical follow-up with no remaining
+judgment call, out of scope for this docs-only change.
 
 ---
 
