@@ -115,11 +115,16 @@ validator/engine identity, which is supposed to differ) is the
 comparability gate section G's differential conformance checks before
 comparing output. **E is now PARTIALLY DECIDED** — host-side enforcement
 at a specific, real chokepoint already found in `CIC-Relay/core/cabinet/
-service.go` (E1, E2a, E3 closed), with the type's exact representation,
-the receipt-transport wire shape, and a real, found gap (the dispatch
-loop's `authContextJson` isn't a genuine actor identity yet) left open
-(E2b and beyond) — the identity gap is a standing dependency for anyone
-implementing E, not just a documentation loose end.
+service.go` (E1, E2a, E3 closed), with the type's exact representation
+and the receipt-transport wire shape left open (E2b). The dispatch
+loop's `authContextJson`-isn't-a-genuine-actor-identity gap, originally
+left as "wasn't checked," has since been checked directly against the
+code: `iac.Actor{...}` has zero production construction sites anywhere
+in the repo, and the external API's own request struct carries no
+identity field either — nothing existing is available to wire in, so
+this needs building, not finding. Designing it is still a standing
+dependency for anyone implementing E, now with that search already
+done rather than left for later.
 
 **F is now PARTIALLY DECIDED too** — the model already covers output
 symmetry by construction (no new data shape needed: B3's coverage/
@@ -688,12 +693,20 @@ judgment call, out of scope for this docs-only change.
 ### E. Boundary enforcement
 
 **Status:** **PARTIALLY DECIDED, not closed.** E1, E2a and E3 are
-settled. E2b (exact type shape, receipt-transport wire shape), whether
-native and WASM modules get the *same* trust/policy treatment inside
-the mandatory boundary (a different question from E1 — review caught an
-earlier draft conflating the two), how a real actor identity gets
-threaded through (a genuine gap found in the live code, not
-hypothesized), and the guest-side digest-check shape are open.
+settled. E2b (exact type shape, receipt-transport wire shape) is open.
+Whether native and WASM modules *should* get the *same* trust/policy
+treatment inside the mandatory boundary (a different question from E1
+— review caught an earlier draft conflating the two) is open as a
+normative question, though now confirmed, by reading `NativeImpl`'s own
+call-shape check, that they don't even share a mechanism *today*
+(native has no identity-carrying parameter at all; WASM has a
+meaningless one). How a real actor identity gets threaded through was
+a genuine gap found in the live code — now checked directly against
+it: `iac.Actor{...}` has zero production construction sites anywhere
+in the repo, and `SetPayload` (the external API's own entry point)
+carries no identity field either, so nothing existing is available to
+wire in; designing the real mechanism remains open. The guest-side
+digest-check shape is open.
 **Blocks:** F, G — nothing downstream is meaningful if a module can
 bypass materialization
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#e--boundary-enforcement-partially-decided-not-closed`
@@ -726,19 +739,34 @@ bypass materialization
      receipt-transport wire shape (`service.go`'s current
      `Process(ctx, authContextJson, inputJson string)` only has room for
      two strings — not designed here).
-   **A real, found gap, also open:** `authContextJson := step.ComponentID`
-   is the calling component's own ID, not an actual actor identity
-   `acl.go`'s `ACL.Allows` could evaluate — so B5's capability/ACL gates
-   can't run meaningfully at this point *yet*. This directly answers
-   what B5 left open (what prevents a module from reading a value it
-   isn't entitled to): this same gate, once a real identity is threaded
-   through — not a separate mechanism, and not resolved by this section.
+   **A real, found gap, checked, still open:** `authContextJson :=
+   step.ComponentID` is the calling component's own ID, not an actual
+   actor identity `acl.go`'s `ACL.Allows` could evaluate — so B5's
+   capability/ACL gates can't run meaningfully at this point *yet*.
+   This directly answers what B5 left open (what prevents a module from
+   reading a value it isn't entitled to): this same gate, once a real
+   identity is threaded through — not a separate mechanism. **This
+   section originally left "whether Relay already has one available, or
+   needs one built" unchecked — now checked, against the code:**
+   grepping every `.go` file for `iac.Actor{` construction found zero
+   production call sites (only `acl_test.go`'s own unit tests), and
+   `SetPayload` (`core/cabinet/set_schema.go`, the external API's own
+   request struct — the top of this whole call chain) carries
+   `WorkflowID`/`Modules`/`Payload`/`Options`/`SourceDigest` and nothing
+   resembling an identity. **Decided: this needs building, not
+   finding** — no existing Relay mechanism is sitting nearby to wire in.
+   Designing it stays open; the search for an existing one is now done
+   and came back empty, not merely undone.
    **Also open, distinct from item 1's structural claim:** whether
    `NativeImpl` (first-party, non-WASM) modules get the *same*
    capability/ACL treatment as `WasmCode` modules once past the
    mandatory chokepoint, or a different trust tier there. "Same
    chokepoint for both" (item 1, closed) is not the same claim as "same
-   policy for both" (open).
+   policy for both" (open) — and checking `NativeImpl`'s own call-shape
+   verification in `service.go` shows they don't even have the same
+   *mechanism* yet: its call signature has no slot for an identity
+   argument at all, where `WasmCode`'s `authContextJson` is at least
+   present, if meaningless. A found asymmetry, not a normative answer.
 3. **Closed:** the gate runs entirely before any WASM boundary is
    crossed, in Go, regardless of which language the eventual guest was
    compiled from — identical for a Go guest and a Rust guest. The one
