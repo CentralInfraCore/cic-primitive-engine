@@ -20,10 +20,13 @@
 //!   existing Go implementation either; out of scope until a set-topology
 //!   collection actually needs one.
 //!
-//! Whether `capability`/`coverage`/`provenance` metadata is part of this
-//! byte tree (B7) is a question about *what* `Value` must be able to
-//! represent before canonicalizing, not about this module — this module
-//! canonicalizes whatever `Value` tree it is handed.
+//! B7 (`docs/MATERIALIZATION-SPEC.md`) already decided that applicable
+//! `capability`/`coverage`/`provenance` facts must be part of the
+//! materialized semantic tree `output_digest` commits to — not left open
+//! here. This module only canonicalizes whatever [`Value`] tree it
+//! receives; whether that tree's own shape carries those facts is a
+//! question for whatever builds the tree (`Normalize`/`Resolve`, not yet
+//! implemented), not for this byte-writer.
 
 use crate::error::{code, Error, Result, Stage};
 use crate::reader::{Map, Value};

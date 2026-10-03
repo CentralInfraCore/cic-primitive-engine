@@ -476,12 +476,28 @@ fn resolve_scalar(
         }
     }
 
-    // The A3 carve-out. Deliberately narrow: untagged and Plain-style only
-    // — an explicitly-tagged integer (`!!int 9223372036854775808`) is not
-    // covered, a named, narrower scope than the untagged case this gap was
-    // actually found in, not silently widened to cover every possible way
-    // an integer could be spelled.
-    if tag.is_none() && style == ScalarStyle::Plain {
+    // The A3 carve-out. `9223372036854775808` and `!!int 9223372036854775808`
+    // assert the same semantic type — integer — so both get the same exact-
+    // precision treatment; only `Plain` style qualifies (quoted is always a
+    // string), and only an untagged scalar or an explicit core-schema `int`
+    // tag (not `str`/`bool`/`float`/`null`, and not a custom tag, which is
+    // already refused above).
+    //
+    // Review-caught on PR #19 (verified before fixing, not taken on faith):
+    // the earlier, untagged-only version did NOT actually let an overflowing
+    // `!!int` fall through to a silent lossy float — `Scalar::
+    // parse_from_cow_and_metadata`'s own "int" arm is `v.parse::<i64>().ok()`,
+    // which is `None` on overflow, so it was already refused via
+    // R-READ-TREE-ONLY, not silently wrong. But refusing a legitimately
+    // huge, explicitly-tagged integer while accepting the identical
+    // untagged literal was still a real, narrower inconsistency — the same
+    // semantic type should not depend on how it was spelled. Widened to
+    // close that, not because the feared silent-loss path existed.
+    let is_plain_number_tag = match tag {
+        None => true,
+        Some(t) => t.is_yaml_core_schema() && t.suffix == "int",
+    };
+    if style == ScalarStyle::Plain && is_plain_number_tag {
         if let Some(digits) = base10_integer_literal(text) {
             return Ok(match digits.parse::<i64>() {
                 Ok(i) => Value::Int(i),
@@ -592,6 +608,39 @@ mod tests {
         let doc = parse_doc("v: 0x1A");
         let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
         assert_eq!(got, &Value::Int(26));
+    }
+
+    // Review-caught gap (PR #19, second pass): an explicitly-tagged
+    // `!!int` asserts the same semantic type as a bare integer literal, so
+    // an overflowing one must get the same BigInt treatment, not a
+    // rejection. (Verified first, against saphyr's own
+    // Scalar::parse_from_cow_and_metadata, that the earlier, untagged-only
+    // version did not actually leak this to a silent lossy float -- its
+    // "int" tag arm is infallible-or-None, so it was refused, not wrong.
+    // Widened anyway, because "refused" and "untagged" shouldn't disagree
+    // about what the same literal means.)
+    #[test]
+    fn explicitly_tagged_int_also_keeps_exact_precision() {
+        let doc = parse_doc("v: !!int 9223372036854775808");
+        let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+        assert_eq!(got, &Value::BigInt("9223372036854775808".to_string()));
+
+        let doc = parse_doc("v: !!int 123");
+        let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+        assert_eq!(got, &Value::Int(123));
+    }
+
+    // A non-"int" core-schema tag, or a custom tag, must NOT be swept into
+    // the integer carve-out just because its text happens to look numeric.
+    #[test]
+    fn non_int_tags_are_not_treated_as_integers() {
+        let doc = parse_doc("v: !!str 123");
+        let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
+        assert_eq!(got, &Value::Str("123".to_string()));
+
+        let err = parse(b"v: !custom 123", Stage::Read, "$", "document")
+            .expect_err("custom tags are refused");
+        assert_eq!(err.rule, "R-READ-TREE-ONLY");
     }
 
     // The existing conformance/reader/ vectors only check accept/reject,
