@@ -110,9 +110,18 @@ problem, under different vocabulary, in `core/nexus/iac`
   five-state concern, independently converged on, under different names.
 - **spec #5, stable `field_id`** (survives a path rename) — landed, tested,
   Go only.
-- A `proof` object-level index (`schema_digest`, `conformance_plan_digest`,
-  `observation_digest`, `object_digest`, `signature`) — this file's
-  "receipt" (section C), independently converged on, Go only.
+- A `proof` object-level index is *sketched* (`schema_digest`,
+  `conformance_plan_digest`, `observation_digest`, `object_digest`,
+  `signature`) — this file's "receipt" (section C) — but **unlike the
+  bullets above, this one is not landed.** `iac-object-model.md` says so
+  itself: *"the object-level `managedFields`/`observation`/`proof`
+  indices are the **deferred** build."* Corrected 2026-10-03 after
+  review caught that an earlier version of this bullet implied landed
+  code by sitting next to bullets that are. There is no `proof.go`; what
+  actually runs per call is `conformance.go`'s `Evaluate()`, which
+  returns a `ConformanceResult` (an intent/state drift verdict plus two
+  digests) — a different artifact from the materialization receipt this
+  file means by "receipt," not a landed instance of it.
 - A type-level custody boundary (`sensitive.go`): a secret field's Go type
   can only ever hold a `SecretRef`, never plaintext, enforced object-wide —
   a working, proven example of section E's enforcement problem, in Go,
@@ -316,31 +325,52 @@ closure pending D, F and B2
    is a *recovered* decision: `BOUNDARY.md` already settled it, with its
    own stated reason (avoiding the archived model's infinite provenance
    regress). `PRIMITIVE-IR.md` open question #1 is answered.
-2. **Closed:** produced on every materialization call, not only at
-   release — matches what's already landed in Go (`core/nexus/iac`'s
-   `proof` is computed per `Evaluate()` call, far more often than a
-   release/signing event).
-3. **Partially decided:** the minimum field set reconciles `BOUNDARY.md`'s
-   sketch with Relay's already-landed `proof` (A0) — digests,
+2. **Closed, re-grounded after review:** produced on every materialization
+   call, not only at release. An earlier version justified this by
+   claiming it matches already-landed Go behavior (`core/nexus/iac`'s
+   `proof` computed per `Evaluate()` call) — **wrong**: `Evaluate()`
+   returns a `ConformanceResult` (an intent/state drift verdict), not a
+   materialization receipt, and the `proof` index A0 pointed to is itself
+   only *sketched*, explicitly named as **deferred** in
+   `iac-object-model.md`. The decision stands, but on its actual ground:
+   `BOUNDARY.md`'s own custody-boundary logic (*"the materialization
+   receipt... is the only part of the boundary that survives the
+   wire"*) requires a receipt for every materialization, or runtime
+   materializations between releases cross the module boundary with no
+   surviving evidence custody held.
+3. **Partially decided, re-grounded after review:** the minimum field set
+   reconciles `BOUNDARY.md`'s sketch with what's actually proven. Only
+   `BOUNDARY.md`'s own fields are decided: the two digests and
    `applied_defaults`/`derived_values` (derived from B3, see item 5
-   below), and `signature` (not in `BOUNDARY.md`'s sketch at all; Relay
-   already signs this, adopted) are decided. `grammar_version`/
-   `primitive_release`/`schema_version`/validator identity are reserved
-   for section D. `unresolved/unknown markers` cannot be specified until
-   B2 (`missing`/`unknown`) has a real shape. `conformance_plan_digest`/
-   `observation_digest` are section F's territory (intent/state
-   comparison), named so they aren't dropped, not claimed as decided
-   here.
+   below). **`signature` is now OPEN, not decided** — an earlier version
+   claimed "Relay already signs this," which is false (no landed
+   precedent exists; the sketched `proof` index that would carry it is
+   itself deferred). `grammar_version`/`primitive_release`/
+   `schema_version`/validator identity are reserved for section D.
+   `unresolved/unknown markers` cannot be specified until B2
+   (`missing`/`unknown`) has a real shape. `conformance_plan_digest` is
+   section F's territory with no landed precedent either;
+   `observation_digest` **is** landed — but as a field of
+   `ConformanceResult` (the drift verdict), a different artifact from
+   this receipt, not simply reusable here.
 4. **Partially decided:** the schema does **not** live in
    `cic-primitives`' `schemas/atomic/`/`schemas/aggregate/` — giving the
    receipt a primitive's schema home would reintroduce the exact
    category error `BOUNDARY.md`'s regress argument (item 1) exists to
    avoid. Whether it lives in this repo instead, or needs its own
    location, is deferred until item 3's field list is actually complete.
-5. **Closed:** `applied_defaults`/`derived_values` are **computed from**
-   `MaterializedField.provenance` (B3) per field, not independently
-   tracked — the same two-sources-of-truth risk A0 found elsewhere,
-   closed here by construction rather than by convention.
+5. **Closed, scope widened after review:** `applied_defaults`/
+   `derived_values` are **computed from** `MaterializedField.provenance`
+   (B3) per field, not independently tracked — the same
+   two-sources-of-truth risk A0 found elsewhere, closed here by
+   construction. Review caught that B3's `provenance` was wrongly scoped
+   "intent/input side only," which cannot produce `BOUNDARY.md`'s own
+   state-side `derived_values` example (`$.state.effective_state`,
+   derived from `$.state.admin_state`/`$.state.oper_state`). B3 corrected:
+   `authored`/`schema_default` remain intent-side only (the latter is
+   also independently forbidden state-side by B1's own defaultability
+   rules), but `derived` can occur on either side — a state field can
+   simultaneously carry `coverage: observed` and `provenance: derived`.
 
 The receipt is not a byproduct. If the CIC proof chain is to mean anything
 here, the materialization receipt **is** the evidence that the custody

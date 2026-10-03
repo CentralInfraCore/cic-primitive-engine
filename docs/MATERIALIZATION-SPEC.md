@@ -331,9 +331,8 @@ status out of the value's own shape.
 MaterializedField {
     value:       Option<canonical value, per section A>
     capability:  implemented | not_implemented | deprecated
-    coverage:    observed | absent | unobserved | (unknown, proposed)   (state/output side only --
-                                                                           see note below)
-    provenance:  authored | schema_default | derived                     (intent/input side only)
+    coverage:    observed | absent | unobserved | (unknown, proposed)
+    provenance:  authored | schema_default | derived
 }
 ```
 
@@ -355,16 +354,43 @@ should use an actual `Option<Value>` (or equivalent); a Go
 implementation needs an explicit presence flag or pointer, not a bare
 `Value` that forces a caller to invent a zero-value reading.
 
-**Coverage and provenance are not both populated on every field.**
-Coverage is meaningful on the *observed/state* side (did we see it);
-provenance is meaningful on the *intent/input* side (why does it have
-this value). A field materialized from authored intent carries a
-provenance and no coverage; a field materialized from an observation
-carries a coverage and no provenance. This mirrors `core/nexus/iac`'s own
+**Correction (review-caught): `provenance` is not intent-side-only.**
+An earlier draft scoped `provenance` to "intent/input side only," on the
+reasoning that coverage governs the observed/state side and provenance
+governs the intent/input side as two cleanly separate halves. That
+cannot produce `BOUNDARY.md`'s own receipt example, which lists a
+**state**-side derived value: `$.state.effective_state`, derived from
+`$.state.admin_state`/`$.state.oper_state`. If `provenance` only applies
+intent-side, the receipt has no way to say *that* value was derived.
+
+Corrected scope, per value:
+- **`authored`** — intent-side only. "Authored" presupposes an operator
+  wrote it; an observation is not authored.
+- **`schema_default`** — intent-side only, and for an independent
+  reason: B1's own defaultability rules already forbid a schema default
+  on `authority: state`/`operational` fields (*"a missing observation
+  must not be masked by an invented one"*), so this value could never
+  legally appear state-side regardless of how `provenance` is scoped.
+- **`derived`** — **either side.** A state field can be computed from
+  other observed fields (`effective_state` from `admin_state`/
+  `oper_state`) exactly as an intent field can be computed from other
+  authored ones. This is the one value that actually needs to cross the
+  intent/state line, and `BOUNDARY.md`'s own example proves it.
+
+Coverage and provenance remain genuinely orthogonal, not mutually
+exclusive: a derived state field carries **both** —
+`coverage: observed` (or whatever the comparator sees) **and**
+`provenance: derived` — simultaneously, recording two different facts
+(was it seen vs. how did it get its value) about the same field, which
+is exactly the point of keeping them as separate axes rather than one.
+A field materialized from plain authored intent still carries a
+provenance and no coverage; a field materialized from a raw,
+non-derived observation still carries a coverage and no provenance. Only
+the derived case populates both. This mirrors `core/nexus/iac`'s own
 intent/state split (A0's inventory: `field.go`'s `mode.read`/`write`,
 `schema.go`'s "a writable field is a config/intent field... a read-only
-field is provider-computed observed state") rather than inventing a new
-split.
+field is provider-computed observed state") while correcting for the one
+case (`derived`) that split doesn't cleanly separate.
 
 ### B4. Resolving A0.4's tri-state/boolean conformance conflict
 
@@ -522,70 +548,105 @@ never embedded inside the `MaterializedField` tree itself.
 ### C2. Produced on every materialization, not only at release time
 
 `BOUNDARY.md`'s sketch doesn't say when a receipt is produced.
-**Decision:** every materialization call produces one — not only a
-release-time/signing event. This matches what's already landed and
-running in Go: `core/nexus/iac`'s `proof` (A0's inventory) is computed
-per `Evaluate()` call — i.e. per runtime conformance check, which is far
-more frequent than a release — and `digest.go`/`node.go`'s `Digest()`
-functions are plain, cheap, always-available calls with no "only at
-release" gate anywhere in the code. Treating the receipt as release-only
-would be new, invented behavior inconsistent with what's already proven;
-adopting "every call" is the same "don't invent what's already decided
-by running code" posture section A took for the canonical format itself.
+
+**Correction (review-caught):** an earlier draft justified "every call"
+by claiming it matches already-landed Go behavior — specifically,
+`core/nexus/iac`'s `proof` being computed per `Evaluate()` call. That
+claim does not hold up: `conformance.go`'s `Evaluate()` returns a
+`ConformanceResult` (`Object`, `Fields`, `IntentDigest`,
+`ObservationDigest`) — an intent/state **drift verdict**, not a
+materialization receipt. The `proof` object-level index (`schema_digest`,
+`conformance_plan_digest`, `observation_digest`, `object_digest`,
+`signature`) that A0's inventory pointed to is itself only *sketched* in
+`iac-object-model.md`, which says outright that *"the object-level
+`managedFields`/`observation`/`proof` indices are the **deferred**
+build."* There is no landed `proof.go`; citing "already landed behavior"
+here was wrong, and the A0 section above has been corrected to match.
+
+**Decision, restated on its actual ground:** every successful
+materialization still MUST emit a receipt — not because existing code
+already does this, but because this is what `docs/BOUNDARY.md`'s own
+custody-boundary logic requires. The receipt is **the only part of the
+boundary that survives the wire** (`BOUNDARY.md`, "Across a process —
+where the type disappears": *"what crosses is bytes, and bytes carry no
+`Validated<_>`... the materialization receipt is therefore not a
+convenience for auditing — it is the only part of the boundary that
+survives the wire."*) If a receipt is only produced at release time, every
+runtime materialization in between crosses the module boundary with no
+surviving evidence that custody held for *that specific* materialization
+— which defeats the reason the receipt exists at all. This is a new
+normative decision for this engine, not a recovered fact, and it's a
+direct consequence of C1's own reasoning, not an inference from
+`Evaluate()`.
 
 ### C3. Minimum field set — only partially decided
 
-Reconciling `BOUNDARY.md`'s sketch with what Relay's `proof` already
-has landed (A0's inventory) surfaces more fields than either source
-names alone:
+**Correction (review-caught):** an earlier draft cited a `proof.go` as
+landed Go precedent for `signature` and for
+`conformance_plan_digest`/`observation_digest`. No such file exists —
+A0's inventory itself was wrong to call the `proof` object-level index
+"landed"; `iac-object-model.md` says it's part of the **deferred** build
+(same correction as C2 above, and the A0 section of this file's
+companion `OPEN-QUESTIONS-GO-RUST.md`). Re-grounded below on what
+actually exists.
 
 ```text
-field                      source                  status
----------------------------------------------------------------------
-schema.digest              BOUNDARY.md             decided
-input_digest                BOUNDARY.md             decided
-output_digest                BOUNDARY.md             decided
-applied_defaults[]          BOUNDARY.md             decided -- see C5
-derived_values[]            BOUNDARY.md             derived -- see C5
-signature                   proof.go (A0, Go-only)  decided -- not in
-                                                      BOUNDARY.md's
-                                                      sketch at all;
-                                                      Relay already
-                                                      signs this, adopt
+field                      source                       status
+--------------------------------------------------------------------------
+schema.digest               BOUNDARY.md                  decided
+input_digest                 BOUNDARY.md                  decided
+output_digest                 BOUNDARY.md                  decided
+applied_defaults[]           BOUNDARY.md                  decided -- see C5
+derived_values[]             BOUNDARY.md                  decided -- see C5
+signature                    none (not BOUNDARY.md's      OPEN -- no
+                              sketch, not landed Relay     landed or
+                              code -- the sketched `proof` sketched
+                              index that would carry this  precedent
+                              is itself deferred, per       exists for
+                              iac-object-model.md)          this field;
+                                                             a future
+                                                             decision,
+                                                             not
+                                                             recovered
+                                                             from
+                                                             anywhere
 engine.version / grammar_version / primitive_release /
-validator identity          OPEN-QUESTIONS' own C candidate list
-                                                      OPEN -- this is
-                                                      section D (version
-                                                      binding)'s job, not
-                                                      C's; C just
-                                                      reserves the field
-unresolved/unknown markers  OPEN-QUESTIONS' own C candidate list
-                                                      OPEN -- genuinely
-                                                      blocked on B2
-                                                      (`missing`/
-                                                      `unknown`); cannot
-                                                      specify the shape
-                                                      of a marker for a
-                                                      state that isn't
-                                                      defined yet
-conformance_plan_digest /
-observation_digest          proof.go (A0, Go-only)  OPEN -- this is
-                                                      section F (output
-                                                      symmetry)'s
-                                                      territory (intent/
-                                                      state comparison),
-                                                      not provenance;
-                                                      named here so it
-                                                      isn't silently
-                                                      dropped, not
-                                                      claimed as decided
+validator identity           OPEN-QUESTIONS' own C         OPEN -- this
+                              candidate list                is section D
+                                                             (version
+                                                             binding)'s
+                                                             job; C just
+                                                             reserves
+                                                             the field
+unresolved/unknown markers   OPEN-QUESTIONS' own C         OPEN --
+                              candidate list                genuinely
+                                                             blocked on
+                                                             B2
+conformance_plan_digest      sketched only, deferred       OPEN --
+                              (`iac-object-model.md`'s      section F's
+                              proof index)                  territory,
+                                                             no landed
+                                                             precedent
+observation_digest           landed, but on a DIFFERENT    OPEN --
+                              artifact: `ConformanceResult` section F's
+                              (`conformance.go`'s           territory;
+                              `Evaluate()`) carries an      the landed
+                              `ObservationDigest` field --   field exists
+                              real, running code, but it's  on the drift
+                              part of the intent/state      verdict, not
+                              drift verdict, not this       this
+                              materialization receipt       receipt --
+                                                             not simply
+                                                             reusable as
+                                                             a receipt
+                                                             field
 ```
 
-So C3 is decided for the data this section itself governs (digests,
-signature, the two provenance-derived lists) and explicitly open for the
-three rows that are really another section's job to fill in — this
-section reserves their place rather than inventing premature shapes for
-them.
+So C3 is decided for the data `BOUNDARY.md`'s own sketch already
+specifies (the two digests, the two provenance-derived lists) and
+explicitly open for everything else — including `signature`, which this
+correction moves from "decided, adopted" to genuinely open, since
+nothing actually grounds it yet.
 
 ### C4. Schema home — partially decided
 
