@@ -1091,20 +1091,25 @@ concern as everything else in this effort, not designed further here.
 
 ```text
 Status: PARTIALLY DECIDED, not closed.
-Closed:  F1 (the semantic model, canonical form, and receipt mechanism
-         -- B1-B5, A1-A7, C1-C5 -- already cover the output/observation
-         side by construction, not as new scope), F2 (core/nexus/iac's
-         compare.go/observation.go/conformance.go are migration source
-         per A0's existing meta-decision, not a permanently separate
-         contract -- this section makes that explicit for the output
-         axis specifically, it does not newly decide it).
-Open:    the actual comparator/verdict EXECUTION LOGIC does not yet
-         exist in the new lib, in either language -- today it exists
-         only as Relay's Go-only core/nexus/iac code, scoped to one
-         OCI vertical slice. Also open: how the conformance/drift
-         verdict relates to the materialization receipt (C) and to
-         ProofTrace (E's finding) -- three adjacent, distinct proof
-         artifacts, not one.
+Closed:  F1-model (B's coverage/provenance axes and A's canonical form
+         already cover output, with NO input-vs-output split -- the
+         real split is observation-knowledge vs. value-origin, and a
+         derived state field legitimately carries both at once, per
+         B3), F1-mechanism (C2's every-call receipt production is
+         direction-agnostic), F2 (core/nexus/iac's compare.go/
+         observation.go/conformance.go are migration source per A0's
+         existing meta-decision, not a permanently separate contract --
+         made explicit for the output axis, not newly decided).
+Open:    whether/how MaterializedField.coverage gets PROJECTED INTO
+         the receipt for an observed field -- C3's decided field set
+         (digests + applied_defaults[]/derived_values[]) carries no
+         coverage payload today, and conformance_plan_digest/
+         observation_digest are explicitly still reserved for this
+         section, unresolved. Also open: the comparator/verdict
+         EXECUTION LOGIC (doesn't exist in the new lib yet, in either
+         language), and how the conformance/drift verdict relates to
+         the receipt (C) and to ProofTrace (E's finding) -- three
+         adjacent, distinct proof artifacts, not one.
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -1126,22 +1131,45 @@ the CIC state or proof chain."* This was never actually in question;
 what section F has to establish is how *this effort's* machinery (A-E)
 applies to it.
 
-**It already does, without new scope:**
-- **Section B's model is already symmetric.** B3's correction (caught by
-  review, already merged) specifically established that `coverage` is
-  the *output/observed*-side axis and `provenance` is the *intent/input*-
-  side axis — "not both populated on every field" was stated precisely
-  so the same `MaterializedField` type serves both directions. There is
-  no second data model to invent for output; B already built one model
-  that covers both.
+**It already does, without new scope — corrected after review caught a
+regression to B3's pre-correction framing:**
+- **Section B's model is already symmetric, but not along an
+  input-vs-output split.** An earlier draft of this section said
+  "`coverage` for output, `provenance` for input — never both," which is
+  exactly the oversimplification B3 was already corrected away from: a
+  *derived state field* carries **both** `coverage: observed` and
+  `provenance: derived` at once (`BOUNDARY.md`'s own `effective_state`
+  example). The real split is not "which direction" but **what each axis
+  records**: `coverage` is *observation knowledge* (was this field
+  looked at, and what did the look find), `provenance` is *value origin*
+  (authored, defaulted, or derived) — and they cross:
+  ```text
+  raw observation       -> coverage populated, provenance usually absent
+  derived state field    -> coverage populated, provenance: derived
+  authored intent field  -> provenance populated, coverage absent
+  derived intent field   -> provenance: derived, coverage absent
+  ```
+  There is no second data model to invent for output; B already built
+  one model that covers both, correctly, as of the fix already merged —
+  this section's first draft just re-introduced the bug in its own
+  summary of that fix.
 - **Section A's canonical form has no input/output distinction at all** —
   a canonical value is a canonical value, materialized from an
   observation or from authored intent, byte-identical rules either way.
-- **Section C's receipt mechanism is direction-agnostic.** C2 decided a
-  receipt is produced on *every materialization call* — nothing in C1-C5
-  says "input only." An observation that gets materialized produces a
-  receipt the same way an authored intent does, with `coverage` populated
-  and `provenance` absent (per B3), the mirror image of the input case.
+- **Section C's receipt mechanism is direction-agnostic, but this does
+  NOT mean the receipt carries a coverage payload — corrected, a second
+  overclaim in the same paragraph.** C2 decided a receipt is produced on
+  *every materialization call*; nothing in C1-C5 says "input only," so
+  the *mechanism* is symmetric. But C3's actually-decided field set is
+  digests plus `applied_defaults[]`/`derived_values[]` (both derived from
+  `provenance`, per C5) — **it does not define any coverage/observation
+  field at all**, and C3 explicitly reserved
+  `conformance_plan_digest`/`observation_digest` as *this section's*
+  territory, still open. So: `MaterializedField.coverage` (B3) is
+  in-memory state, already decided. Whether — and how — that coverage
+  information gets *projected into the receipt* for an observed field is
+  a **separate, still-open question**, not something this section
+  (or C) has settled.
 
 **What doesn't exist yet, in either language:** the actual comparator
 and verdict-aggregation *logic* — deciding whether an observed value
@@ -1204,12 +1232,22 @@ one structure for convenience.
 
 ### F4. What this does and doesn't close
 
-**Closed:** F1 (the existing model already covers output, no new data
-shape needed), F2 (the comparator is migration source under A0's
-existing meta-decision, not a permanent fork — explicit, not newly
-decided), and the three-artifact distinction (F3).
+**Closed:** F1's model claim (B's existing coverage/provenance axes
+already cover output, with no input-vs-output split — corrected after
+review caught a regression to B3's pre-correction framing), F1's
+mechanism claim (C2's receipt production is direction-agnostic), F2
+(the comparator is migration source under A0's existing meta-decision,
+not a permanent fork — explicit, not newly decided), and the
+three-artifact distinction (F3).
 
 **Not closed, deliberately:**
+- **Whether/how `MaterializedField.coverage` gets projected into the
+  receipt** — corrected, a second overclaim an earlier draft made in
+  the same paragraph as the one above. The receipt mechanism being
+  direction-agnostic (C2) does not mean C3's actual field set carries a
+  coverage payload — it doesn't, today, and `conformance_plan_digest`/
+  `observation_digest` remain exactly as open as C3 already said they
+  were.
 - The comparator/verdict logic has no implementation in the new lib at
   all yet, in either language — this section establishes where it
   belongs, not its code.
