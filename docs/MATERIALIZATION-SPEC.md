@@ -21,7 +21,10 @@ canonical byte format — not YAML, not a new format invented here. Section
 A0's inventory found this already proven for most of the surface; this
 section specifies it precisely enough to implement a conformant Rust peer,
 and names the parts that are not yet decided rather than inventing answers
-for them.
+for them. This answers `PRIMITIVE-IR.md`'s open question #3 (*"what is
+the canonical form — a YAML profile, canonical JSON, or something the
+engine defines outright?"*): canonical JSON, specifically this
+already-landed encoding, not a new format.
 
 ### A1. Format
 
@@ -1893,3 +1896,46 @@ F remain explicitly partial, each with named, specific open items
 rather than an unexamined "TBD." The next work is closing those named
 items — C3's reservations, E2b, F's comparator — not starting new
 sections.
+
+## Addendum: `PRIMITIVE-IR.md`'s open question #2
+
+`PRIMITIVE-IR.md`'s own five open questions seeded part of this
+document (#1 → C1, #3 → A, #4 → D); #2 was never picked up by any
+lettered section, and stayed unanswered even though the answer already
+existed. Recorded here rather than forced into a section it doesn't
+naturally belong to — folding it into B, in particular, would wrongly
+imply it fits inside B1's already-closed three-axis count, which it
+does not necessarily do.
+
+**Recovered, not newly decided:** `PRIMITIVE-IR.md`'s open question #2
+asks *"Does the IR carry unresolved references explicitly, or is
+resolution total?"* `BOUNDARY.md`'s own Constructors section already
+answers this, as one of `Validated<Materialized<PrimitiveDocument>>`'s
+own stated guarantees: *"every reference is resolved or explicitly
+unresolved."* Not "every reference IS resolved" — the type names and
+permits the other outcome. **Resolution is not required to be total
+for a document to be valid; an explicitly-unresolved reference is a
+legitimate, representable materialized state, not a failure mode that
+blocks materialization.**
+
+**Named so it is not conflated with a different, separate gap:** this
+is not `cic-primitives`' own D-014, which left reference
+*target-existence* checking unbuilt (*"there is no type registry that
+could say whether `cic:network:NetworkInterface` is a Kind that
+exists"* — D-014, explicitly scoped as "a separate item," not this
+one). D-014's gap is static and schema-level: is the declared target
+even a real Kind? This question is instance-level and
+materialization-time: does *this specific* authored reference, within
+*this* composition, resolve to another object in that composition's
+own graph? Different axis, the same category of conflation this
+document has already named and avoided elsewhere
+(`canonicalNumber`/`normalizeNumbers`, `missing` in
+`cic-schema-registry`'s `coverage.py` vs. `BOUNDARY.md`'s coverage).
+
+**What this does NOT decide, and should not be read as deciding:**
+exactly how "explicitly unresolved" is represented — whether it is a
+new value on an existing axis, a dedicated field, or something B1's
+three-axis model would need revisiting to accommodate. Recovering that
+the *outcome* must be representable at all is not the same as having
+designed its representation; that remains genuinely open, for whoever
+picks it up next.
