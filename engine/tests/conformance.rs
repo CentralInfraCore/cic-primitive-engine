@@ -69,6 +69,15 @@ fn scalar_field(text: &str, key: &str) -> Option<String> {
 }
 
 fn load_group(group: &Path) -> Vec<Vector> {
+    // `canonicalize/`'s own structural invariant, enforced here rather than
+    // left as a runtime-optional convention (review-caught on PR #21): an
+    // accepted vector in this specific group must declare `canonical`, or
+    // it would pass having checked zero canonical bytes -- exactly the
+    // "gate that cannot fail" risk this corpus's own two generic rules
+    // already guard against, just one level more specific.
+    let group_name = group.file_name().map(|n| n.to_string_lossy().to_string());
+    let requires_canonical = group_name.as_deref() == Some("canonicalize");
+
     let mut vectors = Vec::new();
     let entries = fs::read_dir(group).unwrap_or_else(|e| panic!("{}: {e}", group.display()));
     for entry in entries {
@@ -88,8 +97,25 @@ fn load_group(group: &Path) -> Vec<Vector> {
             "rejected" => false,
             other => panic!("{name}: outcome must be accepted or rejected, found `{other}`"),
         };
-        if !accepted && scalar_field(&expected, "code").is_none() {
-            panic!("{name}: a rejection vector must state the code it expects");
+        // Both required for every rejection, in every group, matching what
+        // this corpus's own README already states -- previously only
+        // `code` was actually enforced (review-caught on PR #21); every
+        // existing rejection vector already declares both, so this
+        // tightens the check without changing any vector.
+        if !accepted {
+            if scalar_field(&expected, "code").is_none() {
+                panic!("{name}: a rejection vector must state the code it expects");
+            }
+            if scalar_field(&expected, "stage").is_none() {
+                panic!("{name}: a rejection vector must state the stage it expects");
+            }
+        }
+        let canonical = scalar_field(&expected, "canonical").map(|s| unquote(&s));
+        if requires_canonical && accepted && canonical.is_none() {
+            panic!(
+                "{name}: an accepted vector in `canonicalize/` must state `canonical` \
+                 — otherwise it passes having checked zero canonical bytes"
+            );
         }
         vectors.push(Vector {
             name,
@@ -97,7 +123,7 @@ fn load_group(group: &Path) -> Vec<Vector> {
             accepted,
             code: scalar_field(&expected, "code"),
             stage: scalar_field(&expected, "stage"),
-            canonical: scalar_field(&expected, "canonical").map(|s| unquote(&s)),
+            canonical,
             digest: scalar_field(&expected, "digest").map(|s| unquote(&s)),
         });
     }
