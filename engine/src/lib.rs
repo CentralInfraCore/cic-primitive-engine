@@ -47,16 +47,22 @@
 //! `docs/MATERIALIZATION-SPEC.md`) as a standalone primitive, over whatever
 //! [`reader::Value`] tree it is handed. `role` implements one piece of
 //! `Stage::Normalize` — Role short/long form (`cic-primitives`' P0.2) —
-//! also as a standalone primitive. Neither is wired into a pipeline stage
-//! yet, because `Parse`, and the rest of `Normalize`/`Resolve`/`Validate`,
-//! do not exist yet. Nothing here is a stable API, and no module should
-//! depend on it as one.
+//! also as a standalone primitive. `conformance` implements section F's
+//! per-field comparator primitive (`compare`/`classify_field_value`) —
+//! the object-level plan/verdict walker described in F5 is not built yet.
+//! None of these are wired into a pipeline stage yet, because `Parse`, and
+//! the rest of `Normalize`/`Resolve`/`Validate`, do not exist yet. Nothing
+//! here is a stable API, and no module should depend on it as one.
 
 pub mod canonical;
+pub mod conformance;
 pub mod error;
 pub mod reader;
 pub mod role;
 
 pub use canonical::{digest, to_canonical_json};
+pub use conformance::{
+    classify_field, classify_field_value, compare, CompareType, Coverage, FieldVerdict,
+};
 pub use error::{code, Error, Result, Stage};
 pub use role::{expand_role, Role};

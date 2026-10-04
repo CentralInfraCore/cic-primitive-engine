@@ -18,3 +18,13 @@ saphyr-parser = "0.0.6"
 # canonicalization logic itself (section A), which is ported by hand so this
 # crate stays self-contained.
 sha2 = "0.10"
+# The numeric comparator (F, conformance.rs) needs exact rational equality
+# across int/big-int/float/numeric-string, mirroring Go's own compare.go,
+# which uses math/big.Rat for exactly this reason (float64 would silently
+# reintroduce the precision loss section A's own number handling exists to
+# avoid). Arbitrary-precision rational arithmetic is a well-defined math
+# primitive, same case as sha2 above -- reuse an audited crate, don't
+# hand-roll bignum division.
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"

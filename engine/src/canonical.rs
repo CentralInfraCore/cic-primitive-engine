@@ -112,7 +112,7 @@ fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
 /// `"-0"`/`"+0"` -> `"0"`). Returns `None` only if `s` is not actually a
 /// validated digit run — [`crate::reader::Value::BigInt`]'s own invariant
 /// guarantees this never happens for a value this crate constructed itself.
-fn canonical_integer(s: &str) -> Option<String> {
+pub(crate) fn canonical_integer(s: &str) -> Option<String> {
     let (neg, digits) = match s.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, s.strip_prefix('+').unwrap_or(s)),
@@ -136,7 +136,7 @@ fn canonical_integer(s: &str) -> Option<String> {
 /// never uses an exponent, matching Go's `FormatFloat(f, 'f', -1, 64)` —
 /// verified empirically in this session (`4.0` -> `"4"`, `1000.0` ->
 /// `"1000"`, not `"1e3"`).
-fn canonical_float(f: f64) -> String {
+pub(crate) fn canonical_float(f: f64) -> String {
     let s = format!("{f}");
     if s == "-0" {
         "0".to_string()
