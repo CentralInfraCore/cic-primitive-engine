@@ -696,12 +696,17 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          scope and byte-level semantics decided there. This closes the
          row for C's purposes without implementing anything -- F1's
          comparator still doesn't exist in either language), and C4's
-         actual schema TEXT (CLOSED -- docs/RECEIPT-SCHEMA.md, every
+         CORE FIELD LAYOUT (CLOSED -- docs/RECEIPT-SCHEMA.md, every
          field cited to the decision requiring it, version-identity
-         facts laid out flat per D1 rather than nested, and a latent
+         facts laid out flat per D1 rather than nested, a latent
          overlap between the old `schema.digest` row and D1.3's richer
-         group found and resolved -- one field, not two).
-Open:    WHETHER the receipt schema itself ever carries a
+         group found and resolved -- one field, not two -- AND
+         requiredness/cardinality/ordering fixed on review: every
+         field REQUIRED, `applied_defaults`/`derived_values` REQUIRED-
+         but-possibly-`[]`, both sorted by `.path` byte-wise,
+         `derived_values[].inputs[]` a deduplicated sorted set).
+Open:    C4's EXTENSION/META fields, not the core layout above: WHETHER
+         the receipt schema itself ever carries a
          signature-related field populated by an external authority,
          same pattern as cic-primitives' own release.sign/pledge.sign
          -- C4's call, a schema-layout question, not decided by this
@@ -953,7 +958,7 @@ projection* as an audit convenience (F1/F4's call, not a custody
 question). C4 still owns how every one of the closed facts is actually
 nested and named on the wire.
 
-### C4. Schema home — CLOSED as to WHICH repo, and the schema's own text is now written (`docs/RECEIPT-SCHEMA.md`)
+### C4. Schema home — CLOSED as to WHICH repo, and the core field layout is now written (`docs/RECEIPT-SCHEMA.md`); extension/meta fields stay open
 
 The receipt needs a **formal, versioned schema both languages implement
 against** — the same cross-language concern driving this whole effort.
@@ -1061,6 +1066,36 @@ doing so: whether each receipt INSTANCE needs its own schema-version
 field (distinct from this document itself having a version), which
 nothing already decided settles. Added to this section's open items
 below, not invented an answer to.
+
+**Correction (review-caught on PR #24): listing field names and types
+is not the same as a byte-level wire contract — the same gap F5 had to
+fix one section up, recurring here.** The first version of
+`RECEIPT-SCHEMA.md` never said whether `applied_defaults`/
+`derived_values` may be omitted when empty, nor in what order their
+entries (or `derived_values[].inputs`) appear — and section A's A6
+deliberately doesn't sort `Seq`s, so without a stated rule two
+conforming implementations could emit different bytes for the same
+semantic receipt. Fixed: every field is now REQUIRED (extending
+`PRIMITIVE-IR.md`'s already-decided Complete property to this sibling
+artifact — an omitted key is exactly the kind of ambiguous gap that
+property forbids), the two evidence arrays are required-but-possibly-
+`[]`, both arrays sort by `.path` byte-wise (A2's comparator, reused),
+and `derived_values[].inputs` is decided — newly, not inherited from
+C5, which only ever said what the list *means*, not whether its order
+or duplicates are significant — to be a deduplicated, sorted path set.
+
+**Also corrected: calling the whole of "C4's actual schema text"
+CLOSED overstated it.** The *core field layout* — the fields above,
+now with requiredness/cardinality/ordering fixed — is closed. Three
+schema-shape questions (signature slot, redundant coverage projection,
+receipt-instance schema-version) remain genuinely open, and a reader
+could reasonably take "schema text: CLOSED" to mean those were settled
+too, or be confused when a future field gets added to a document
+already called closed. Restated as: **C4's core field layout is
+CLOSED; C4's extension/meta fields are PARTIALLY OPEN** — matching how
+every other PARTIALLY DECIDED section in this document already
+separates what's settled from what isn't, rather than introducing a
+third status category.
 
 **Still open, and genuinely so — not decided by the above:** the exact
 file path/directory within this repo (a small implementation detail,
@@ -1266,15 +1301,25 @@ either artifact, but real).
   artifact (F3), with their own scope and byte-level semantics decided
   there, not here.
 
-**Closed (added while writing `docs/RECEIPT-SCHEMA.md`):**
-- **C4's actual schema text.** Every decided field laid out, cited to
+**Closed (added while writing `docs/RECEIPT-SCHEMA.md`, then tightened
+on review — PR #24):**
+- **C4's core field layout.** Every decided field laid out, cited to
   its source decision, with the version-identity facts flat (one key
   per D1 identifier) rather than nested — nesting would visually imply
   the four facts vary together, which D1 established they don't. Also
   resolved, in the writing: `schema.digest` (C3's table, from
   `BOUNDARY.md`'s pre-D1 sketch) and D1.3's richer three-part domain-
   schema-identity group were never reconciled as the same slot; they
-  are now one field (`schema_digest`), not two.
+  are now one field (`schema_digest`), not two. **Review caught that a
+  field list alone isn't a byte-level contract** (the same gap F5
+  fixed one section up): every field is now REQUIRED, the two evidence
+  arrays are required-but-possibly-`[]`, both sort by `.path` byte-
+  wise, and `derived_values[].inputs` is decided, as a new fact not
+  inherited from C5, to be a deduplicated sorted set, not an
+  execution-order trace. "C4's schema text: CLOSED" is corrected to
+  "C4's **core field layout**: CLOSED" — the *extension/meta* fields
+  (signature slot, coverage projection, receipt-instance schema-
+  version) stay open, listed above, not swept in by the broader claim.
 
 ## D — Version binding (closes section D)
 

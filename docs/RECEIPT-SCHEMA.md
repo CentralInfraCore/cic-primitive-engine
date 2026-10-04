@@ -64,6 +64,47 @@ derived_values            list                C5 -- DerivedEvidence, one
                                                        value
 ```
 
+## Required, cardinality, ordering
+
+**Every field listed above is REQUIRED on every receipt instance; none may
+be omitted-by-absence.** This isn't new — it extends `PRIMITIVE-IR.md`'s
+already-decided **Complete** property (*"No member is optional-by-omission.
+If a value is absent, the IR says so explicitly and says why"*) to this
+sibling artifact, consistent with C2 (every successful materialization
+produces a receipt). A receipt whose job is to be audited cannot itself
+have ambiguous gaps.
+
+**`applied_defaults` and `derived_values` are REQUIRED arrays, never
+omitted, `[]` when there is nothing to report.** An omitted key is
+ambiguous between "this engine doesn't populate this evidence" and "zero
+entries were produced this call" — the same ambiguity `PRIMITIVE-IR.md`'s
+Complete property exists to forbid. `[]` states the second thing
+explicitly; omission would state neither.
+
+**Ordering, stated explicitly because section A does not supply it for
+arrays — the same gap F5 found and fixed for the two verdict-artifact
+digests, now fixed here before it recurs:** A6 preserves `Seq` order
+exactly as given; it has no opinion on receipt-array order at all. Without
+a projection-level rule, two conforming implementations could list the same
+evidence in different orders and produce different canonical bytes for
+semantically identical receipts.
+
+- `applied_defaults[]`: sorted ascending by `.path`, raw UTF-8 byte order
+  (A2's comparator, reused).
+- `derived_values[]`: sorted ascending by `.path`, the same rule.
+- `derived_values[].inputs[]`: **a new decision, not inherited from C5.**
+  C5 says `inputs` is "the exact paths THIS invocation actually read" —
+  that settles *what* the list means, not whether order or duplicates are
+  significant; the one landed example (`effective_state` reading
+  `admin_state`/`oper_state`) doesn't establish either way, since it never
+  repeats a path. Decided here: `inputs` is a **deduplicated, sorted-
+  ascending (byte-wise) path set**, not an execution-order trace — if a
+  future derivation rule reads the same path twice, or reads two paths in
+  an order that varies between calls without changing the result, that
+  must not change the digest. If a rule is ever written where the read
+  *order itself* is part of what must be audited, it needs a different
+  field — this one is a set.
+
 ## Example
 
 ```yaml
