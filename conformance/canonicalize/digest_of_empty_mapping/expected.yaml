@@ -1,0 +1,4 @@
+outcome: accepted
+canonical: '{}'
+digest: 'sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a'
+why: A7's digest is sha256 of the canonical bytes directly, verified here against Python's hashlib, not against this engine's own digest() in a circle.

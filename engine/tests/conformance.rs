@@ -15,7 +15,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use cic_primitive_engine::{reader, Stage};
+use cic_primitive_engine::{digest, reader, to_canonical_json, Stage};
 
 /// The minimum a group must contain before it is allowed to report success.
 const MIN_VECTORS_PER_GROUP: usize = 2;
@@ -26,6 +26,27 @@ struct Vector {
     accepted: bool,
     code: Option<String>,
     stage: Option<String>,
+    /// `canonicalize/`'s own extension to the shared `expected.yaml`
+    /// vocabulary: the exact canonical JSON bytes an accepted vector must
+    /// produce. Harmless, always `None`, for groups that don't declare it
+    /// (`reader/`).
+    canonical: Option<String>,
+    /// Same extension, for the rarer vectors that also pin A7's digest —
+    /// most accepted vectors only need to pin `canonical`, since the
+    /// digest is a pure function of it, already covered by `canonical.rs`'s
+    /// own unit tests.
+    digest: Option<String>,
+}
+
+/// Strips one layer of single-quoting, if present on both ends — the
+/// `canonical`/`digest` fields are always single-quoted in `expected.yaml`
+/// so a value starting with `{`/`[` can't be misread as YAML flow syntax by
+/// a real YAML parser that later consumes this same corpus.
+fn unquote(s: &str) -> String {
+    s.strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''))
+        .unwrap_or(s)
+        .to_string()
 }
 
 fn corpus_root() -> PathBuf {
@@ -48,6 +69,15 @@ fn scalar_field(text: &str, key: &str) -> Option<String> {
 }
 
 fn load_group(group: &Path) -> Vec<Vector> {
+    // `canonicalize/`'s own structural invariant, enforced here rather than
+    // left as a runtime-optional convention (review-caught on PR #21): an
+    // accepted vector in this specific group must declare `canonical`, or
+    // it would pass having checked zero canonical bytes -- exactly the
+    // "gate that cannot fail" risk this corpus's own two generic rules
+    // already guard against, just one level more specific.
+    let group_name = group.file_name().map(|n| n.to_string_lossy().to_string());
+    let requires_canonical = group_name.as_deref() == Some("canonicalize");
+
     let mut vectors = Vec::new();
     let entries = fs::read_dir(group).unwrap_or_else(|e| panic!("{}: {e}", group.display()));
     for entry in entries {
@@ -67,8 +97,25 @@ fn load_group(group: &Path) -> Vec<Vector> {
             "rejected" => false,
             other => panic!("{name}: outcome must be accepted or rejected, found `{other}`"),
         };
-        if !accepted && scalar_field(&expected, "code").is_none() {
-            panic!("{name}: a rejection vector must state the code it expects");
+        // Both required for every rejection, in every group, matching what
+        // this corpus's own README already states -- previously only
+        // `code` was actually enforced (review-caught on PR #21); every
+        // existing rejection vector already declares both, so this
+        // tightens the check without changing any vector.
+        if !accepted {
+            if scalar_field(&expected, "code").is_none() {
+                panic!("{name}: a rejection vector must state the code it expects");
+            }
+            if scalar_field(&expected, "stage").is_none() {
+                panic!("{name}: a rejection vector must state the stage it expects");
+            }
+        }
+        let canonical = scalar_field(&expected, "canonical").map(|s| unquote(&s));
+        if requires_canonical && accepted && canonical.is_none() {
+            panic!(
+                "{name}: an accepted vector in `canonicalize/` must state `canonical` \
+                 — otherwise it passes having checked zero canonical bytes"
+            );
         }
         vectors.push(Vector {
             name,
@@ -76,6 +123,8 @@ fn load_group(group: &Path) -> Vec<Vector> {
             accepted,
             code: scalar_field(&expected, "code"),
             stage: scalar_field(&expected, "stage"),
+            canonical,
+            digest: scalar_field(&expected, "digest").map(|s| unquote(&s)),
         });
     }
     vectors.sort_by(|a, b| a.name.cmp(&b.name));
@@ -154,6 +203,90 @@ fn reader_vectors() {
     assert!(
         failures.is_empty(),
         "{} of {} reader vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// `conformance/canonicalize/` — section A's own vectors (G1's own, already
+/// named follow-up: "adding a corpus group only gets the generic invariant
+/// checks; the hand-written test that actually runs [it] still has to be
+/// written"). Each document is read with `reader::parse`, then
+/// canonicalized; an accepted vector's exact canonical bytes (and,
+/// sometimes, A7's digest) are pinned, not just "did it not error" —
+/// language-independent by construction, so a future Go peer can consume
+/// the identical fixtures.
+#[test]
+fn canonicalize_vectors() {
+    let group = corpus_root().join("canonicalize");
+    let vectors = load_group(&group);
+    let mut failures = Vec::new();
+
+    for v in &vectors {
+        let value = match reader::parse(&v.input, Stage::Read, "$", "document") {
+            Ok(value) => value,
+            Err(e) => {
+                failures.push(format!("{}: failed to parse as a document: {e}", v.name));
+                continue;
+            }
+        };
+        let result = to_canonical_json(&value);
+        match (&result, v.accepted) {
+            (Ok(bytes), true) => {
+                let got = String::from_utf8(bytes.clone())
+                    .unwrap_or_else(|e| panic!("{}: canonical output is not UTF-8: {e}", v.name));
+                if let Some(want) = &v.canonical {
+                    if &got != want {
+                        failures.push(format!(
+                            "{}: canonical mismatch\n    got:  {got}\n    want: {want}",
+                            v.name
+                        ));
+                    }
+                }
+                if let Some(want_digest) = &v.digest {
+                    let got_digest = digest(bytes);
+                    if &got_digest != want_digest {
+                        failures.push(format!(
+                            "{}: digest mismatch\n    got:  {got_digest}\n    want: {want_digest}",
+                            v.name
+                        ));
+                    }
+                }
+            }
+            (Err(e), false) => {
+                if let Some(expected) = &v.code {
+                    if e.code != *expected {
+                        failures.push(format!(
+                            "{}: expected code {expected}, got {}",
+                            v.name, e.code
+                        ));
+                    }
+                }
+                if let Some(expected) = &v.stage {
+                    if e.stage.as_str() != expected {
+                        failures.push(format!(
+                            "{}: expected stage {expected}, got {}",
+                            v.name,
+                            e.stage.as_str()
+                        ));
+                    }
+                }
+            }
+            (Ok(_), false) => failures.push(format!(
+                "{}: LEAKED — expected canonicalization to reject this, it produced bytes",
+                v.name
+            )),
+            (Err(e), true) => failures.push(format!(
+                "{}: expected acceptance, canonicalization rejected with {}",
+                v.name, e.code
+            )),
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} canonicalize vectors failed:\n  {}",
         failures.len(),
         vectors.len(),
         failures.join("\n  ")

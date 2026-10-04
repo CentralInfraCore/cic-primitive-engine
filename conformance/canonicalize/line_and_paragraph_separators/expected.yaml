@@ -1,0 +1,3 @@
+outcome: accepted
+canonical: '{"v":"line\u2028sep\u2029para"}'
+why: A4: U+2028/U+2029 are escaped even though RFC 8259 does not require it -- inherited from Go's json.Marshal.

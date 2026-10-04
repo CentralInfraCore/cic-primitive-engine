@@ -1,0 +1,3 @@
+outcome: accepted
+canonical: '{"a":0,"b":0}'
+why: A3: negative zero, whether authored as an integer or a float literal, canonicalizes to the bare token 0.
