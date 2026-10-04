@@ -54,6 +54,28 @@ observation_digest        string (sha256:…)   F5/F9 -- digest of the
                                                        claim consumed
 ```
 
+## `verdict_schema_version`: bump semantics
+
+**Decided here, not left implicit: `verdict_schema_version` is a bare
+integer, starting at `1`.** The Fields table above says it extends
+`PRIMITIVE-IR.md`'s **Versioned** property the same way
+`receipt_schema_version` does — but extending the property only commits
+to the field *existing*; it does not by itself say when the value
+changes.
+
+**It MUST increment on any backward-incompatible change to the verdict
+contract — not only field layout, but also requiredness,
+cardinality/ordering, a field's semantics, or its digest/canonical
+interpretation.** This is the identical rule `docs/RECEIPT-SCHEMA.md`
+already states for `receipt_schema_version`, carried over rather than
+re-derived: `RECEIPT-SCHEMA.md` itself needed a correction (PR #26) to
+widen this past "field layout" alone, after `derived_values[].inputs`
+kept its name and type while its *contract* (order-significant trace vs.
+deduplicated set) changed incompatibly underneath that same name. Both
+fields extend the identical `PRIMITIVE-IR.md` property for the identical
+reason, so the same bump rule applies here from the start rather than
+waiting to be caught by the same mistake twice.
+
 ## Required, cardinality, ordering
 
 **Every field listed above is REQUIRED on every verdict instance; none may
