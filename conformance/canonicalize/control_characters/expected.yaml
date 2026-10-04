@@ -1,0 +1,3 @@
+outcome: accepted
+canonical: '{"v":"\t\u0007\u000b"}'
+why: A4: \t gets the short escape; \u0007 (bell) and \u000B (vertical tab) get the six-character \u00XX form, lowercase hex.

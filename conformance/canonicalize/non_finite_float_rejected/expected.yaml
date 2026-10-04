@@ -1,0 +1,4 @@
+outcome: rejected
+code: E_NON_FINITE_NUMBER
+stage: canonicalize
+why: YAML's own .inf core-schema tag parses cleanly (saphyr), but canonical JSON has no representation for infinity -- caught at canonicalization, not silently written as an invalid token.

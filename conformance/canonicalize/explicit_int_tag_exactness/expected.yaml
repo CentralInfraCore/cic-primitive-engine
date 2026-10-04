@@ -1,0 +1,3 @@
+outcome: accepted
+canonical: '{"v":9223372036854775808}'
+why: The same integer, spelled with an explicit core-schema !!int tag, canonicalizes identically to the untagged literal (large_integer_beyond_i64) -- same semantic type, same bytes, regardless of spelling.
