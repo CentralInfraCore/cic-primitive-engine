@@ -918,38 +918,52 @@ proof chain
    question named (cf. D-017's explicit scoping of `deprecated`) — so
    it's answered here, not left open by omission.
 3. **Closed — `conformance_plan_digest`'s and `observation_digest`'s
-   scope and byte-level semantics, grounded by reading `conformance.go`
-   directly rather than assuming the names imply existing behavior.**
-   Both are fields of the conformance/drift verdict artifact (artifact
-   3 below) — never the materialization receipt (artifact 2) — settling
-   what C3 only confirmed the *location* of. `conformance_plan_digest`
-   has **no landed precedent at all**: `ConformancePlan`/`FieldPlan`/
-   `CollectionPlan` exist as Go types in `conformance.go`, but
-   `Evaluate()` never digests a plan value — only `intent` and `obs`
-   are digested. **Decision:** it is the canonical-bytes digest
-   (section A's format, reused) of the compiled comparison plan
-   actually executed — scalar field paths and comparators, collection
-   topologies and their per-element plans. `observation_digest` **does**
-   have landed precedent, but narrower than the name suggests:
-   `observationDigest(obs Observation)` digests only
-   `Observation{Observed, AuthoritativeAbsent}` — the coverage envelope
-   — never the `observed map[string]interface{}` values actually
-   compared against intent. **Decision, an explicit, named divergence
-   from Relay's landed behavior, not a recovered fact:** for this
-   engine, `observation_digest` binds the coverage envelope *and* the
-   observed value at every covered path — the full validated
-   observation claim the comparator consumed. Reason: the same one B7
-   already established for `value`/`coverage`/`provenance` in the
-   materialized tree — a semantic claim's constituent facts must be
+   scope AND an exact, named preimage shape for each, grounded by
+   reading `conformance.go`/`observation.go`/`compare.go`/
+   `collection.go` directly rather than assuming the names imply
+   existing behavior.** Both are fields of the conformance/drift
+   verdict artifact (artifact 3 below) — never the materialization
+   receipt (artifact 2). `conformance_plan_digest` has **no landed
+   precedent at all** (`ConformancePlan` is never digested in
+   `conformance.go`); `observation_digest` **does** have landed
+   precedent, but narrower than the name suggests — it digests only
+   `Observation{Observed, AuthoritativeAbsent}` (the coverage
+   envelope), never the compared values — and this engine's version
+   deliberately widens past it, for the same reason B7 widened the
+   materialized tree: a semantic claim's constituent facts must be
    committed as real, digested data, not merely present at evaluation
-   time. Under the landed, envelope-only digest, two runs with
-   identical coverage but different observed values at those paths
-   would digest identically while potentially producing different
-   verdicts — exactly the gap B7 closed elsewhere. This does not
-   implement the comparator (F1's gap stands) and does not decide the
-   verdict artifact's own wire layout (no schema-layout decision exists
-   for it yet, same separation as C3/C4) — only what each digest's
-   bytes are taken over.
+   time.
+   **Correction (review-caught on PR #23): naming the semantic
+   content is scope, not a byte-level contract** — two
+   implementations can both honestly satisfy the same semantic
+   description and still produce different trees, hence different
+   digests. Fixed with two named, exact `Value`-tree shapes
+   (`docs/MATERIALIZATION-SPEC.md`'s F5, in full, including every
+   array's ordering rule — section A sorts `Map` keys but has no
+   opinion on `Seq` order, so the projection supplies its own
+   byte-wise sort by `path`, reusing A2's comparator):
+   - **`PlanDigestProjection`** — `{scalars: [{path, compare}],
+     collections: [{path, topology, keys, elements: [{path,
+     compare}]}]}`, `compare` being the literal `CompareType` string
+     (`compare.go`), `topology`/`keys` being `Collection`'s own three
+     topology values and key-field list (`collection.go`).
+   - **`ObservationDigestProjection`** — `{fields: [{path, coverage,
+     value?}]}`, `coverage` being **B3's actual four values**
+     (`observed`/`absent`/`unobserved`/`unknown`), not Relay's
+     two-list envelope — the second half of the review's catch: a
+     digest that can't distinguish `unknown` from `unobserved` doesn't
+     commit to the distinction B2/B7 exist to make. `value` is present
+     **iff** `coverage == observed`, grounded in `ClassifyFieldValue`'s
+     own logic (only `CoverageObserved` ever reads a value; every
+     other state says "the comparison is irrelevant — coverage alone
+     decides"), not in `MaterializedField`'s separate, already-closed
+     value-presence rule (a different artifact's question).
+
+   This does not implement the comparator (F1's gap stands) and does
+   not decide the verdict artifact's own wire layout (no schema-layout
+   decision exists for it yet, same separation as C3/C4) — only what
+   each digest's bytes are taken over, at the same byte-level precision
+   section A already holds materialization to.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

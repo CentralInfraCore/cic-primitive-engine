@@ -1873,13 +1873,69 @@ digested. `iac-object-model.md`'s `proof` object-level index names the
 field but is explicit that this whole index is the **deferred** build.
 **Decision:** `conformance_plan_digest` is the canonical-bytes digest
 (section A's format, reused — no new serialization rule invented) of
-the compiled comparison plan actually executed for this verdict: the
-scalar field paths and their comparators, and the collection
-topologies with their per-element field plans — the semantic content of
-`ConformancePlan`, not its Go struct layout. This lets two verdicts be
-compared for *plan* equality independently of whether their *results*
-happen to agree, the same kind of distinction D2's comparability gate
-already draws for materialization (G3).
+the compiled comparison plan actually executed for this verdict. This
+lets two verdicts be compared for *plan* equality independently of
+whether their *results* happen to agree, the same kind of distinction
+D2's comparability gate already draws for materialization (G3).
+
+**Correction (review-caught on PR #23): naming the semantic content
+("scalar field paths and comparators, collection topologies and
+per-element plans") is scope, not a byte-level contract.** Two
+implementations can both honestly satisfy that sentence and still
+produce different trees — `{"fields":[{"path":"$.x","comparator":
+"equal"}]}` and `{"scalar_fields":{"$.x":{"compare":"equal"}}}` are
+both faithful to the semantics above, and section A canonicalizes each
+correctly, to **different** bytes. A digest is only a digest of
+something specific; "the semantic content" is not specific enough to
+digest. Fixed below with a named, exact preimage shape — a
+**PlanDigestProjection** — expressed directly as a section-A `Value`
+tree (`Map`/`Seq`/`Str`, from `reader.rs`), not Go or Rust struct
+layout:
+
+```text
+PlanDigestProjection =
+  Map {
+    "scalars":     Seq[ Map{ "path": Str, "compare": Str } ],
+    "collections": Seq[ Map{
+      "path":     Str,
+      "topology": Str,        -- "atomic" | "set" | "map"
+                               -- Collection.Topology's own three values
+                               -- (collection.go), the semantic content,
+                               -- not the Go CollectionTopology type
+      "keys":     Seq[ Str ], -- TopologyMap's key fields; ALWAYS
+                               -- present, an empty Seq for "atomic"/
+                               -- "set" -- never omitted, so a present-
+                               -- vs-absent-key choice can't itself
+                               -- change the bytes
+      "elements": Seq[ Map{ "path": Str, "compare": Str } ]
+    } ]
+  }
+```
+
+`compare` is the literal `CompareType` string (`"exact"`/`"numeric"`,
+`compare.go`) — the comparator's semantic identity, not a Go/Rust enum
+tag.
+
+**Ordering, stated explicitly because section A does not supply it for
+arrays.** A2 (this document, section A) sorts `Map` keys by UTF-8 byte
+order; A6 preserves `Seq` order exactly as given — it has no opinion on
+array order at all, by design, because array order is sometimes
+meaningful data. Here it is not: `scalars`, `collections`, each
+collection's `elements`, and each collection's `keys` are all
+*unordered sets* at the semantic level `ConformancePlan` actually
+describes. Byte-identical digests across two implementations therefore
+require a **projection-level** ordering rule, decided here, not
+inherited from section A:
+- `scalars`, `collections`, and every `elements` list: sorted by
+  `path`, byte-wise (the same comparator A2 already uses for map
+  keys — reused, not reinvented).
+- `keys`: sorted byte-wise — this mirrors `Collection.ElementKey`'s own
+  `sort.Strings(keys)` (`collection.go`, already landed), not a new
+  rule invented for this digest.
+
+`conformance_plan_digest = digest(to_canonical_json(PlanDigestProjection))`,
+using section A's own `digest`/`to_canonical_json` (`canonical.rs`) — no
+third serialization step.
 
 **`observation_digest` — landed precedent exists, but it covers less
 than the name suggests, and this decision deliberately widens past it.**
@@ -1911,13 +1967,77 @@ exactly the gap B7 closed for `value`/`coverage`/`provenance` in the
 materialized tree itself. Binding the digest to the full consumed
 claim closes the same gap for the verdict artifact.
 
+**Correction (review-caught on PR #23, two related gaps in the same
+paragraph):**
+
+1. **"The coverage envelope and the observed value" was scope, not a
+   preimage shape** — the same underspecification as
+   `conformance_plan_digest` above, fixed the same way: a named,
+   exact **ObservationDigestProjection**, a section-A `Value` tree.
+2. **The projection must distinguish B3's actual four coverage values,
+   not Relay's two-list envelope.** The paragraph above, read literally,
+   still speaks Relay's `Observed`/`AuthoritativeAbsent` list language.
+   But B3 (closed, this document) already decided `coverage` is
+   `observed | absent | unobserved | unknown` — four values, not the
+   binary "looked at or not" a two-list envelope encodes. `unknown` is
+   B2's own addition with no Relay equivalent at all (B2: *"the device
+   itself reported an indeterminate value... distinct from `absent`...
+   and from `unobserved`"*) — exactly the B7 logic this section already
+   invokes: if `unknown` isn't distinguishable in the digest from
+   `unobserved`, the digest doesn't actually commit to it, which is the
+   same gap B7 exists to close, reopened one level down.
+
+```text
+ObservationDigestProjection =
+  Map {
+    "fields": Seq[ Map{
+      "path":     Str,
+      "coverage": Str,   -- one of B3's four values, verbatim:
+                         -- "observed" | "absent" | "unobserved" |
+                         -- "unknown" -- never Relay's two-list form
+      "value":    <canonical value, per section A>
+                         -- key PRESENT iff coverage == "observed";
+                         -- OMITTED (never present-with-null) for every
+                         -- other coverage value
+    } ]
+  }
+```
+
+**Why `value` is restricted to `coverage == "observed"`, and not, say,
+also attached to `unknown`'s indeterminate device report:** grounded in
+`observation.go`/`compare.go`'s own logic, not invented for this
+digest. `ClassifyFieldValue`: *"if `o.Coverage(path) != CoverageObserved`
+{ ...the observed value is not authoritative, so the comparison is
+irrelevant — coverage alone decides }"* — the comparator itself never
+reads a value for any coverage state but `observed`. This projection
+commits to what the comparator actually consumed (F5's own framing,
+above); it is not a restatement of `MaterializedField`'s separate,
+already-closed (B3) value-presence rule, which is a different
+question about a different artifact (the materialized tree, not the
+verdict). A future decision could add a raw-report payload for
+`unknown` if the comparator itself ever starts consuming one — not
+decided here, because nothing consumes one today.
+
+**Ordering, for the same reason as the plan projection:** `fields` is
+sorted by `path`, byte-wise, before canonicalization — section A's A6
+preserves `Seq` order as given and does not sort it; the projection
+supplies its own rule here, reusing A2's byte-wise comparator rather
+than inventing a second one.
+
+`observation_digest = digest(to_canonical_json(ObservationDigestProjection))`,
+using section A's own `digest`/`to_canonical_json`, same as the plan
+digest.
+
 **What this does not do:** it does not implement the comparator (F1's
-gap stands, in both languages), and it does not decide how
-`conformance_plan_digest`/`observation_digest` are nested or named on
-the conformance-verdict artifact's own wire format — that artifact has
-no schema-layout decision yet, the same way the receipt's C4 layout is
-separate from C3's field-content decisions. It only settles what each
-digest's bytes are taken over.
+gap stands, in both languages) — these two projections are inputs a
+future comparator implementation must construct and digest the same
+way in both languages, not comparator code itself. It does not decide
+how `conformance_plan_digest`/`observation_digest` are nested or named
+on the conformance-verdict artifact's own wire format — that artifact
+has no schema-layout decision yet, the same way the receipt's C4 layout
+is separate from C3's field-content decisions. It only settles what
+each digest's bytes are taken over, now at the same byte-level
+precision section A already holds materialization to.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
