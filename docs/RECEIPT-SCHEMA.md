@@ -17,6 +17,18 @@ embedded in the `PrimitiveIR` tree. Produced on every materialization call
 ```text
 field                     type                source
 ---------------------------------------------------------------------------
+receipt_schema_version    integer             this document -- which
+                                                       version of THIS
+                                                       contract (layout,
+                                                       requiredness,
+                                                       ordering, field
+                                                       semantics), not
+                                                       D1's schema_version
+                                                       (the domain schema's
+                                                       own version); see
+                                                       "Decided, closing
+                                                       C" below
+
 grammar_sha256            string (sha256:…)   D1.1 -- atom-grammar rules
 grammar_schema_sha256     string (sha256:…)   D1.1 -- instance-grammar schema
 
@@ -109,6 +121,8 @@ semantically identical receipts.
 
 ```yaml
 materialization:
+  receipt_schema_version: 1
+
   grammar_sha256: "sha256:..."
   grammar_schema_sha256: "sha256:..."
 
@@ -162,26 +176,76 @@ D1.2's primitive-release tag format. D1.3's three-part group (`schema_name`/
 `schema_version`/`schema_digest`) supersedes it; there is one schema-digest
 field here, not two.
 
-## Deliberately absent
+## Decided, closing C: the three remaining extension/meta questions
 
-- **A signature-related field.** Whether this schema ever reserves a slot
-  for an externally-produced signature (parallel to `cic-primitives`'
-  `release.sign`) is still open — C4's own call, not resolved by this
-  document. Adding a field now would decide it by default, which is the one
-  thing this file must not do.
-- **A coverage projection.** Whether the receipt additionally carries a
-  redundant `coverage` projection as an audit convenience is F1/F4's still-
-  open, non-custody question. `output_digest` already commits to coverage
-  (B7) regardless of whether this schema adds a second, redundant copy of
-  it; omitted here pending that decision.
-- **A schema-version field for the receipt schema itself.** `docs/
-  MATERIALIZATION-SPEC.md`'s C section says the receipt needs "a formal,
-  versioned schema" — found, while writing this out, to be ambiguous
-  between "this document itself has a version" (true of any spec) and "every
-  receipt instance carries its own schema-version field, the way
-  `PRIMITIVE-IR.md` requires of the IR." Nothing already decided settles
-  which. Not invented here — named as a new, small open question for C4,
-  not answered by omission.
+These three were left open by C4's core-field-layout closure (PR #24).
+Closing them here closes section C in full — every one of C1–C5, C4's
+which-repo question, its core field layout, and these three extension
+questions is now decided. Nothing in C is open any more.
+
+**`receipt_schema_version` is added — decided yes.** `docs/
+MATERIALIZATION-SPEC.md`'s C section says the receipt needs "a formal,
+versioned schema," which, read literally, is ambiguous between the
+*document* having a version and every *instance* carrying one.
+Resolved by the same move this document already made for
+requiredness: `PRIMITIVE-IR.md`'s own **Versioned** property (*"Every
+IR document declares its version. A consumer that has not declared
+support for that version must not be handed it"*) applies to this
+sibling artifact too, produced by the identical pipeline (C1). A bare
+integer, starting at `1`.
+
+**Correction (review-caught on PR #26): "incremented when the field
+layout changes" was too narrow — a reader could take it to mean the
+*set of field names* is the only thing this version tracks.** This
+document's own content already disproves that scope: `derived_values[].
+inputs` kept its field name and type (`list[string]`) when this file
+decided it is a deduplicated sorted set rather than an execution-order
+trace (the "Required, cardinality, ordering" section, above) — the
+*layout* never changed, but the *contract* did, incompatibly, for any
+consumer that had assumed order was significant. **`receipt_schema_
+version` MUST increment on any backward-incompatible change to the
+receipt contract — not only field layout, but also requiredness,
+cardinality/ordering, a field's semantics, or its digest/canonical
+interpretation.** Still not a complex versioning scheme, the same
+minimalism C5 already applied to `"schema-default"` as a literal,
+unversioned v1 constant — a bare integer, bumped on any of the above,
+nothing more elaborate. Named `receipt_schema_version`, not
+`schema_version`, specifically to avoid colliding with D1.3's
+already-existing `schema_version` field, which is the *domain* schema's
+own version — a different fact entirely, found only because writing
+the two side by side made the name clash obvious.
+
+**No signature-related field — decided no, not merely deferred.** This
+schema does not reserve a slot for an externally-produced signature,
+parallel to `cic-primitives`' `release.sign`. Grounded in extending
+C1's own reasoning one level further: C1 already decided the receipt
+is a **sibling** artifact, bound by digest, never embedded in the data
+it describes, specifically to avoid the archived model's regress
+(`BOUNDARY.md`: embedding provenance as a node member meant every
+`origin` needed an `origin` of its own, without end). Reserving a slot
+*inside* the receipt for a signature *of* the receipt is a smaller
+version of the identical mistake — the receipt would carry a fact
+about its own future handling, not about the data it describes. If
+this receipt is ever signed, the signature lives in a separate,
+sibling artifact wrapping it (`SignedReceiptEnvelope{receipt_digest,
+signer_identity, signature}`, parallel to how the receipt itself wraps
+the materialized data) — never a field in *this* schema. This is a new
+decision, not a recovered one; D-015's `release.sign` precedent showed
+a schema *may* reserve such a slot, not that *this* one must.
+
+**No redundant coverage projection — decided no, not merely deferred.**
+F1/F4 already settled the custody question: coverage needs no receipt
+projection to survive the module boundary, because `output_digest`
+(B7) already commits to it as part of the materialized semantic claim.
+What remained was a smaller "nice to have for audits" question — would
+duplicating coverage into the receipt make auditing more convenient.
+Decided no, on this document's own founding discipline (its own
+opening line: *"a field with no citation [to a decision requiring it]
+does not belong here"*): nothing has established a concrete need for
+faster or receipt-local coverage access that re-deriving it from the
+materialized tree doesn't already satisfy. If a real audit workflow
+later needs that, it is a new, concretely-motivated decision for then
+— not one to pre-empt now on spec alone.
 
 ## Not decided here
 

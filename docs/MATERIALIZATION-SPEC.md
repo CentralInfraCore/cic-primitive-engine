@@ -665,10 +665,12 @@ output `output_digest` protects. Whether the receipt *additionally*
 carries a redundant coverage projection as an audit convenience is a
 separate, non-custody question, addressed where F1/F4 actually live.
 
-## C — Receipt schema (PARTIALLY DECIDED, not closed)
+## C — Receipt schema (CLOSED)
 
 ```text
-Status: PARTIALLY DECIDED, not closed.
+Status: CLOSED. Every row, including the three extension/meta
+         questions C4's core-field-layout closure (PR #24) left open,
+         is now decided.
 Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          materialization, not just at release), C3's version-identity
          row (filled in by D1's four identifier groups, once D closed),
@@ -689,13 +691,13 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          this row needs no field of its own in C's schema), C4's
          WHICH-REPO question (CLOSED -- the schema lives in this repo,
          `cic-primitive-engine`, not a new or separate location; see
-         C4 for the three convergent reasons), and C3's
+         C4 for the three convergent reasons), C3's
          `conformance_plan_digest`/`observation_digest` rows (CLOSED,
          by F5 -- confirmed NOT receipt fields at all; they belong to
          the conformance/drift verdict artifact (F3), with their own
          scope and byte-level semantics decided there. This closes the
          row for C's purposes without implementing anything -- F1's
-         comparator still doesn't exist in either language), and C4's
+         comparator still doesn't exist in either language), C4's
          CORE FIELD LAYOUT (CLOSED -- docs/RECEIPT-SCHEMA.md, every
          field cited to the decision requiring it, version-identity
          facts laid out flat per D1 rather than nested, a latent
@@ -704,22 +706,19 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          requiredness/cardinality/ordering fixed on review: every
          field REQUIRED, `applied_defaults`/`derived_values` REQUIRED-
          but-possibly-`[]`, both sorted by `.path` byte-wise,
-         `derived_values[].inputs[]` a deduplicated sorted set).
-Open:    C4's EXTENSION/META fields, not the core layout above: WHETHER
-         the receipt schema itself ever carries a
-         signature-related field populated by an external authority,
-         same pattern as cic-primitives' own release.sign/pledge.sign
-         -- C4's call, a schema-layout question, not decided by this
-         engine-doesn't-sign closure; smaller, whether the receipt
-         should ADDITIONALLY carry a redundant coverage projection as an
-         audit convenience, not a custody requirement -- F1/F4's
-         territory; and a new, small question found while writing
-         RECEIPT-SCHEMA.md: whether each receipt INSTANCE needs its own
-         schema-version field, distinct from this document having one.
-         Does not block C1/C2/C3-version/C5/C3-signing/C3-unresolved-
-         unknown/C3-F-territory/C4-repo/C4-schema-text from being used,
-         but the receipt is not a fully closed artifact until the
-         signature-slot and coverage-projection questions resolve.
+         `derived_values[].inputs[]` a deduplicated sorted set), and
+         C4's three EXTENSION/META fields (CLOSED -- docs/
+         RECEIPT-SCHEMA.md: `receipt_schema_version` added, decided
+         yes, per PRIMITIVE-IR.md's own Versioned property applied to
+         this sibling artifact; no signature-related field, decided
+         no, extending C1's own sibling-not-embedded reasoning one
+         level further; no redundant coverage projection, decided no,
+         per this document's own "a field with no citation does not
+         belong here" discipline -- F1/F4's custody question was
+         already settled by B7, and nothing has established a concrete
+         need for the audit-convenience duplicate).
+Open:    Nothing. Section C is fully closed -- the receipt is a
+         finished, implementable artifact as of docs/RECEIPT-SCHEMA.md.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -951,14 +950,15 @@ field needed; coverage is already committed via `output_digest`), and
 `conformance_plan_digest`/`observation_digest` (CLOSED by F5 — neither
 is a receipt field at all; both belong to the conformance/drift verdict
 artifact, F3, with their own scope and byte-level semantics decided
-there). What remains open is *whether the receipt schema itself ever
-carries a signature-related field* (C4's call, not decided here) and
-*whether the receipt should additionally carry a redundant coverage
-projection* as an audit convenience (F1/F4's call, not a custody
-question). C4 still owns how every one of the closed facts is actually
-nested and named on the wire.
+there). *Whether the receipt schema itself ever carries a
+signature-related field* and *whether the receipt should additionally
+carry a redundant coverage projection* as an audit convenience were
+open at the time this was written — both CLOSED since, decided no,
+directly in `docs/RECEIPT-SCHEMA.md` while closing section C in full.
+C4 still owns how every one of the closed facts is actually nested and
+named on the wire.
 
-### C4. Schema home — CLOSED as to WHICH repo, and the core field layout is now written (`docs/RECEIPT-SCHEMA.md`); extension/meta fields stay open
+### C4. Schema home, core field layout, and extension/meta fields — all CLOSED (`docs/RECEIPT-SCHEMA.md`)
 
 The receipt needs a **formal, versioned schema both languages implement
 against** — the same cross-language concern driving this whole effort.
@@ -1097,12 +1097,27 @@ every other PARTIALLY DECIDED section in this document already
 separates what's settled from what isn't, rather than introducing a
 third status category.
 
-**Still open, and genuinely so — not decided by the above:** the exact
-file path/directory within this repo (a small implementation detail,
-not blocking — `docs/RECEIPT-SCHEMA.md` is where it landed, not a claim
-that no other path was possible), the signature-slot question, the
-coverage-projection question, and the receipt-instance schema-version
-question just found.
+**Update: the three extension/meta questions have since closed too,
+in `docs/RECEIPT-SCHEMA.md` directly, not here.** `receipt_schema_version`
+is added — decided yes, extending `PRIMITIVE-IR.md`'s own Versioned
+property to this sibling artifact, the same move already used for its
+Complete property. No signature-related field — decided no, extending
+C1's own sibling-not-embedded reasoning one level further: reserving a
+slot *inside* the receipt for a signature *of* the receipt would be a
+smaller version of the exact regress C1 exists to avoid; if this
+receipt is ever signed, the signature lives in a separate sibling
+artifact wrapping it, never a field in this schema. No redundant
+coverage projection — decided no, on this document's own "a field with
+no citation does not belong here" discipline: F1/F4 already settled
+the custody question (B7), and nothing has established a concrete need
+for a receipt-local duplicate. **With these three closed, section C has
+no open items left at all** — see this section's own status block,
+updated to `CLOSED`.
+
+**Still open, and genuinely so — the only thing left:** the exact file
+path/directory within this repo (a small implementation detail, not
+blocking — `docs/RECEIPT-SCHEMA.md` is where it landed, not a claim
+that no other path was possible).
 
 ### C5. `provenance` is the classification source; the entry's evidence is a separate, now-specified record — CLOSED
 
@@ -1275,25 +1290,8 @@ receipt's own sibling per C1 — narrower precedent than "a formal
 schema already lives here," since no formal schema exists yet for
 either artifact, but real).
 
-**Open:**
-- **Whether the receipt schema itself ever carries a signature-related
-  field**, populated by an external authority the same way
-  `cic-primitives`' own `release.sign`/`pledge.sign` are — a review on
-  PR #14 caught that an earlier pass overclaimed this as settled
-  ("the schema carries no signature field"), when D-015 actually shows
-  schema ownership and producer ownership are different facts. This is
-  a receipt *schema layout* question, C4's territory, not resolved by
-  "this engine doesn't sign."
-- **Whether the receipt should additionally carry a redundant coverage
-  projection**, purely as an audit convenience — not a custody
-  question any more (B7 settled that), but F1/F4's smaller, remaining
-  one.
-- **Whether each receipt instance needs its own schema-version field**
-  — found while writing `docs/RECEIPT-SCHEMA.md`: "a formal, versioned
-  schema" (this section's own words, above) is ambiguous between the
-  *document* having a version and every *instance* carrying one, and
-  nothing already decided settles which. New, small, not invented away
-  by writing the text.
+**Open:** Nothing. See below — the three questions this "Open" list
+used to hold have all since closed.
 
 **Closed (added by F5, after this section's original closure):**
 - C3's `conformance_plan_digest`/`observation_digest` rows — neither is
@@ -1319,7 +1317,38 @@ on review — PR #24):**
   execution-order trace. "C4's schema text: CLOSED" is corrected to
   "C4's **core field layout**: CLOSED" — the *extension/meta* fields
   (signature slot, coverage projection, receipt-instance schema-
-  version) stay open, listed above, not swept in by the broader claim.
+  version) stay open at this point, closed separately below.
+
+**Closed (the three extension/meta questions, closed directly in
+`docs/RECEIPT-SCHEMA.md`, completing section C):**
+- **`receipt_schema_version`, added — decided yes.** Extends
+  `PRIMITIVE-IR.md`'s own Versioned property to this sibling artifact,
+  the same move this document already made for its Complete property.
+  A bare integer starting at `1`, bumped on any backward-incompatible
+  change to the receipt *contract* — field layout, requiredness,
+  ordering, field semantics, or digest/canonical interpretation, not
+  only the set of field names (review-caught on PR #26: a narrower
+  first wording risked implying only layout changes counted, which
+  this document's own `derived_values[].inputs` ordering decision,
+  same layout, different contract, disproves) — not a complex
+  versioning scheme otherwise, the same minimalism C5 applied to
+  `"schema-default"`. Named to avoid colliding with D1.3's own
+  `schema_version` field (the *domain* schema's version, a different
+  fact), a clash only visible once both were written side by side.
+- **No signature-related field — decided no.** Extends C1's own
+  sibling-not-embedded reasoning one level further: a slot *inside*
+  the receipt for a signature *of* the receipt would be a smaller
+  version of the exact regress C1 avoids. A signed form, if one is
+  ever needed, wraps the receipt as a separate sibling artifact
+  instead.
+- **No redundant coverage projection — decided no.** F1/F4 already
+  settled custody (B7); the remaining "audit convenience" question
+  closes on this document's own "a field with no citation does not
+  belong here" discipline — no concrete need has been established for
+  the duplicate.
+
+**Section C is now CLOSED in full** — see its status block above,
+updated from PARTIALLY DECIDED to CLOSED.
 
 ## D — Version binding (closes section D)
 
@@ -1749,12 +1778,12 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          engine/src/conformance.rs, ported from compare.go/
          observation.go and tested against that file's own vectors;
          the object-level ConformancePlan/Evaluate/aggregate walker
-         is NOT part of this -- see Open below).
-Open:    whether the receipt should ADDITIONALLY carry a redundant
-         coverage projection as an audit convenience (not a custody
-         requirement any more, per B7) -- a smaller, non-blocking
-         question than the one this row used to pose. Also open: the
-         object-level comparator/verdict WALKER (ConformancePlan's
+         is NOT part of this -- see Open below), and the redundant-
+         coverage-projection question (CLOSED, decided no, in
+         docs/RECEIPT-SCHEMA.md while closing section C in full --
+         output_digest/B7 already satisfies the custody need, and no
+         concrete audit-convenience need was ever established).
+Open:    the object-level comparator/verdict WALKER (ConformancePlan's
          Rust equivalent, Evaluate, aggregate -- F6 closed the
          per-field primitive these would call, not the walk itself, in
          either language), and how the conformance/drift verdict
@@ -1887,9 +1916,11 @@ there are now three artifacts in view, and they must stay distinct:
                                the same mechanism protecting `value`.
                                Whether this artifact ADDITIONALLY
                                carries a redundant coverage projection,
-                               purely as an audit convenience, remains
-                               OPEN (see F1/F4) -- a smaller question
-                               than this diagram originally posed.
+                               purely as an audit convenience, was open
+                               at the time this diagram was drawn --
+                               CLOSED since, decided no, in docs/
+                               RECEIPT-SCHEMA.md while closing section
+                               C in full.
 3. Conformance/drift verdict -- intent vs. observed comparison outcome
    (conformance.go)            (CONFORMANT/DRIFT/OBSERVED_ABSENT/
                                 UNOBSERVED/NOT_COMPARABLE)
@@ -1928,17 +1959,14 @@ is migration source under A0's existing meta-decision, not a permanent
 fork — explicit, not newly decided), and the three-artifact distinction
 (F3).
 
+**Also closed, since (not at F4's original writing): whether the
+receipt should ADDITIONALLY carry a redundant coverage projection,
+purely as an audit convenience.** Decided no, in `docs/RECEIPT-SCHEMA.md`
+while closing section C in full — no concrete need for the duplicate
+was ever established, and this document's own "a field with no
+citation does not belong here" discipline settles it without one.
+
 **Not closed, deliberately:**
-- **Whether the receipt should ADDITIONALLY carry a redundant coverage
-  projection, purely as an audit convenience.** This is what remains of
-  the row that used to read "whether/how `MaterializedField.coverage`
-  gets projected into the receipt" — narrowed by B7, which answered the
-  custody half (coverage doesn't need the receipt to survive the wire;
-  it's already part of what `output_digest` commits to). C3's actual
-  field set still carries no coverage payload today, and that is no
-  longer a gap this document is waiting to fill — it's a legitimate,
-  closed answer (no custody-driven coverage field), leaving only a
-  smaller "nice to have for audits" question, not decided here.
 - The comparator/verdict logic's object-level walk (`ConformancePlan`/
   `Evaluate`/`aggregate`) has no implementation in the new lib yet, in
   either language — this section (and F5/F6 below) establishes what it

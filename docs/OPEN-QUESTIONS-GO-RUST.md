@@ -144,13 +144,16 @@ permanent fork — made explicit for this axis rather than left looking
 undecided. **F1's custody question is also now closed, by B7:**
 coverage does not need projecting into the receipt to survive the
 module boundary — it's already part of the materialized semantic
-output `output_digest` commits to. Open: the comparator has no
-implementation in the new lib yet, in either language; whether the
-receipt should *additionally* carry a redundant coverage projection as
-an audit convenience (a smaller question than the custody one B7
-closed); and how the materialization receipt relates to the separate
-conformance/drift verdict (a third, distinct proof artifact alongside
-ProofTrace and the receipt) isn't decided.
+output `output_digest` commits to. **The smaller "additionally carry a
+redundant coverage projection" question B7's closure left is also now
+closed — decided no**, in `docs/RECEIPT-SCHEMA.md` while closing
+section C in full (no concrete audit-convenience need was ever
+established). Open: the comparator's object-level walk has no
+implementation in the new lib yet, in either language (the per-field
+primitive it would call does, per F6); and how the materialization
+receipt relates to the separate conformance/drift verdict (a third,
+distinct proof artifact alongside ProofTrace and the receipt) isn't
+decided.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -449,7 +452,7 @@ wire, because B7 already commits it via `output_digest`.
 
 ### C. Receipt schema
 
-**Status:** **PARTIALLY DECIDED, not closed.** C1 (sibling artifact, not
+**Status:** **CLOSED.** C1 (sibling artifact, not
 IR-embedded), C2 (produced every materialization call), C3's
 version-identity row (filled in by D1's four identifier groups, once D
 closed — a later-pass fill-in, not decided when this table was first
@@ -495,17 +498,21 @@ lays out every field, cited to its source decision, every field
 REQUIRED, the two evidence arrays sorted by `.path` byte-wise and
 required-but-possibly-`[]`, `derived_values[].inputs` a deduplicated
 sorted set. "Schema text: CLOSED" is corrected to "core field layout:
-CLOSED" — three *extension/meta* fields stay open: the signature-field
-layout question just named, the coverage-projection question (F1/F4),
-and a new, small question found while writing the text — whether each
-receipt INSTANCE needs its own schema-version field.
-**Blocks:** differential conformance (G); proof-chain integration; full
-closure pending F's comparator implementation and the signature-slot/
-coverage-projection decisions (C5's evidence record, C3's
-engine-doesn't-sign sub-decision, C3's unresolved/unknown-markers row,
-C4's which-repo question, C3's conformance_plan_digest/
-observation_digest rows, and C4's schema text no longer block this)
-**Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
+CLOSED." **And, closing section C in full: the three extension/meta
+fields this left open are now all decided, directly in
+`docs/RECEIPT-SCHEMA.md`** — `receipt_schema_version` added (decided
+yes, extending `PRIMITIVE-IR.md`'s Versioned property); no
+signature-related field (decided no, extending C1's own
+sibling-not-embedded reasoning one level further — a slot for the
+receipt's own eventual signature would be a smaller version of the
+exact regress C1 avoids); no redundant coverage projection (decided
+no, on this document's own "a field with no citation does not belong
+here" discipline — F1/F4's custody question was already settled by
+B7). **Section C is CLOSED.**
+**Blocks:** nothing of its own any more — differential conformance (G)
+and proof-chain integration still wait on F's comparator walk, not on
+anything in C
+**Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
    is a *recovered* decision: `BOUNDARY.md` already settled it, with its
@@ -668,11 +675,17 @@ observation_digest rows, and C4's schema text no longer block this)
    file already draws elsewhere between what a closure settles and
    what it doesn't.
 
-   **Still genuinely open:** the exact in-repo path (trivial,
-   non-blocking — it landed at `docs/RECEIPT-SCHEMA.md`, not a claim no
-   other path was possible), the signature-slot question, the
-   coverage-projection question, and the receipt-instance
-   schema-version question just found.
+   **Update: the three extension/meta questions have since closed too,
+   directly in `docs/RECEIPT-SCHEMA.md`, completing section C.**
+   `receipt_schema_version` added (decided yes, extending
+   `PRIMITIVE-IR.md`'s Versioned property); no signature-related field
+   (decided no, extending C1's own sibling-not-embedded reasoning one
+   level further); no redundant coverage projection (decided no, per
+   this document's own "no citation, no field" discipline — F1/F4's
+   custody question was already settled by B7). **Still genuinely
+   open:** only the exact in-repo path (trivial, non-blocking — it
+   landed at `docs/RECEIPT-SCHEMA.md`, not a claim no other path was
+   possible).
 5. **CLOSED — classification and evidence, both specified; review
    caught an overclaim here too, on the way to closing it.** B3's
    `provenance` was first wrongly scoped "intent/input side only,"
