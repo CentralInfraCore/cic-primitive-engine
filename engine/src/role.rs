@@ -29,7 +29,11 @@
 //! Role, by contrast, is P0.2 — closed, enforced by `check_grammar.py`,
 //! measured against a real corpus (`kubernetes-pod.yaml`,
 //! `compute-resource.yaml`: 32 occurrences). A decided contract to
-//! implement, not one to guess at.
+//! implement, not one to guess at. Ported against that *executable*
+//! reference specifically, not `atom-grammar/README.md`'s own prose — which
+//! a review on this module caught still drifting from it in one place
+//! (`key`'s authority; see [`surface_default_authority`]'s own doc comment),
+//! fixed upstream in `cic-primitives#18`, not worked around here.
 //!
 //! # What this module does not do
 //!
@@ -121,6 +125,18 @@ const SHORT_ROLE_EXPANSION: &[ShortRoleExpansion] = &[
 /// is `"operational"`, not `"state"` — `sorted({"state", "operational"})`
 /// puts `"operational"` first (`'o' < 's'`), and the Python takes
 /// `sorted(...)[0]`.
+///
+/// This is also `key`'s own authority once expanded (`SHORT_ROLE_EXPANSION`'s
+/// `"key"` entry has `authority: None`) — ported against the *executable*
+/// reference, deliberately, not `atom-grammar/README.md`'s own prose, which
+/// a review on this PR caught still drifted from it: the README said `key`'s
+/// authority is always `config`, while `check_grammar.py`'s own comments
+/// explain a later, corpus-measured correction making it surface-derived
+/// (`container_statuses[].name` is a key the adapter *reports*, on a
+/// `state_surface`, not one the requester supplies). Fixed upstream in
+/// `cic-primitives#18`, not worked around here — this module's own behavior
+/// was already correct before that PR, since it was ported from the code,
+/// not the prose.
 fn surface_default_authority(surface: Option<&str>) -> &'static str {
     match surface {
         Some("config_surface") => "config",
