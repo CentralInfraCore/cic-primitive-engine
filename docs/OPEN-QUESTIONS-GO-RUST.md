@@ -1154,6 +1154,31 @@ proof chain
    already-closed `Coverage` model, defaulting to `Unobserved` for an
    unrecorded path, mirroring Go's own default case.
 
+   **Review-caught, fixed before merge: a genuine Relay bug, inherited
+   and then corrected rather than ported.** Go's `resolvePath` splits
+   a `{...}` segment on only the *first* `=` (`strings.Cut`, verified
+   directly), so a multi-key identity like `"name=nic-0,zone=eu"`
+   (which `Collection::element_key`, item 5, already builds and tests)
+   resolves to looking for a field named `"name"` whose whole value is
+   the literal string `"nic-0,zone=eu"` — matching nothing.
+   `conformance_test.go` never exercises a multi-key `CollectionPlan`,
+   so Relay's own tests never catch it either. Porting it here would
+   have left this walker unable to resolve a path it generates from
+   its own multi-key-supporting `Collection` model — fixed instead,
+   per A0's standing "migration source, not a bug-for-bug contract"
+   principle: a `{...}` segment is now the comma-separated `"k=v"`
+   list `ElementKey` itself builds, every pair required to match.
+   Proven with a new test — whose own first version was wrong in a
+   way worth recording: giving intent and observed the *same* element
+   value let the bug hide, since an unresolved path on both sides
+   falls back to `Value::Null`, and `Null` trivially equals `Null`,
+   producing a false `CONFORMANT` indistinguishable from a correct
+   match. Caught by sabotage-and-restore against the pre-fix code
+   (this document's own established verification discipline). The
+   analogous `TopologySet` case (a bracketed segment with no `=`) has
+   no working Go behavior either and is left exactly as narrow,
+   named rather than silently extended.
+
    **What this does not do:** produce `conformance_plan_digest`/
    `observation_digest` (item 3/F5) — those commit to the *executed
    plan* and the *full observation claim*, not `SpecDigest(intent)`

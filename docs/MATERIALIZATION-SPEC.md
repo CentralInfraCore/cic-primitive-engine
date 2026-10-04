@@ -2370,6 +2370,42 @@ committed `Coverage` to B3's closed four-value model rather than Go's
 to `Unobserved` for an unrecorded path, mirroring Go's own default
 case), not a struct Go has a direct analogue for.
 
+**Review-caught, fixed before merge (PR #28): Go's own `resolvePath`
+has a bug for multi-key collection identities, inherited and then
+corrected rather than ported.** `Collection::element_key` (F7) already
+supports multiple key fields, joining them as `"k1=v1,k2=v2"`
+(`collection_test.go`'s own multi-key vector, ported in F7). Go's
+`resolvePath` splits a `{...}` path segment on only the *first* `=`
+(`strings.Cut`, verified directly) — for `"name=nic-0,zone=eu"` that
+yields `key="name"`, `val="nic-0,zone=eu"`, which looks for a field
+named `"name"` whose entire value is the literal string
+`"nic-0,zone=eu"` — matching nothing real. `conformance_test.go` never
+exercises a multi-key `CollectionPlan`, so Relay's own test suite never
+catches this either; it is a genuine, inherited bug, not a Go↔Rust
+divergence. Porting it here would have left this walker unable to
+resolve a path it generates from its own, already-merged, multi-key-
+supporting `Collection` model — an internal inconsistency a faithful
+port would have reproduced for no reason, since A0's standing
+principle already treats `core/nexus/iac` as migration source and
+tested reference material, not a contract to reproduce bug-for-bug.
+Fixed: a `{...}` segment is parsed as the comma-separated `"k=v"` list
+`ElementKey` itself builds, with every pair required to match (the
+single-key case is simply the one-constraint case of this, unaffected
+otherwise). Proven with a new test, not merely asserted — and the
+test's own first version was itself wrong in a way worth recording:
+giving intent and observed the *same* element value let the bug hide,
+because an unresolved path on both sides falls back to `Value::Null`,
+and `Null` trivially equals `Null`, producing a false `CONFORMANT`
+that looked identical to a correctly-resolved match. Caught by
+deliberately re-running the corrected test against the pre-fix code
+(sabotage-and-restore, this document's own established verification
+discipline) and confirming it actually failed before confirming it
+passed after. The analogous `TopologySet` case — a bracketed segment
+with no `=` at all — has no working Go behavior either (it looks for a
+field literally *named* the whole identity string) and is left exactly
+as narrow as Go, named rather than silently extended, since nothing in
+either language's test suite exercises it.
+
 **What this does not do:** produce `conformance_plan_digest`/
 `observation_digest` (F5) — F5 already decided these commit to the
 *executed plan* and the *full observation claim*, not simply

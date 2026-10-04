@@ -193,18 +193,48 @@ fn element_keys(intent: &Value, observed: &Value, cp: &CollectionPlan) -> Vec<St
 }
 
 /// Ported from `conformance.go`'s `resolvePath`: walks a canonical path
-/// (`"/a/b"`, or `"/list/{key=val}/field"`) into a nested `Value`,
+/// (`"/a/b"`, or `"/list/{key=val}/field"`, or, for a multi-key
+/// collection, `"/list/{k1=v1,k2=v2}/field"`) into a nested `Value`,
 /// returning the value found, or `None` if any segment along the way
-/// can't be resolved. A `"{key=val}"` segment selects the list element
-/// whose key field's [`crate::collection`]-style display equals `val` --
-/// the exact same `fmt.Sprintf("%v", ...)` formatting `ElementKey` uses
-/// (`go_display`, reused, not a second copy), including a missing key
-/// field rendering as `"<nil>"`.
+/// can't be resolved.
+///
+/// **Correction (review-caught on PR #28): Go's own `resolvePath` only
+/// ever splits a `{...}` segment on the *first* `=`, via
+/// `strings.Cut(seg, "=")`.** For a single-key identity that's
+/// sufficient; for the multi-key identity `Collection::element_key`
+/// already builds (`"name=nic-0,zone=eu"`, `collection.rs`, F7, tested
+/// against `collection_test.go`'s own multi-key vector), it is not —
+/// verified directly against `strings.Cut`: it returns `key="name"`,
+/// `val="nic-0,zone=eu"`, which then looks for a field literally named
+/// `"name"` whose *entire* value is the string `"nic-0,zone=eu"`,
+/// matching nothing real. This is an inherited Relay bug, not a Go↔Rust
+/// divergence — `conformance_test.go` never exercises a multi-key
+/// `CollectionPlan`, so it was never caught there either — but porting it
+/// here would leave this walker unable to resolve a path it generates
+/// from its own, already-merged, multi-key-supporting `Collection` model.
+/// Per A0's standing principle (`core/nexus/iac` is migration source and
+/// tested reference material, not a contract this library must
+/// reproduce bug-for-bug), fixed rather than ported: a `{...}` segment is
+/// now parsed as the comma-separated `"k=v"` list `ElementKey` itself
+/// builds, every pair matched against the candidate element's fields
+/// via [`crate::collection::go_display`] (reused, not a second copy),
+/// and **all** pairs must match. A single-key identity is simply the
+/// one-constraint case of this, so the existing single-key path is
+/// unaffected.
+///
+/// **A narrower, explicitly-named limitation inherited from the same
+/// root cause, not fixed here because nothing exercises it either:**
+/// Go's `resolvePath` also has no working case for a `TopologySet`
+/// element at all (a bracketed segment with no `=` looks for a field
+/// literally *named* the whole identity string, which almost never
+/// exists) — this port doesn't invent a different, untested behavior
+/// for that case; a `{...}` segment is only ever matched against `Map`
+/// elements, same as Go.
 ///
 /// `None` conflates "this segment doesn't exist" with "this segment
 /// exists but isn't a value this path shape could be applied to" (e.g. a
-/// `{key=val}` segment over a non-`Seq`), matching Go's own
-/// `resolvePath`, which returns the identical `(nil, false)` for both.
+/// `{...}` segment over a non-`Seq`), matching Go's own `resolvePath`,
+/// which returns the identical `(nil, false)` for both.
 fn resolve_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = root;
     for seg in path.trim_matches('/').split('/') {
@@ -215,19 +245,26 @@ fn resolve_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
             let Value::Seq(list) = cur else {
                 return None;
             };
-            let (key, val) = inner.split_once('=').unwrap_or((inner, ""));
+            // Every "k=v" pair, comma-separated, matching ElementKey's
+            // own construction -- all must match (see doc comment).
+            let constraints: Vec<(&str, &str)> = inner
+                .split(',')
+                .map(|part| part.split_once('=').unwrap_or((part, "")))
+                .collect();
             let found = list.iter().find(|elem| {
                 let Value::Map(m) = elem else {
                     return false;
                 };
-                let display = match m.get(key) {
-                    Some(v) => match crate::collection::go_display(v) {
-                        Some(s) => s,
-                        None => return false, // non-finite float -- never matches
-                    },
-                    None => "<nil>".to_string(),
-                };
-                display == val
+                constraints.iter().all(|(key, val)| {
+                    let display = match m.get(key) {
+                        Some(v) => match crate::collection::go_display(v) {
+                            Some(s) => s,
+                            None => return false, // non-finite float -- never matches
+                        },
+                        None => "<nil>".to_string(),
+                    };
+                    display == *val
+                })
             });
             cur = found?;
         } else {
@@ -491,5 +528,64 @@ mod tests {
             verdict.fields.get("/memory_gb"),
             Some(&FieldVerdict::Unobserved)
         );
+    }
+
+    // Review-caught on PR #28: not a port -- conformance_test.go never
+    // exercises a multi-key CollectionPlan (its own ociPlan uses a single
+    // key, "name"), so there is no existing Go vector to port against
+    // (Go's own resolvePath has the identical bug this proves fixed, just
+    // never caught by a test). Proves evaluate() can resolve a field path
+    // it generated from its own multi-key ElementKey. Caught in review of
+    // this very fix: an earlier version of this test used identical
+    // intent/observed values, which passed even against the UNFIXED
+    // bracket-matching code -- both sides silently fell back to
+    // Value::Null when resolution failed, and Null trivially equals
+    // Null, producing a false CONFORMANT that masked the exact failure
+    // this test exists to catch. Intent and observed must differ for
+    // this test to mean anything.
+    #[test]
+    fn multi_key_collection_identity_resolves_back_to_its_element() {
+        let nic = |subnet: &str| {
+            map(&[
+                ("name", Value::Str("nic-0".into())),
+                ("zone", Value::Str("eu".into())),
+                ("subnet", Value::Str(subnet.into())),
+            ])
+        };
+        let plan = ConformancePlan {
+            scalars: vec![],
+            collections: vec![CollectionPlan {
+                path: "/nics".into(),
+                collection: Collection {
+                    topology: CollectionTopology::Map,
+                    keys: vec!["name".into(), "zone".into()],
+                },
+                elements: vec![FieldPlan {
+                    path: "subnet".into(),
+                    compare: CompareType::Exact,
+                }],
+            }],
+        };
+        // Intent and observed deliberately DIFFER. This is the point: if
+        // resolve_path's bracket-matching silently fails to find either
+        // element (the bug this test exists to catch), both sides fall
+        // back to Value::Null, which compares EQUAL to itself -- a false
+        // CONFORMANT that would hide the exact failure this test needs to
+        // surface. Only a correctly-resolved, genuinely different pair of
+        // real values produces the DRIFT this test actually checks for.
+        let intent = map(&[("nics", Value::Seq(vec![nic("prod-a")]))]);
+        let observed = map(&[("nics", Value::Seq(vec![nic("prod-WRONG")]))]);
+        let mut obs = Observation::new();
+        obs.set("/nics/{name=nic-0,zone=eu}/subnet", Coverage::Observed);
+
+        let verdict = evaluate(&intent, &observed, &obs, &plan);
+        assert_eq!(
+            verdict.fields.get("/nics/{name=nic-0,zone=eu}/subnet"),
+            Some(&FieldVerdict::Drift),
+            "a multi-key identity must resolve back to the SAME real element on \
+             both sides, not silently fall back to Null on both -- fields={:?}",
+            verdict.fields
+        );
+        assert_eq!(verdict.object, ObjectConformance::Drift);
     }
 }
