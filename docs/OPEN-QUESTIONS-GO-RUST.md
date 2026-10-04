@@ -102,11 +102,14 @@ call, but B7's, the same way the row was always going to be decided
 somewhere else, not here. **C4's own WHICH-REPO question has since
 closed too** (added later, while closing C4): the schema lives in this
 repo, not a new or separate location — see C4's own entry below for
-the three convergent reasons. C3's remaining rows
-(`conformance_plan_digest`/`observation_digest`; the signature-field
-layout question just named) plus C4's actual schema *text* (not which
-repo hosts it) are reserved for F or genuinely ungrounded, not guessed
-at.
+the three convergent reasons. **C3's `conformance_plan_digest`/
+`observation_digest` rows have since closed too, by F5:** neither is a
+receipt field at all — both belong to the conformance/drift verdict
+artifact (F3), with their own scope and byte-level semantics decided
+there, not in this schema. What's left: the signature-field layout
+question just named, plus C4's actual schema *text* (not which repo
+hosts it, and no longer blocked on any unresolved field), reserved for
+whoever writes it next.
 
 **D is now closed too** — four identifiers, not one or two (grammar
 digest, primitive release identity, domain schema identity — logical
@@ -481,16 +484,19 @@ materialized semantic claim `output_digest` commits to, so this row
 needs no field of its own — the custody question is settled, not
 merely unblocked. **C4's WHICH-REPO question is also now closed**
 (added later, while closing C4): the schema lives in this repo, not a
-new or separate location — see C4's own entry below. C3's remaining
-rows (`conformance_plan_digest`/`observation_digest`, F's territory;
-the signature-field layout question just named) and C4's actual schema
-*text* (field-by-field layout, still deferred until C3's remaining
-rows close) are open.
+new or separate location — see C4's own entry below. **C3's
+`conformance_plan_digest`/`observation_digest` rows are also now
+closed, by F5** (added later, while closing F): neither is a receipt
+field at all — both belong to the conformance/drift verdict artifact
+(F3), with their own scope and byte-level semantics decided there. What's
+open: the signature-field layout question just named, and C4's actual
+schema *text* (field-by-field layout — no longer blocked on any
+unresolved field, just not yet written).
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending C3's remaining F-territory row, C4's schema text, and F
+closure pending C4's schema text and F's comparator implementation
 (C5's evidence record, C3's engine-doesn't-sign sub-decision, C3's
-unresolved/unknown-markers row, and C4's which-repo question no longer
-block this)
+unresolved/unknown-markers row, C4's which-repo question, and C3's
+conformance_plan_digest/observation_digest rows no longer block this)
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -572,10 +578,16 @@ block this)
    semantic claim `output_digest` already commits to, so coverage
    doesn't need a receipt field to survive the module boundary — the
    row closes with no field, the custody question fully answered, not
-   merely unblocked. `conformance_plan_digest` is section F's territory
-   with no landed precedent either; `observation_digest` **is**
-   landed — but as a field of `ConformanceResult` (the drift verdict),
-   a different artifact from this receipt, not simply reusable here.
+   merely unblocked. **`conformance_plan_digest`/`observation_digest`
+   are now CLOSED too, by F5 — see F's own entry below for the
+   semantics.** Neither is a receipt field: `conformance_plan_digest`
+   is section F's territory with no landed precedent at all
+   (`ConformancePlan` exists in `conformance.go` but is never digested
+   there); `observation_digest` **is** landed, but only as a field of
+   `ConformanceResult` (the drift verdict, digesting the coverage
+   envelope alone, not observed values) — a different artifact from
+   this receipt, never simply reusable here, and F5 deliberately widens
+   its scope for this engine's own version of it.
 4. **CLOSED as to WHICH repo; the schema's own text stays deferred.**
    The schema does **not** live in `cic-primitives`' `schemas/atomic/`/
    `schemas/aggregate/` — giving the receipt a primitive's schema home
@@ -834,14 +846,18 @@ review caught a regression to an input-vs-output framing B3 was already
 fixed away from), F1's custody claim (coverage needs no receipt
 projection to survive the module boundary — closed by B7, added later:
 coverage is already part of the materialized semantic claim
-`output_digest` commits to), and F2 (the comparator is migration source
-under A0's existing meta-decision, made explicit for this axis) are
-settled. **Open:** whether the receipt should *additionally* carry a
-redundant coverage projection as an audit convenience (not a custody
-requirement any more — a smaller question than this row used to pose),
-the comparator/verdict logic's actual implementation (in either
-language), and how the materialization receipt relates to the separate
-conformance/drift verdict artifact.
+`output_digest` commits to), F2 (the comparator is migration source
+under A0's existing meta-decision, made explicit for this axis), and F5
+(`conformance_plan_digest`'s and `observation_digest`'s scope and
+byte-level semantics — both are conformance/drift-verdict-artifact
+fields, never receipt fields; see item 3 below) are settled. **Open:**
+whether the receipt should *additionally* carry a redundant coverage
+projection as an audit convenience (not a custody requirement any more
+— a smaller question than this row used to pose), the comparator/
+verdict logic's actual implementation (in either language — F5 decided
+what the two digests commit to, not how to compute a verdict), and how
+the materialization receipt relates to the separate conformance/drift
+verdict artifact.
 **Blocks:** proof-chain completeness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
 
@@ -883,8 +899,9 @@ proof chain
    item), none is needed: coverage doesn't require the receipt to
    survive the module boundary, because it's already part of the
    materialized semantic output `output_digest` commits to.**
-   `conformance_plan_digest`/`observation_digest` remain exactly as
-   open as C3 already said. What doesn't exist yet, in
+   `conformance_plan_digest`/`observation_digest` were, at the time
+   this item was written, exactly as open as C3 said — closed since,
+   by F5 (item 3 below). What doesn't exist yet, in
    either language, is the actual comparator/verdict-aggregation logic —
    today that's Relay's own Go code
    (`compare.go`/`observation.go`/`conformance.go`), landed and tested
@@ -900,6 +917,39 @@ proof chain
    settled, would itself be the kind of silent-divergence risk this
    question named (cf. D-017's explicit scoping of `deprecated`) — so
    it's answered here, not left open by omission.
+3. **Closed — `conformance_plan_digest`'s and `observation_digest`'s
+   scope and byte-level semantics, grounded by reading `conformance.go`
+   directly rather than assuming the names imply existing behavior.**
+   Both are fields of the conformance/drift verdict artifact (artifact
+   3 below) — never the materialization receipt (artifact 2) — settling
+   what C3 only confirmed the *location* of. `conformance_plan_digest`
+   has **no landed precedent at all**: `ConformancePlan`/`FieldPlan`/
+   `CollectionPlan` exist as Go types in `conformance.go`, but
+   `Evaluate()` never digests a plan value — only `intent` and `obs`
+   are digested. **Decision:** it is the canonical-bytes digest
+   (section A's format, reused) of the compiled comparison plan
+   actually executed — scalar field paths and comparators, collection
+   topologies and their per-element plans. `observation_digest` **does**
+   have landed precedent, but narrower than the name suggests:
+   `observationDigest(obs Observation)` digests only
+   `Observation{Observed, AuthoritativeAbsent}` — the coverage envelope
+   — never the `observed map[string]interface{}` values actually
+   compared against intent. **Decision, an explicit, named divergence
+   from Relay's landed behavior, not a recovered fact:** for this
+   engine, `observation_digest` binds the coverage envelope *and* the
+   observed value at every covered path — the full validated
+   observation claim the comparator consumed. Reason: the same one B7
+   already established for `value`/`coverage`/`provenance` in the
+   materialized tree — a semantic claim's constituent facts must be
+   committed as real, digested data, not merely present at evaluation
+   time. Under the landed, envelope-only digest, two runs with
+   identical coverage but different observed values at those paths
+   would digest identically while potentially producing different
+   verdicts — exactly the gap B7 closed elsewhere. This does not
+   implement the comparator (F1's gap stands) and does not decide the
+   verdict artifact's own wire layout (no schema-layout decision exists
+   for it yet, same separation as C3/C4) — only what each digest's
+   bytes are taken over.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
@@ -921,9 +971,10 @@ include.
 ### G. Differential conformance
 
 **Status:** **PARTIALLY DECIDED, not closed** — and cannot fully close
-until C3's open fields and F's comparator implementation do (B2, C5 and
-C3's unresolved/unknown-markers row have since closed and no longer
-block this). The comparison *harness structure* is fixed; full test
+until F's comparator implementation lands (B2, C5, C3's
+unresolved/unknown-markers row, and C3's `conformance_plan_digest`/
+`observation_digest` rows have all since closed and no longer block
+this). The comparison *harness structure* is fixed; full test
 *coverage* is not yet possible.
 **Blocks:** nothing further — this is the last section
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#g--differential-conformance-partially-decided-not-closed`
@@ -991,10 +1042,12 @@ anything about parity.
    correct (after ProofTrace/receipt and receipt/verdict).
 
 **Not closed, and cannot be yet:** full test coverage. Any vector
-touching C3's still-open fields (`conformance_plan_digest`/
-`observation_digest`, F's territory) or F's not-yet-implemented
-comparator is out of scope for the harness today — named as a gap, not
-silently passed or skipped. C5's evidence record and C3's
+exercising the comparator/verdict artifact — including
+`conformance_plan_digest`/`observation_digest` — is out of scope for
+the harness today, not because their semantics are undecided (F5
+settled those) but because F's comparator has no implementation in
+either language yet, so there is nothing to vector against — named as
+a gap, not silently passed or skipped. C5's evidence record and C3's
 `unresolved/unknown markers` row have since closed (the latter via
 B7: coverage is part of what step 2's canonical-byte comparison already
 catches, with no separate receipt field needed) and no longer belong
