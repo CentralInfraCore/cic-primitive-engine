@@ -253,4 +253,5 @@ later needs that, it is a new, concretely-motivated decision for then
   these are not receipt fields at all; they belong to the conformance/drift
   verdict artifact (F3), a different schema this document does not define.
 - The verdict artifact's own wire layout — out of scope for this file,
-  which is the materialization receipt only.
+  which is the materialization receipt only. Decided separately, in
+  `docs/VERDICT-SCHEMA.md` (F10).
