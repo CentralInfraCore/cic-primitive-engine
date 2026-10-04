@@ -1743,17 +1743,23 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          digests the full validated observation claim the comparator
          consumed -- coverage envelope AND observed values -- a
          deliberate widening of Relay's landed observationDigest(),
-         which digests only the coverage envelope).
+         which digests only the coverage envelope), and F6 (the
+         per-field comparator PRIMITIVE -- compare/classify_field/
+         classify_field_value -- implemented in Rust,
+         engine/src/conformance.rs, ported from compare.go/
+         observation.go and tested against that file's own vectors;
+         the object-level ConformancePlan/Evaluate/aggregate walker
+         is NOT part of this -- see Open below).
 Open:    whether the receipt should ADDITIONALLY carry a redundant
          coverage projection as an audit convenience (not a custody
          requirement any more, per B7) -- a smaller, non-blocking
          question than the one this row used to pose. Also open: the
-         comparator/verdict EXECUTION LOGIC (doesn't exist in the new
-         lib yet, in either language -- F5 decided what the two digests
-         commit to, not how to compute a verdict), and how the
-         conformance/drift verdict relates to the receipt (C) and to
-         ProofTrace (E's finding) -- three adjacent, distinct proof
-         artifacts, not one.
+         object-level comparator/verdict WALKER (ConformancePlan's
+         Rust equivalent, Evaluate, aggregate -- F6 closed the
+         per-field primitive these would call, not the walk itself, in
+         either language), and how the conformance/drift verdict
+         relates to the receipt (C) and to ProofTrace (E's finding) --
+         three adjacent, distinct proof artifacts, not one.
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -1933,9 +1939,12 @@ fork — explicit, not newly decided), and the three-artifact distinction
   longer a gap this document is waiting to fill — it's a legitimate,
   closed answer (no custody-driven coverage field), leaving only a
   smaller "nice to have for audits" question, not decided here.
-- The comparator/verdict logic has no implementation in the new lib at
-  all yet, in either language — this section (and F5 below) establishes
-  what it produces and what the two digests commit to, not the code.
+- The comparator/verdict logic's object-level walk (`ConformancePlan`/
+  `Evaluate`/`aggregate`) has no implementation in the new lib yet, in
+  either language — this section (and F5/F6 below) establishes what it
+  produces and what the two digests commit to, not that code. The
+  per-field primitive it would drive (`compare`/`classify_field_value`)
+  is implemented in Rust (F6, added later).
 - How artifact 2 (receipt) and artifact 3 (conformance verdict) relate
   procedurally — e.g. does computing a verdict require a receipt to
   already exist, or are they independent outputs of the same
@@ -2128,6 +2137,101 @@ has no schema-layout decision yet, the same way the receipt's C4 layout
 is separate from C3's field-content decisions. It only settles what
 each digest's bytes are taken over, now at the same byte-level
 precision section A already holds materialization to.
+
+**Update (F6): F1's gap has since narrowed, not closed.** The
+per-field comparator PRIMITIVE now exists in Rust — F1's "doesn't
+implement the comparator" above is no longer true of the whole
+comparator, only of the object-level walker that would drive it. See
+F6.
+
+### F6. The per-field comparator primitive — implemented (Rust); the object-level walker is not
+
+`engine/src/conformance.rs` ports `compare.go`'s `Compare` and
+`observation.go`'s `ClassifyField`/`ClassifyFieldValue` — the per-field
+primitives, not `conformance.go`'s object-level `ConformancePlan`/
+`Evaluate`/`aggregate` walk over a whole document (that remains F1's
+open gap, narrower now, not closed). Every function's test vectors were
+ported case-for-case from `compare_test.go`'s own
+`TestCompare_Exact`/`TestCompare_Numeric`/`TestClassifyFieldValue`,
+not invented.
+
+**`Coverage` is B3's closed four-value enum** (`observed`/`absent`/
+`unobserved`/`unknown`), not Relay's two-list `Observation{Observed,
+AuthoritativeAbsent}` envelope — there is no object-level walker here
+to hold a two-list form, and B3 already settled what the per-field
+state actually is.
+
+**A new decision, not a port, because Relay has nothing to port here:**
+`unknown` has no Relay equivalent at all (B2's own addition) and
+`observation.go`'s `ClassifyField` therefore has no rule for it.
+Decided, narrowly: `unknown` classifies the same as `unobserved` — a
+device-reported indeterminate value is not authoritative evidence
+either way, so conformance cannot be claimed from it. This is the
+smallest extension of the existing rule, not a guess at a richer one
+(e.g. a dedicated `INDETERMINATE` verdict); a future decision may give
+`unknown` its own verdict without this one needing to change.
+
+**A faithfully-ported, named asymmetry, not a bug:** the numeric
+comparator converts a `Value::Str` numeric literal to an exact rational
+by parsing its decimal digits directly (mirroring `big.Rat.SetString`),
+and converts a `Value::Float` to an exact rational from its IEEE-754
+bits directly (mirroring `SetFloat64`) — **never through each other.**
+Verified empirically (Go container, `math/big.Rat`): the decimal string
+`"0.1"` parses to the exact fraction `1/10`; the `f64` value `0.1`
+converts to `3602879701896397/36028797018963968` — a *different*
+rational. Go's own comparator has this same asymmetry (it has no
+alternate path either), and it is not exercised by `compare_test.go`'s
+own vectors, which only use values exactly representable in binary
+(1.5, 100, …). Not fixed here: fixing it would make this engine's
+comparator diverge *from* the Go reference section G's differential
+conformance exists to compare against.
+
+**Review-caught gap (PR #25), fixed before merge: the numeric string
+grammar was missing `big.Rat.SetString`'s fraction form entirely.**
+`compare.go`'s `ratFromString` is a thin wrapper over `SetString` with
+no narrowing of its own, so the grammar this engine ports must match
+`SetString`'s, not a plausible-looking decimal/scientific subset of
+it. Go's own documentation: *"s can be given as a (possibly signed)
+fraction `a/b`, or as a floating-point number..."* — verified
+empirically (`"1/2"` → `1/2`, `"10/5"` → `2`, `"1/0"` fails, `"3/-4"`
+fails because *"the divisor may not be signed"*). Missing this meant
+`compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with Go —
+`comparable=false` here, `comparable=true, matched=true` there —
+exactly the divergence section G's differential conformance exists to
+catch, caught by review instead of by G's own harness (which cannot
+run yet; F1's object-level walker still doesn't exist). Fixed by
+trying the fraction form first (its grammar has no overlap with the
+decimal form, mirroring `SetString`'s own either/or structure).
+
+**Review-caught gap, round two (PR #25), fixed before merge: the
+named gap above was itself not acceptable to leave open.** The first
+round's fix closed the fraction form but left `SetString`'s binary/
+octal/hex integer and float forms, their `"e"`/`"p"` exponents, and
+digit-separating underscores unported — disclosed honestly as a
+"real but low-probability" residual gap. Review rejected that
+framing: *the PR's own declared goal is "port `Compare`," and section
+G's entire purpose is Go↔Rust differential equivalence — a known,
+reachable semantic divergence doesn't become acceptable by being
+rare.* `CompareNumeric("0x10", "16")` really would disagree between
+languages (`comparable=true` in Go, `comparable=false` here) had this
+shipped. Fixed by porting `SetString`'s complete grammar: decimal,
+binary (`0b`), octal (`0o`) and hexadecimal (`0x`) integers and
+floats, each base's own float mantissa with `'.'`, a decimal `"e"`/
+`"E"` exponent (×10, unavailable for hex, where `e` is itself a valid
+digit) or a binary `"p"`/`"P"` exponent (×2, available on *every*
+base including plain decimal — verified: `"1p1"` → `2`), and a single
+underscore between any two digits of a run, plus — uniquely — one
+immediately after a base prefix before its first digit (`"0x_10"` →
+`16`, but doubled, trailing, or otherwise misplaced underscores all
+fail, verified case by case). Every claim here, and every rejection,
+was checked against real Go output in a Docker container before
+being encoded, not taken from the documentation prose alone.
+
+**What this does not do:** implement `ConformancePlan`, `Evaluate`, or
+`aggregate` — the object-level walk that drives these primitives over
+a whole document and produces the `ConformanceResult`-equivalent
+verdict F5's two projections describe. That remains F1's open item,
+now scoped to exactly this.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

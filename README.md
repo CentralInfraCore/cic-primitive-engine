@@ -8,14 +8,19 @@ materialized `PrimitiveIR`. Generators — YANG, RESTCONF, Kubernetes, Go, the
 Relay — consume the IR, never the YAML.
 
 > **Status: early.** `error` and `reader` are extracted and working.
-> `canonical` implements `Stage::Canonicalize`'s byte format, and `role`
+> `canonical` implements `Stage::Canonicalize`'s byte format, `role`
 > implements one piece of `Stage::Normalize` (Role short/long form, a
-> direct port of `cic-primitives`' own `check_grammar.py`) — both as
-> standalone primitives, over whatever tree each is handed. Neither is
-> wired into a pipeline stage yet, because `Parse` and the rest of
-> `Normalize`/`Resolve`/`Validate` don't exist. Access's own short/long
-> form is deliberately not here yet either — its instance grammar is still
-> undecided upstream (`cic-primitives#17`). Nothing here is a stable API.
+> direct port of `cic-primitives`' own `check_grammar.py`), and
+> `conformance` implements section F's per-field comparator primitive
+> (`compare`/`classify_field_value`, ported from `CIC-Relay`'s
+> `compare.go`/`observation.go`) — all three as standalone primitives,
+> over whatever tree each is handed. None is wired into a pipeline stage
+> yet, because `Parse` and the rest of `Normalize`/`Resolve`/`Validate`
+> don't exist, and `conformance`'s own object-level
+> `ConformancePlan`/`Evaluate` walker doesn't exist either. Access's own
+> short/long form is deliberately not here yet — its instance grammar is
+> still undecided upstream (`cic-primitives#17`). Nothing here is a
+> stable API.
 
 ---
 
