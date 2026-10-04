@@ -916,13 +916,18 @@ topology/element-identity PRIMITIVE — `Collection`/
 `CollectionTopology`/`element_key`, full `fmt.Sprintf("%v", ...)`
 parity including `Float`/`Seq`/`Map` — implemented in Rust,
 `engine/src/collection.rs`, ported from `collection.go` and tested
-against that file's own vectors; see item 5), and the redundant-coverage-projection
+against that file's own vectors; see item 5), the redundant-coverage-projection
 question (CLOSED, decided no, in `docs/RECEIPT-SCHEMA.md` while
-closing section C in full) are settled. **Open:** the object-level
-comparator/verdict WALKER's actual implementation (`ConformancePlan`'s
-Rust equivalent, `Evaluate`, `aggregate`, `elementKeys`, `resolvePath`
-— F6/F7 closed the per-field and element-identity primitives these
-would call, not the walk, in either language), and how the
+closing section C in full), and F8 (the object-level comparator/
+verdict WALKER — `ConformancePlan`/`FieldPlan`/`CollectionPlan`/
+`evaluate`/`aggregate`/`elementKeys`/`resolvePath` — implemented in
+Rust, `engine/src/plan.rs`, ported from `conformance.go` and tested
+against all seven of that file's own end-to-end OCI vectors; see item
+6) are settled. **Open:** wiring F5's `conformance_plan_digest`/
+`observation_digest` projections to the real `ConformancePlan`/
+`Observation` types F8 introduces (deferred because Go's analogous
+`IntentDigest` needs a `SpecDigest`-equivalent expand+normalize step
+this engine's `Normalize` stage doesn't have yet), and how the
 materialization receipt relates to the separate conformance/drift
 verdict artifact.
 **Blocks:** proof-chain completeness
@@ -1125,6 +1130,65 @@ proof chain
    `ElementKey` *"a placeholder identity until the CIC Canonical
    Object Encoding lands"* — a property of the reference, unrelated to
    how faithfully it's ported here.
+6. **Closed — the object-level WALKER, implemented in Rust
+   (`engine/src/plan.rs`), closing F1's "the comparator doesn't exist
+   in either language" gap (narrowed by items 4/5, closed here).**
+   Ports `conformance.go`'s `FieldPlan`/`CollectionPlan`/
+   `ConformancePlan`/`Evaluate`/`aggregate`/`elementKeys`/
+   `resolvePath` — the piece that drives F6's per-field primitives and
+   F7's element-identity primitive over a whole document. Every one of
+   `conformance_test.go`'s seven end-to-end OCI vectors
+   (`Conformant`/`ExtraStateFieldsAreNotDrift`/`Drift`/
+   `NotComparable`/`Unobserved`/`DesiredAbsentIsConformant`, plus the
+   intent/observed/plan fixtures themselves) ported case-for-case, not
+   invented, plus a new test for `unknown` coverage (B2's own
+   addition, no Relay equivalent) flowing through to an `Unobserved`
+   verdict, matching F6's own decision for it.
+
+   **A naming note:** this engine's `conformance.rs` (item 4) ports
+   Go's `compare.go`/`observation.go`, not `conformance.go` despite
+   the name — `conformance.go`'s actual content lives here, in
+   `plan.rs`, named for what it is. `Observation` (introduced here) is
+   new, not ported: Go's two-list envelope has no four-value
+   equivalent to adapt, so this is simply a per-path lookup into B3's
+   already-closed `Coverage` model, defaulting to `Unobserved` for an
+   unrecorded path, mirroring Go's own default case.
+
+   **Review-caught, fixed before merge: a genuine Relay bug, inherited
+   and then corrected rather than ported.** Go's `resolvePath` splits
+   a `{...}` segment on only the *first* `=` (`strings.Cut`, verified
+   directly), so a multi-key identity like `"name=nic-0,zone=eu"`
+   (which `Collection::element_key`, item 5, already builds and tests)
+   resolves to looking for a field named `"name"` whose whole value is
+   the literal string `"nic-0,zone=eu"` — matching nothing.
+   `conformance_test.go` never exercises a multi-key `CollectionPlan`,
+   so Relay's own tests never catch it either. Porting it here would
+   have left this walker unable to resolve a path it generates from
+   its own multi-key-supporting `Collection` model — fixed instead,
+   per A0's standing "migration source, not a bug-for-bug contract"
+   principle: a `{...}` segment is now the comma-separated `"k=v"`
+   list `ElementKey` itself builds, every pair required to match.
+   Proven with a new test — whose own first version was wrong in a
+   way worth recording: giving intent and observed the *same* element
+   value let the bug hide, since an unresolved path on both sides
+   falls back to `Value::Null`, and `Null` trivially equals `Null`,
+   producing a false `CONFORMANT` indistinguishable from a correct
+   match. Caught by sabotage-and-restore against the pre-fix code
+   (this document's own established verification discipline). The
+   analogous `TopologySet` case (a bracketed segment with no `=`) has
+   no working Go behavior either and is left exactly as narrow,
+   named rather than silently extended.
+
+   **What this does not do:** produce `conformance_plan_digest`/
+   `observation_digest` (item 3/F5) — those commit to the *executed
+   plan* and the *full observation claim*, not `SpecDigest(intent)`
+   (Go's actual `IntentDigest`, also not ported: `SpecDigest` runs
+   `ExpandSpec`/`normalizeNumbers` first, and this engine's
+   `Normalize` stage doesn't exist yet). Wiring F5's two projections to
+   the real `ConformancePlan`/`Observation` types is a separate,
+   not-yet-done step. Nor does this decide how the verdict relates
+   procedurally to the receipt (C) or to ProofTrace (E) — three
+   distinct proof artifacts (F3), still not wired together.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

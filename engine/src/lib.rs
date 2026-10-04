@@ -48,11 +48,11 @@
 //! [`reader::Value`] tree it is handed. `role` implements one piece of
 //! `Stage::Normalize` — Role short/long form (`cic-primitives`' P0.2) —
 //! also as a standalone primitive. `conformance` implements section F's
-//! per-field comparator primitive (`compare`/`classify_field_value`), and
-//! `collection` implements the topology/element-identity primitive
-//! (`Collection::element_key`) the not-yet-built object-level plan/verdict
-//! walker (F5) will need to tell collection elements apart. None of these
-//! are wired into a pipeline stage yet, because `Parse`, and the rest of
+//! per-field comparator primitive (`compare`/`classify_field_value`) and
+//! `collection` implements its topology/element-identity primitive
+//! (`Collection::element_key`); `plan` drives both over a whole document
+//! (`evaluate`), closing F1's object-level-walker gap. None of these are
+//! wired into a pipeline stage yet, because `Parse`, and the rest of
 //! `Normalize`/`Resolve`/`Validate`, do not exist yet. Nothing here is a
 //! stable API, and no module should depend on it as one.
 
@@ -60,13 +60,17 @@ pub mod canonical;
 pub mod collection;
 pub mod conformance;
 pub mod error;
+pub mod plan;
 pub mod reader;
 pub mod role;
 
 pub use canonical::{digest, to_canonical_json};
 pub use collection::{Collection, CollectionTopology};
 pub use conformance::{
-    classify_field, classify_field_value, compare, CompareType, Coverage, FieldVerdict,
+    classify_field, classify_field_value, compare, CompareType, Coverage, FieldVerdict, Observation,
 };
 pub use error::{code, Error, Result, Stage};
+pub use plan::{
+    evaluate, CollectionPlan, ConformancePlan, FieldPlan, ObjectConformance, ObjectVerdict,
+};
 pub use role::{expand_role, Role};

@@ -112,8 +112,12 @@ impl Collection {
 /// `fmt.Sprintf("%v", ...)`, ported in full (see this module's own doc
 /// comment for the correction history). `None` only for a non-finite
 /// float -- every other `Value` variant, including nested `Seq`/`Map`, has
-/// a defined, Go-matching display form.
-fn go_display(v: &Value) -> Option<String> {
+/// a defined, Go-matching display form. `pub(crate)`: the not-yet-built
+/// object-level walker's `resolvePath`-equivalent needs the exact same
+/// formatting for its own `{key=val}` path-segment matching (`conformance.
+/// go`'s `resolvePath` uses the identical `fmt.Sprintf("%v", em[key])`),
+/// and must not grow a second, drifting copy of it.
+pub(crate) fn go_display(v: &Value) -> Option<String> {
     match v {
         Value::Null => Some("<nil>".to_string()),
         Value::Bool(b) => Some(if *b { "true" } else { "false" }.to_string()),

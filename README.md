@@ -13,16 +13,18 @@ Relay — consume the IR, never the YAML.
 > direct port of `cic-primitives`' own `check_grammar.py`),
 > `conformance` implements section F's per-field comparator primitive
 > (`compare`/`classify_field_value`, ported from `CIC-Relay`'s
-> `compare.go`/`observation.go`), and `collection` implements its
+> `compare.go`/`observation.go`), `collection` implements its
 > collection-topology/element-identity primitive (`element_key`, ported
-> from `collection.go`) — all four as standalone primitives, over
-> whatever tree each is handed. None is wired into a pipeline stage
-> yet, because `Parse` and the rest of `Normalize`/`Resolve`/`Validate`
-> don't exist, and the object-level `ConformancePlan`/`Evaluate`/
-> `elementKeys` walker that would drive `conformance`/`collection`
-> doesn't exist either. Access's own short/long form is deliberately
-> not here yet — its instance grammar is still undecided upstream
-> (`cic-primitives#17`). Nothing here is a stable API.
+> from `collection.go`), and `plan` drives both over a whole document
+> (`evaluate`, ported from `conformance.go`) — closing section F's
+> object-level-walker gap, though it still doesn't produce the
+> `conformance_plan_digest`/`observation_digest` fields F5 decided, since
+> that needs wiring to a `Normalize` stage that doesn't exist yet. None
+> of this is wired into a pipeline stage, because `Parse` and the rest
+> of `Normalize`/`Resolve`/`Validate` don't exist. Access's own
+> short/long form is deliberately not here yet — its instance grammar is
+> still undecided upstream (`cic-primitives#17`). Nothing here is a
+> stable API.
 
 ---
 

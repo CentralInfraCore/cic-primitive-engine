@@ -1783,17 +1783,23 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          CollectionTopology/element_key, full fmt.Sprintf("%v", ...)
          parity including Float/Seq/Map -- implemented in Rust,
          engine/src/collection.rs, ported from collection.go and tested
-         against that file's own vectors; still not elementKeys/
-         resolvePath/the walker itself), and the redundant-
+         against that file's own vectors), the redundant-
          coverage-projection question (CLOSED, decided no, in
          docs/RECEIPT-SCHEMA.md while closing section C in full --
          output_digest/B7 already satisfies the custody need, and no
-         concrete audit-convenience need was ever established).
-Open:    the object-level comparator/verdict WALKER (ConformancePlan's
-         Rust equivalent, Evaluate, aggregate, elementKeys,
-         resolvePath -- F6/F7 closed the per-field/element-identity
-         primitives these would call, not the walk itself, in either
-         language), and how the conformance/drift verdict
+         concrete audit-convenience need was ever established), and F8
+         (the object-level comparator/verdict WALKER -- ConformancePlan/
+         FieldPlan/CollectionPlan/evaluate/aggregate/elementKeys/
+         resolvePath -- implemented in Rust, engine/src/plan.rs, ported
+         from conformance.go and tested against all seven of that
+         file's own end-to-end OCI vectors).
+Open:    wiring F5's conformance_plan_digest/observation_digest
+         projections to the ConformancePlan/Observation types F8
+         introduces (F8's own ObjectVerdict deliberately omits both --
+         Go's analogous IntentDigest needs a SpecDigest-equivalent
+         expand+normalize step this engine's Normalize stage doesn't
+         have yet, so "intent digest" doesn't yet mean the same thing
+         here it does in Go), and how the conformance/drift verdict
          relates to the receipt (C) and to ProofTrace (E's finding) --
          three adjacent, distinct proof artifacts, not one.
 ```
@@ -1869,17 +1875,29 @@ regression to B3's pre-correction framing:**
   projection purely as an audit convenience — not a custody requirement,
   since B7 already supplies that — addressed in F4 below.
 
-**What doesn't exist yet, in either language:** the actual comparator
-and verdict-aggregation *logic* — deciding whether an observed value
-conforms to a declared intent, and rolling per-field verdicts up to an
-object verdict. Today this exists only as Relay's own Go code
-(`core/nexus/iac/compare.go`'s `CompareType` exact/numeric comparator,
-`observation.go`'s `ClassifyField`, `conformance.go`'s `Evaluate`/
-`aggregate`) — landed, tested, but scoped to one OCI vertical slice and
-with **no Rust peer at all**. This is the same "model decided, Rust
-implementation doesn't exist yet" shape section A was already honest
-about for canonicalization; F doesn't change that shape, it just
-confirms the comparator is squarely inside it.
+**At the time this was written, the actual comparator and verdict-
+aggregation logic did not exist in either language.** Today this
+exists only as Relay's own Go code (`core/nexus/iac/compare.go`'s
+`CompareType` exact/numeric comparator, `observation.go`'s
+`ClassifyField`, `conformance.go`'s `Evaluate`/`aggregate`) — landed,
+tested, but scoped to one OCI vertical slice and with **no Rust peer
+at all**. This was the same "model decided, Rust implementation
+doesn't exist yet" shape section A was already honest about for
+canonicalization.
+
+**Update: that gap is closed, in Rust, as of F6/F7/F8.** `compare`/
+`classify_field_value` (F6, `engine/src/conformance.rs`),
+`Collection::element_key` (F7, `engine/src/collection.rs`), and
+`ConformancePlan`/`evaluate`/`aggregate`/`elementKeys`/`resolvePath`
+(F8, `engine/src/plan.rs`) together port `compare.go`/`observation.go`/
+`collection.go`/`conformance.go` in full, tested against every real Go
+vector those files' own test suites carry, including all seven of
+`conformance_test.go`'s end-to-end OCI scenarios. Still **no Go peer**
+— the comparator exists only in Rust, the mirror image of the gap this
+paragraph originally named. What F8 does not produce is
+`conformance_plan_digest`/`observation_digest` (F5's two projections) —
+wiring those to the real plan/observation types is a separate,
+not-yet-done step, named in `plan.rs`'s own doc comment.
 
 ### F2. `core/nexus/iac`'s comparator is migration source, not a permanent fork — making A0's existing decision explicit for this axis
 
@@ -2316,11 +2334,90 @@ still calls `TopologySet`'s `ElementKey` *"a placeholder identity
 until the CIC Canonical Object Encoding lands"* — a property of the
 reference being ported, unrelated to how faithfully it's ported here.
 
-**What this does not do:** implement `elementKeys` (the function that
-actually calls `ElementKey` over both sides of a collection and unions/
-sorts the results) or any part of `resolvePath`/`Evaluate`/`aggregate`.
-Those, plus `ConformancePlan`/`FieldPlan`/`CollectionPlan`, remain F1's
-open item.
+**What this does not do:** implement `elementKeys`, `resolvePath`,
+`Evaluate`, or `aggregate` — see F8, immediately below, for why that's
+no longer an open gap either.
+
+### F8. The object-level walker — implemented (Rust), closing F1's executable-logic gap
+
+`engine/src/plan.rs` ports `conformance.go`'s `FieldPlan`/
+`CollectionPlan`/`ConformancePlan`/`Evaluate`/`aggregate`/
+`elementKeys`/`resolvePath` — the piece that drives F6's per-field
+primitives and F7's element-identity primitive over a whole document.
+F1's "the actual comparator doesn't exist in either language" gap
+(and F6/F7's own "still not the walker" scoping) is closed: every one
+of `conformance_test.go`'s seven end-to-end OCI vectors
+(`TestEvaluate_OCI_Conformant`/`ExtraStateFieldsAreNotDrift`/`Drift`/
+`NotComparable`/`Unobserved`/`DesiredAbsentIsConformant`) was ported
+case-for-case, not invented, plus a new test exercising `unknown`
+coverage (B2's own addition, no Relay equivalent) flowing correctly
+through to an `Unobserved` verdict, matching F6's own decision for it.
+
+**A naming note, since this doesn't follow Go's file layout.** This
+engine's own `conformance.rs` (F6) ports Go's `compare.go`/
+`observation.go` — **not** `conformance.go`, despite the name.
+`conformance.go`'s actual content, the object-level walk, lives here,
+in `plan.rs`, named for what it is rather than for the Go file that
+happens to hold it. Stated plainly so a future reader comparing file
+names against Go's doesn't go looking for `Evaluate` in the file
+literally named `conformance.rs`.
+
+**`Observation`, introduced here, is new, not ported — Go's own
+two-list envelope has no four-value equivalent to adapt.** F6 already
+committed `Coverage` to B3's closed four-value model rather than Go's
+`Observation{Observed, AuthoritativeAbsent}`; `plan.rs`'s own
+`Observation` is simply a per-path lookup into that model (defaulting
+to `Unobserved` for an unrecorded path, mirroring Go's own default
+case), not a struct Go has a direct analogue for.
+
+**Review-caught, fixed before merge (PR #28): Go's own `resolvePath`
+has a bug for multi-key collection identities, inherited and then
+corrected rather than ported.** `Collection::element_key` (F7) already
+supports multiple key fields, joining them as `"k1=v1,k2=v2"`
+(`collection_test.go`'s own multi-key vector, ported in F7). Go's
+`resolvePath` splits a `{...}` path segment on only the *first* `=`
+(`strings.Cut`, verified directly) — for `"name=nic-0,zone=eu"` that
+yields `key="name"`, `val="nic-0,zone=eu"`, which looks for a field
+named `"name"` whose entire value is the literal string
+`"nic-0,zone=eu"` — matching nothing real. `conformance_test.go` never
+exercises a multi-key `CollectionPlan`, so Relay's own test suite never
+catches this either; it is a genuine, inherited bug, not a Go↔Rust
+divergence. Porting it here would have left this walker unable to
+resolve a path it generates from its own, already-merged, multi-key-
+supporting `Collection` model — an internal inconsistency a faithful
+port would have reproduced for no reason, since A0's standing
+principle already treats `core/nexus/iac` as migration source and
+tested reference material, not a contract to reproduce bug-for-bug.
+Fixed: a `{...}` segment is parsed as the comma-separated `"k=v"` list
+`ElementKey` itself builds, with every pair required to match (the
+single-key case is simply the one-constraint case of this, unaffected
+otherwise). Proven with a new test, not merely asserted — and the
+test's own first version was itself wrong in a way worth recording:
+giving intent and observed the *same* element value let the bug hide,
+because an unresolved path on both sides falls back to `Value::Null`,
+and `Null` trivially equals `Null`, producing a false `CONFORMANT`
+that looked identical to a correctly-resolved match. Caught by
+deliberately re-running the corrected test against the pre-fix code
+(sabotage-and-restore, this document's own established verification
+discipline) and confirming it actually failed before confirming it
+passed after. The analogous `TopologySet` case — a bracketed segment
+with no `=` at all — has no working Go behavior either (it looks for a
+field literally *named* the whole identity string) and is left exactly
+as narrow as Go, named rather than silently extended, since nothing in
+either language's test suite exercises it.
+
+**What this does not do:** produce `conformance_plan_digest`/
+`observation_digest` (F5) — F5 already decided these commit to the
+*executed plan* and the *full observation claim*, not simply
+`SpecDigest(intent)` (Go's actual `IntentDigest`, which this port
+also omits: `SpecDigest` runs `ExpandSpec`/`normalizeNumbers` first,
+and this engine's `Normalize` stage doesn't exist yet, so "intent
+digest" doesn't yet mean the same thing here it does in Go). Wiring
+F5's two projections to the `ConformancePlan`/`Observation` types this
+file introduces is a separate, not-yet-done step. Nor does this decide
+how the conformance/drift verdict this produces relates procedurally
+to the materialization receipt (C) or to ProofTrace (E) — three
+distinct proof artifacts (F3), still not wired together.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
