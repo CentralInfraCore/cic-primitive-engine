@@ -695,22 +695,26 @@ Closed:  C1 (sibling artifact, not IR-embedded), C2 (produced every
          the conformance/drift verdict artifact (F3), with their own
          scope and byte-level semantics decided there. This closes the
          row for C's purposes without implementing anything -- F1's
-         comparator still doesn't exist in either language).
+         comparator still doesn't exist in either language), and C4's
+         actual schema TEXT (CLOSED -- docs/RECEIPT-SCHEMA.md, every
+         field cited to the decision requiring it, version-identity
+         facts laid out flat per D1 rather than nested, and a latent
+         overlap between the old `schema.digest` row and D1.3's richer
+         group found and resolved -- one field, not two).
 Open:    WHETHER the receipt schema itself ever carries a
          signature-related field populated by an external authority,
          same pattern as cic-primitives' own release.sign/pledge.sign
          -- C4's call, a schema-layout question, not decided by this
-         engine-doesn't-sign closure; and, smaller, whether the receipt
+         engine-doesn't-sign closure; smaller, whether the receipt
          should ADDITIONALLY carry a redundant coverage projection as an
          audit convenience, not a custody requirement -- F1/F4's
-         territory. C4's actual schema TEXT (the field-by-field layout)
-         remains unwritten -- not because a field list is still unknown
-         (F5's closure removed the last unknown-field blocker), but
-         because writing it is simply the next, separate step.
+         territory; and a new, small question found while writing
+         RECEIPT-SCHEMA.md: whether each receipt INSTANCE needs its own
+         schema-version field, distinct from this document having one.
          Does not block C1/C2/C3-version/C5/C3-signing/C3-unresolved-
-         unknown/C3-F-territory/C4-repo from being used, but the receipt
-         is not a finished, implementable artifact until C4's schema
-         text is actually written.
+         unknown/C3-F-territory/C4-repo/C4-schema-text from being used,
+         but the receipt is not a fully closed artifact until the
+         signature-slot and coverage-projection questions resolve.
 ```
 
 ### C1. Sibling artifact, bound by digest — not part of the IR
@@ -774,7 +778,17 @@ actually exists.
 ```text
 field                      source                       status
 --------------------------------------------------------------------------
-schema.digest               BOUNDARY.md                  decided
+schema.digest               BOUNDARY.md                  ABSORBED into
+                                                             the version-
+                                                             identity row
+                                                             below (D1.3's
+                                                             `schema_digest`)
+                                                             -- found while
+                                                             writing
+                                                             RECEIPT-
+                                                             SCHEMA.md, not
+                                                             a separate
+                                                             field
 input_digest                 BOUNDARY.md                  decided
 output_digest                 BOUNDARY.md                  decided
 applied_defaults[]           BOUNDARY.md                  decided -- see C5
@@ -939,7 +953,7 @@ projection* as an audit convenience (F1/F4's call, not a custody
 question). C4 still owns how every one of the closed facts is actually
 nested and named on the wire.
 
-### C4. Schema home — CLOSED as to WHICH repo; the schema's own text stays deferred
+### C4. Schema home — CLOSED as to WHICH repo, and the schema's own text is now written (`docs/RECEIPT-SCHEMA.md`)
 
 The receipt needs a **formal, versioned schema both languages implement
 against** — the same cross-language concern driving this whole effort.
@@ -1028,11 +1042,32 @@ facts converge on this, not a single guess:
   would need a specific, stated reason; none of the three facts above
   supplies one.
 
+**Update: the schema's actual field enumeration has since been
+written.** `docs/RECEIPT-SCHEMA.md` is C4's field-by-field text — every
+field cites the decision requiring it (C1/C2, C5, D1, B7), with the
+version-identity facts laid out flat (one key per D1 identifier, not
+nested under a shared `version` key, for the reason D1 itself
+established: the four facts vary independently, and nesting them would
+visually imply they don't). Writing it out also surfaced, and resolved,
+a latent overlap this table's own two rows hid: `schema.digest` (the
+row above, from `BOUNDARY.md`'s pre-D1 sketch) and D1.3's richer
+three-part domain-schema-identity group were never reconciled as the
+same slot — `RECEIPT-SCHEMA.md` absorbs the former into the latter
+(`schema_digest`, one field, not two). It deliberately omits the
+signature field and the coverage-projection field (both still open,
+C4's and F1/F4's own calls respectively, not decided by writing the
+layout) — and surfaced one small, new, genuinely open question in
+doing so: whether each receipt INSTANCE needs its own schema-version
+field (distinct from this document itself having a version), which
+nothing already decided settles. Added to this section's open items
+below, not invented an answer to.
+
 **Still open, and genuinely so — not decided by the above:** the exact
 file path/directory within this repo (a small implementation detail,
-not blocking), and — unchanged from before — the schema's actual field
-enumeration, which still cannot be written until C3's two remaining
-F-territory rows close.
+not blocking — `docs/RECEIPT-SCHEMA.md` is where it landed, not a claim
+that no other path was possible), the signature-slot question, the
+coverage-projection question, and the receipt-instance schema-version
+question just found.
 
 ### C5. `provenance` is the classification source; the entry's evidence is a separate, now-specified record — CLOSED
 
@@ -1218,18 +1253,28 @@ either artifact, but real).
   projection**, purely as an audit convenience — not a custody
   question any more (B7 settled that), but F1/F4's smaller, remaining
   one.
-- **C4's actual schema text** — the field-by-field layout. Not blocked
-  on anything in C3 any more: F5 closed `conformance_plan_digest`/
-  `observation_digest` by confirming neither is a receipt field, so the
-  field list for this schema was already complete once the rows above
-  closed. Deferred purely because nobody has written the text yet, not
-  because a field is still unknown.
+- **Whether each receipt instance needs its own schema-version field**
+  — found while writing `docs/RECEIPT-SCHEMA.md`: "a formal, versioned
+  schema" (this section's own words, above) is ambiguous between the
+  *document* having a version and every *instance* carrying one, and
+  nothing already decided settles which. New, small, not invented away
+  by writing the text.
 
 **Closed (added by F5, after this section's original closure):**
 - C3's `conformance_plan_digest`/`observation_digest` rows — neither is
   a receipt field. Both belong to the conformance/drift verdict
   artifact (F3), with their own scope and byte-level semantics decided
   there, not here.
+
+**Closed (added while writing `docs/RECEIPT-SCHEMA.md`):**
+- **C4's actual schema text.** Every decided field laid out, cited to
+  its source decision, with the version-identity facts flat (one key
+  per D1 identifier) rather than nested — nesting would visually imply
+  the four facts vary together, which D1 established they don't. Also
+  resolved, in the writing: `schema.digest` (C3's table, from
+  `BOUNDARY.md`'s pre-D1 sketch) and D1.3's richer three-part domain-
+  schema-identity group were never reconciled as the same slot; they
+  are now one field (`schema_digest`), not two.
 
 ## D — Version binding (closes section D)
 
