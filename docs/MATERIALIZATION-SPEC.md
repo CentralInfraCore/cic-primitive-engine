@@ -1780,7 +1780,8 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          the object-level ConformancePlan/Evaluate/aggregate walker
          is NOT part of this -- see Open below), F7 (the collection-
          topology/element-identity PRIMITIVE -- Collection/
-         CollectionTopology/element_key -- implemented in Rust,
+         CollectionTopology/element_key, full fmt.Sprintf("%v", ...)
+         parity including Float/Seq/Map -- implemented in Rust,
          engine/src/collection.rs, ported from collection.go and tested
          against that file's own vectors; still not elementKeys/
          resolvePath/the walker itself), and the redundant-
@@ -2277,31 +2278,43 @@ test vector ported case-for-case from `collection_test.go`'s own
 `TestCollection_ElementKey`. F1's object-level walker gap narrows
 again, is still not closed.
 
-**A deliberate, bounded gap, grounded differently from F6's
-numeric-grammar one — not excused by rarity alone.** Go's `ElementKey`
-formats any key-field or set-element value via `fmt.Sprintf("%v",
-...)`, including `float64` (scientific-notation formatting — a
-different, non-trivial algorithm from section A's own
-`canonical_float`, verified empirically: Go's `%v` prints `1e+20`
-where `canonical_float` prints the full plain-decimal digit run) and
-arbitrary maps/slices. This port refuses both (no identity, not a
-guessed one) — narrower than Go. Rarity alone was already rejected as
-a justification for narrowing a port this session (F6, PR #25); the
-distinction here is **not** rarity but *kind*: F6's numeric comparator
-is general-purpose, with no principled reason to exclude any numeric
-shape, while an identity *key field* is different — `BOUNDARY.md`'s
-own defaultability table already holds, for `structural: key`, that
-*"identity is never guessed."* A schema identifying a collection
-element by a float is already in tension with a principle this
-document independently holds, before this port is even considered.
-Further grounding: `collection.go`'s own comment calls its
-`TopologySet` `ElementKey` *"a placeholder identity until the CIC
-Canonical Object Encoding lands"* — the reference being ported is
-itself explicit that the set case is not a finished contract. Porting
-`%v`'s exact float/map/slice algorithm to match an admittedly
-provisional upstream shape is deferred, not silently absent — named in
-the module's own doc comment and tested (`float_and_non_scalar_key_
-values_have_no_identity`), not merely claimed.
+**Review-caught gap (PR #27), fixed before merge: refusing `Float`/
+`Seq`/`Map` values was itself narrower than Go for no principled
+reason.** The first version of this primitive refused to format
+`Float`/`Seq`/`Map` key-field or set-element values at all, reasoning
+that an identity should never be "guessed" (`BOUNDARY.md`'s own
+defaultability table, `structural: key`: *"identity is never
+guessed"*). That reasoning holds for a map-topology *key field* — but
+not for a `TopologySet` element, where the *whole value already is*
+the identity by construction; there is nothing to guess, only
+something to format, exactly as Go's reference does unconditionally.
+Review correctly identified this as the same category of gap already
+rejected once this session for the numeric comparator's string
+grammar (F6, PR #25) — narrower than the reference for no reason
+beyond rarity.
+
+**Fixed: full `%v` parity**, verified empirically in a Docker
+container rather than assumed. `float64`'s `%v` is exactly
+`strconv.FormatFloat(f, 'g', -1, 64)`: plain decimal when the decimal
+exponent of the leading significant digit is `-4..=5`, scientific
+notation otherwise — confirmed by sweeping exponents from -8 to 25
+across multiple significant-digit counts; the threshold held at
+exactly that boundary regardless of digit count, a *different*
+algorithm from section A's own `canonical_float`, which never uses
+scientific notation at all. A slice's `%v` is `"[e1 e2 e3]"`
+(space-separated, each element recursively `%v`-formatted); a map's is
+`"map[k1:v1 k2:v2]"`, keys **sorted** — Go's `fmt` package has sorted
+map keys for deterministic `%v` output since Go 1.12 (verified
+empirically), which happens to be exactly this crate's own A2
+byte-wise key-sort rule, reused, not reinvented. The one remaining
+exception is `NaN`/`±Infinity` (`%v` would print `"NaN"`/`"+Inf"`/
+`"-Inf"`) — out of scope for a materialized value in this engine's own
+pipeline (`Stage::Canonicalize` already rejects non-finite floats),
+kept only as a defensive, documented exception for a `Value` handed to
+this function before that stage runs. `collection.go`'s own comment
+still calls `TopologySet`'s `ElementKey` *"a placeholder identity
+until the CIC Canonical Object Encoding lands"* — a property of the
+reference being ported, unrelated to how faithfully it's ported here.
 
 **What this does not do:** implement `elementKeys` (the function that
 actually calls `ElementKey` over both sides of a collection and unions/

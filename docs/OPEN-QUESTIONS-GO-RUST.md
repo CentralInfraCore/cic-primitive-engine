@@ -913,9 +913,10 @@ comparator PRIMITIVE — `compare`/`classify_field`/
 conformance.rs`, ported from `compare.go`/`observation.go` and tested
 against that file's own vectors; see item 4), F7 (the collection-
 topology/element-identity PRIMITIVE — `Collection`/
-`CollectionTopology`/`element_key` — implemented in Rust, `engine/src/
-collection.rs`, ported from `collection.go` and tested against that
-file's own vectors; see item 5), and the redundant-coverage-projection
+`CollectionTopology`/`element_key`, full `fmt.Sprintf("%v", ...)`
+parity including `Float`/`Seq`/`Map` — implemented in Rust,
+`engine/src/collection.rs`, ported from `collection.go` and tested
+against that file's own vectors; see item 5), and the redundant-coverage-projection
 question (CLOSED, decided no, in `docs/RECEIPT-SCHEMA.md` while
 closing section C in full) are settled. **Open:** the object-level
 comparator/verdict WALKER's actual implementation (`ConformancePlan`'s
@@ -1096,27 +1097,34 @@ proof chain
    Every test vector ported case-for-case from `collection_test.go`'s
    own `TestCollection_ElementKey`.
 
-   **A deliberate, bounded gap, grounded differently from item 4's
-   numeric-grammar one.** Go's `ElementKey` formats any key-field or
-   set-element value via `fmt.Sprintf("%v", ...)`, including `float64`
-   (a different, non-trivial formatting algorithm from section A's own
-   `canonical_float` — verified empirically: Go's `%v` prints `1e+20`
-   where `canonical_float` prints the full plain-decimal digit run)
-   and arbitrary maps/slices. This port refuses both — narrower than
-   Go, same shape as item 4's residual gap, but **not** grounded in
-   rarity, which item 4's review round two already rejected as a
-   justification. The distinction is *kind*, not frequency: the
-   numeric comparator is general-purpose, with no principled reason to
-   exclude any numeric shape; an identity *key field* is different —
-   `BOUNDARY.md`'s own defaultability table already holds, for
-   `structural: key`, that *"identity is never guessed,"* so a schema
-   identifying a collection element by a float is already in tension
-   with a principle this document independently holds. Further
-   grounding: `collection.go`'s own comment calls its `TopologySet`
+   **Review-caught gap (PR #27), fixed before merge: refusing to format
+   `Float`/`Seq`/`Map` values was narrower than Go for no principled
+   reason.** The first version refused all three, reasoning that an
+   identity should never be "guessed" (`BOUNDARY.md`'s defaultability
+   table, `structural: key`: *"identity is never guessed"*) — sound for
+   a map-topology *key field*, but not for a `TopologySet` element,
+   where the whole value already **is** the identity by construction;
+   there is nothing to guess, only something to format, exactly as Go
+   does unconditionally. Review correctly placed this in the same
+   category as item 4's rejected rarity-based narrowing (PR #25).
+
+   **Fixed: full `%v` parity**, verified empirically in a Docker
+   container. `float64`'s `%v` is `strconv.FormatFloat(f, 'g', -1,
+   64)`: plain decimal for a leading-digit decimal exponent of
+   `-4..=5`, scientific otherwise — the threshold held regardless of
+   significant-digit count, across a sweep from exponent -8 to 25, a
+   different algorithm from section A's own `canonical_float`. A
+   slice's `%v` is `"[e1 e2 e3]"`; a map's is `"map[k1:v1 k2:v2]"`,
+   keys **sorted** — Go's `fmt` has sorted map keys for deterministic
+   `%v` output since Go 1.12 (verified empirically), exactly this
+   crate's own A2 key-sort rule, reused. The one remaining exception is
+   `NaN`/`±Infinity` — out of scope for a materialized `Value` in this
+   engine's own pipeline (`Stage::Canonicalize` already rejects
+   non-finite floats), kept only as a defensive exception.
+   `collection.go`'s own comment still calls `TopologySet`'s
    `ElementKey` *"a placeholder identity until the CIC Canonical
-   Object Encoding lands"* — the reference being ported is itself
-   explicit the set case isn't a finished contract. Deferred, named in
-   the module's own doc comment and tested, not silently absent.
+   Object Encoding lands"* — a property of the reference, unrelated to
+   how faithfully it's ported here.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

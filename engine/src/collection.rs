@@ -6,30 +6,38 @@
 //! ported) to tell collection elements on the intent and observed sides
 //! apart.
 //!
-//! # A deliberate, bounded gap: floating-point and non-scalar key values
+//! # `ElementKey` parity with Go's `fmt.Sprintf("%v", ...)`
 //!
-//! Go's `ElementKey` formats *any* key-field or set-element value via
-//! `fmt.Sprintf("%v", ...)`, including `float64` (scientific notation above
-//! or below certain magnitudes — a *different*, non-trivial formatting
-//! algorithm from section A's own `canonical_float`, verified empirically
-//! in this session: Go's `%v` prints `1e+20`, where `canonical_float`
-//! prints the full plain-decimal digit run) and arbitrary maps/slices.
-//! [`Collection::element_key`] refuses both (returns `""`, meaning "no
-//! stable identity"), narrower than Go. This is not excused by rarity
-//! alone — that argument was already rejected once this session, for the
-//! numeric comparator's string grammar (PR #25), and rightly so, since a
-//! *general-purpose* comparator has no principled reason to exclude any
-//! input shape. An identity *key field* is different in kind: this
-//! document's own `BOUNDARY.md` already holds (defaultability table,
-//! `structural: key`) that *"identity is never guessed"* — a schema that
-//! identifies a collection element by a float is already in tension with
-//! that principle, independent of this port. Go's own `collection.go`
-//! comment calls its `TopologySet` `ElementKey` itself *"a placeholder
-//! identity until the CIC Canonical Object Encoding lands"* — i.e. the
-//! reference this ports is explicit that the set case isn't a finished
-//! contract either. Porting `%v`'s exact float/map/slice algorithm to
-//! match an admittedly-provisional upstream shape is deferred, not
-//! silently absent.
+//! **Correction (review-caught on PR #27): an earlier version of this
+//! module refused to format `Float`/`Seq`/`Map` values at all, on the
+//! reasoning that an identity should never be "guessed."** That reasoning
+//! held for a map-topology *key field* (this document's own `BOUNDARY.md`
+//! defaultability table: *"identity is never guessed"*), but not for a
+//! `TopologySet` element: there, the *whole value* already **is** the
+//! identity by construction — there is nothing to guess, only something to
+//! format, exactly as Go's reference does unconditionally. Refusing to
+//! format a `Float`/`Seq`/`Map` *element* was simply narrower than the Go
+//! reference it ports, for no principled reason distinct from rarity — the
+//! same category of gap already rejected once this session for the numeric
+//! comparator's string grammar (PR #25).
+//!
+//! Fixed: [`Collection::element_key`] now reproduces `fmt.Sprintf("%v",
+//! ...)` for every `Value` variant, including `Float` (Go's `%v` for
+//! `float64` is `strconv.FormatFloat(f, 'g', -1, 64)` — plain decimal for
+//! an exponent of -4..5, scientific otherwise, verified empirically across
+//! many magnitudes and significant-digit counts in a Docker container, a
+//! *different*, non-trivial algorithm from section A's own
+//! `canonical_float`, which never uses scientific notation at all) and
+//! `Seq`/`Map` (Go's `%v` prints `"[e1 e2 e3]"` for a slice and `"map[k1:v1
+//! k2:v2]"` for a map, keys sorted — Go's `fmt` package sorts map keys for
+//! deterministic `%v` output since Go 1.12, verified empirically, which
+//! happens to be exactly this crate's own A2 key-sort rule, reused here,
+//! not reinvented). The one residual gap is `NaN`/`±Inf`, which `%v` would
+//! print as `"NaN"`/`"+Inf"`/`"-Inf"` and this module refuses (no stable
+//! identity) — out of scope for a *materialized* value in this engine's own
+//! pipeline (section A's `Stage::Canonicalize` already rejects non-finite
+//! floats), kept here only as a defensive, documented exception for a
+//! `Value` this function might be handed before that stage runs.
 
 use crate::canonical::canonical_integer;
 use crate::reader::Value;
@@ -61,9 +69,11 @@ impl Collection {
     ///     (`"name=nic-0"`); a missing key field renders as `"<nil>"`,
     ///     matching Go's `fmt.Sprintf("%v", nil)` exactly (verified
     ///     empirically) — not an empty string, and not omitted.
-    ///   - `Set`: a string form of the element value (Go's own comment:
-    ///     "a placeholder identity until the CIC Canonical Object Encoding
-    ///     lands" — see this module's doc comment).
+    ///   - `Set`: a string form of the element value, matching
+    ///     `fmt.Sprintf("%v", elem)` in full (see module docs) — Go's own
+    ///     comment still calls this "a placeholder identity until the CIC
+    ///     Canonical Object Encoding lands," a property of the reference
+    ///     being ported, not of how faithfully it's ported here.
     ///   - `Atomic` (or the zero value): `""` — the list has no
     ///     per-element identity, it is one value.
     #[must_use]
@@ -82,9 +92,9 @@ impl Collection {
                     let display = match m.get(k) {
                         Some(v) => match go_display(v) {
                             Some(s) => s,
-                            // A value this function can't confidently
-                            // display (see module docs) -- no identity,
-                            // not a guessed one.
+                            // Only a non-finite float reaches this branch
+                            // (see module docs) -- no identity, not a
+                            // guessed one.
                             None => return String::new(),
                         },
                         None => "<nil>".to_string(),
@@ -99,22 +109,112 @@ impl Collection {
     }
 }
 
-/// `fmt.Sprintf("%v", ...)`'s result for the `Value` variants this module
-/// can confidently reproduce byte-for-byte (verified empirically against
-/// real Go output): `nil` -> `"<nil>"`, a bool -> `"true"`/`"false"`, a
-/// string -> itself, verbatim, and an integer -> its decimal digits
-/// (`BigInt` via section A's own `canonical_integer`, the same
-/// normalization Go's own big-integer display would apply). `None` for
-/// `Float`/`Seq`/`Map` -- see this module's own doc comment for why.
+/// `fmt.Sprintf("%v", ...)`, ported in full (see this module's own doc
+/// comment for the correction history). `None` only for a non-finite
+/// float -- every other `Value` variant, including nested `Seq`/`Map`, has
+/// a defined, Go-matching display form.
 fn go_display(v: &Value) -> Option<String> {
     match v {
         Value::Null => Some("<nil>".to_string()),
         Value::Bool(b) => Some(if *b { "true" } else { "false" }.to_string()),
         Value::Int(i) => Some(i.to_string()),
         Value::BigInt(s) => canonical_integer(s),
+        Value::Float(f) => go_float_display(*f),
         Value::Str(s) => Some(s.clone()),
-        Value::Float(_) | Value::Seq(_) | Value::Map(_) => None,
+        Value::Seq(items) => {
+            let mut parts = Vec::with_capacity(items.len());
+            for item in items {
+                parts.push(go_display(item)?);
+            }
+            Some(format!("[{}]", parts.join(" ")))
+        }
+        Value::Map(m) => {
+            let mut keys = m.keys();
+            // Go's `fmt` package has sorted map keys for deterministic
+            // `%v` output since Go 1.12 (verified empirically) -- A2's
+            // byte-wise sort, reused, not a second rule.
+            keys.sort_unstable();
+            let mut parts = Vec::with_capacity(keys.len());
+            for k in keys {
+                let val = m.get(k).expect("key came from this map's own key list");
+                parts.push(format!("{k}:{}", go_display(val)?));
+            }
+            Some(format!("map[{}]", parts.join(" ")))
+        }
     }
+}
+
+/// `fmt.Sprintf("%v", f)` for a `float64` -- equivalent to
+/// `strconv.FormatFloat(f, 'g', -1, 64)` (verified empirically in this
+/// session: both produce byte-identical output for every vector tested).
+/// Plain decimal when the decimal exponent of the leading significant
+/// digit is in `-4..=5`; scientific notation (`"d.ddde±NN"`, exponent
+/// zero-padded to at least two digits, explicit sign) otherwise -- a
+/// *different* threshold from section A's `canonical_float`, which never
+/// uses scientific notation at all, verified by sweeping exponents from
+/// -8 to 25 across multiple significant-digit counts in a Docker
+/// container: the threshold held at exactly this boundary regardless of
+/// how many significant digits the value had.
+///
+/// `None` for `NaN`/`±Infinity` -- `%v` would print `"NaN"`/`"+Inf"`/
+/// `"-Inf"`, but a materialized `Value` in this engine's own pipeline
+/// never carries one (section A's `Stage::Canonicalize` already rejects
+/// non-finite floats); kept as a defensive, documented exception for a
+/// `Value` handed to this function before that stage runs.
+fn go_float_display(f: f64) -> Option<String> {
+    if !f.is_finite() {
+        return None;
+    }
+    if f == 0.0 {
+        return Some("0".to_string()); // folds -0.0 the same way canonical_float does
+    }
+    // Rust's `{:e}` is exactly the normalized form this needs: one
+    // nonzero digit before the point, the shortest round-trip digit
+    // string after it, and the decimal exponent of that leading digit --
+    // the same quantity Go's algorithm thresholds on.
+    let sci = format!("{f:e}");
+    let (mantissa_part, exp_part) = sci
+        .split_once('e')
+        .expect("Rust's `{:e}` formatting always contains 'e'");
+    let exp: i32 = exp_part
+        .parse()
+        .expect("the exponent after 'e' is always a valid integer");
+    let neg = mantissa_part.starts_with('-');
+    let digits: String = mantissa_part
+        .trim_start_matches('-')
+        .chars()
+        .filter(|c| *c != '.')
+        .collect();
+
+    let mut out = String::new();
+    if neg {
+        out.push('-');
+    }
+    if !(-4..6).contains(&exp) {
+        out.push(digits.as_bytes()[0] as char);
+        if digits.len() > 1 {
+            out.push('.');
+            out.push_str(&digits[1..]);
+        }
+        out.push('e');
+        out.push(if exp >= 0 { '+' } else { '-' });
+        out.push_str(&format!("{:02}", exp.unsigned_abs()));
+    } else if exp >= 0 {
+        let int_len = (exp + 1) as usize;
+        if digits.len() <= int_len {
+            out.push_str(&digits);
+            out.push_str(&"0".repeat(int_len - digits.len()));
+        } else {
+            out.push_str(&digits[..int_len]);
+            out.push('.');
+            out.push_str(&digits[int_len..]);
+        }
+    } else {
+        out.push_str("0.");
+        out.push_str(&"0".repeat((-exp - 1) as usize));
+        out.push_str(&digits);
+    }
+    Some(out)
 }
 
 #[cfg(test)]
@@ -197,26 +297,77 @@ mod tests {
         );
     }
 
-    // Not in collection_test.go -- this engine's own named gap (see module
-    // docs), pinned down as a real test rather than only a doc claim.
+    // Review-caught on PR #27: a float-valued key field, or a whole
+    // TopologySet element, is NOT a guessed identity -- Go already assigns
+    // one via %v, and this port must too. Every vector here was generated
+    // by running real Go fmt.Sprintf("%v", ...) in a Docker container in
+    // this session, not transcribed from memory.
     #[test]
-    fn float_and_non_scalar_key_values_have_no_identity() {
+    fn float_values_get_the_same_identity_go_does() {
+        let set = Collection {
+            topology: CollectionTopology::Set,
+            keys: vec![],
+        };
+        let cases: &[(f64, &str)] = &[
+            (16.0, "16"),
+            (16.5, "16.5"),
+            (0.1, "0.1"),
+            (0.0001, "0.0001"),
+            (0.00001, "1e-05"),
+            (100000.0, "100000"),
+            (1_000_000.0, "1e+06"),
+            (123456.0, "123456"),
+            (1_234_567.0, "1.234567e+06"),
+            (1e20, "1e+20"),
+            (1e-100, "1e-100"),
+            (-16.5, "-16.5"),
+            (0.0, "0"),
+            (-0.0, "0"),
+        ];
+        for (f, want) in cases {
+            assert_eq!(set.element_key(&Value::Float(*f)), *want, "{f}");
+        }
+
         let map_coll = Collection {
             topology: CollectionTopology::Map,
             keys: keys(&["id"]),
         };
         assert_eq!(
             map_coll.element_key(&map(&[("id", Value::Float(1.5))])),
-            "",
-            "a float-valued key field yields no identity, not a guessed one"
+            "id=1.5"
         );
+
+        // NaN/Infinity: the one residual, defensively-handled exception.
+        assert_eq!(set.element_key(&Value::Float(f64::NAN)), "");
+        assert_eq!(set.element_key(&Value::Float(f64::INFINITY)), "");
+    }
+
+    // Review-caught on PR #27: a TopologySet element can itself be a
+    // nested Seq/Map, matching Go's %v exactly ("[e1 e2]" / "map[k:v]",
+    // keys sorted) -- not refused as "no identity" the way the first
+    // version of this module did.
+    #[test]
+    fn nested_seq_and_map_values_match_go_v_formatting() {
+        let set = Collection {
+            topology: CollectionTopology::Set,
+            keys: vec![],
+        };
         assert_eq!(
-            Collection {
-                topology: CollectionTopology::Set,
-                keys: vec![],
-            }
-            .element_key(&Value::Float(1.5)),
-            ""
+            set.element_key(&Value::Seq(vec![
+                Value::Str("a".into()),
+                Value::Int(1),
+                Value::Bool(true),
+            ])),
+            "[a 1 true]"
         );
+        // Go sorts map keys for %v regardless of insertion order.
+        assert_eq!(
+            set.element_key(&map(
+                &[("b", Value::Int(1)), ("a", Value::Str("x".into())),]
+            )),
+            "map[a:x b:1]"
+        );
+        assert_eq!(set.element_key(&Value::Seq(vec![])), "[]");
+        assert_eq!(set.element_key(&map(&[])), "map[]");
     }
 }
