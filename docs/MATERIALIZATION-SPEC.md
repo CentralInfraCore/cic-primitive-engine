@@ -1778,15 +1778,21 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          engine/src/conformance.rs, ported from compare.go/
          observation.go and tested against that file's own vectors;
          the object-level ConformancePlan/Evaluate/aggregate walker
-         is NOT part of this -- see Open below), and the redundant-
+         is NOT part of this -- see Open below), F7 (the collection-
+         topology/element-identity PRIMITIVE -- Collection/
+         CollectionTopology/element_key -- implemented in Rust,
+         engine/src/collection.rs, ported from collection.go and tested
+         against that file's own vectors; still not elementKeys/
+         resolvePath/the walker itself), and the redundant-
          coverage-projection question (CLOSED, decided no, in
          docs/RECEIPT-SCHEMA.md while closing section C in full --
          output_digest/B7 already satisfies the custody need, and no
          concrete audit-convenience need was ever established).
 Open:    the object-level comparator/verdict WALKER (ConformancePlan's
-         Rust equivalent, Evaluate, aggregate -- F6 closed the
-         per-field primitive these would call, not the walk itself, in
-         either language), and how the conformance/drift verdict
+         Rust equivalent, Evaluate, aggregate, elementKeys,
+         resolvePath -- F6/F7 closed the per-field/element-identity
+         primitives these would call, not the walk itself, in either
+         language), and how the conformance/drift verdict
          relates to the receipt (C) and to ProofTrace (E's finding) --
          three adjacent, distinct proof artifacts, not one.
 ```
@@ -2260,6 +2266,48 @@ being encoded, not taken from the documentation prose alone.
 a whole document and produces the `ConformanceResult`-equivalent
 verdict F5's two projections describe. That remains F1's open item,
 now scoped to exactly this.
+
+### F7. The collection-topology/element-identity primitive — implemented (Rust); still not the walker
+
+`engine/src/collection.rs` ports `collection.go`'s `Collection`/
+`CollectionTopology`/`ElementKey` — the piece `conformance.go`'s
+not-yet-ported `elementKeys` needs to tell a map- or set-topology
+collection's elements on the intent and observed sides apart. Every
+test vector ported case-for-case from `collection_test.go`'s own
+`TestCollection_ElementKey`. F1's object-level walker gap narrows
+again, is still not closed.
+
+**A deliberate, bounded gap, grounded differently from F6's
+numeric-grammar one — not excused by rarity alone.** Go's `ElementKey`
+formats any key-field or set-element value via `fmt.Sprintf("%v",
+...)`, including `float64` (scientific-notation formatting — a
+different, non-trivial algorithm from section A's own
+`canonical_float`, verified empirically: Go's `%v` prints `1e+20`
+where `canonical_float` prints the full plain-decimal digit run) and
+arbitrary maps/slices. This port refuses both (no identity, not a
+guessed one) — narrower than Go. Rarity alone was already rejected as
+a justification for narrowing a port this session (F6, PR #25); the
+distinction here is **not** rarity but *kind*: F6's numeric comparator
+is general-purpose, with no principled reason to exclude any numeric
+shape, while an identity *key field* is different — `BOUNDARY.md`'s
+own defaultability table already holds, for `structural: key`, that
+*"identity is never guessed."* A schema identifying a collection
+element by a float is already in tension with a principle this
+document independently holds, before this port is even considered.
+Further grounding: `collection.go`'s own comment calls its
+`TopologySet` `ElementKey` *"a placeholder identity until the CIC
+Canonical Object Encoding lands"* — the reference being ported is
+itself explicit that the set case is not a finished contract. Porting
+`%v`'s exact float/map/slice algorithm to match an admittedly
+provisional upstream shape is deferred, not silently absent — named in
+the module's own doc comment and tested (`float_and_non_scalar_key_
+values_have_no_identity`), not merely claimed.
+
+**What this does not do:** implement `elementKeys` (the function that
+actually calls `ElementKey` over both sides of a collection and unions/
+sorts the results) or any part of `resolvePath`/`Evaluate`/`aggregate`.
+Those, plus `ConformancePlan`/`FieldPlan`/`CollectionPlan`, remain F1's
+open item.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

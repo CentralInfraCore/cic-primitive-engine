@@ -911,14 +911,18 @@ fields, never receipt fields; see item 3 below), and F6 (the per-field
 comparator PRIMITIVE — `compare`/`classify_field`/
 `classify_field_value` — implemented in Rust, `engine/src/
 conformance.rs`, ported from `compare.go`/`observation.go` and tested
-against that file's own vectors; see item 4) are settled. **Open:**
-whether the receipt should *additionally* carry a redundant coverage
-projection as an audit convenience (not a custody requirement any more
-— a smaller question than this row used to pose), the object-level
+against that file's own vectors; see item 4), F7 (the collection-
+topology/element-identity PRIMITIVE — `Collection`/
+`CollectionTopology`/`element_key` — implemented in Rust, `engine/src/
+collection.rs`, ported from `collection.go` and tested against that
+file's own vectors; see item 5), and the redundant-coverage-projection
+question (CLOSED, decided no, in `docs/RECEIPT-SCHEMA.md` while
+closing section C in full) are settled. **Open:** the object-level
 comparator/verdict WALKER's actual implementation (`ConformancePlan`'s
-Rust equivalent, `Evaluate`, `aggregate` — F6 closed the per-field
-primitive these would call, not the walk, in either language), and how
-the materialization receipt relates to the separate conformance/drift
+Rust equivalent, `Evaluate`, `aggregate`, `elementKeys`, `resolvePath`
+— F6/F7 closed the per-field and element-identity primitives these
+would call, not the walk, in either language), and how the
+materialization receipt relates to the separate conformance/drift
 verdict artifact.
 **Blocks:** proof-chain completeness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
@@ -1082,6 +1086,37 @@ proof chain
    digit-separating underscores, including the one-underscore-right-
    after-a-prefix exception. Every claim and every rejection verified
    against real Go output in a Docker container before being encoded.
+5. **Closed — the collection-topology/element-identity PRIMITIVE,
+   implemented in Rust (`engine/src/collection.rs`), narrowing F1's gap
+   further rather than closing it.** Ports `collection.go`'s
+   `Collection`/`CollectionTopology`/`ElementKey` — not `elementKeys`
+   (the function that calls `ElementKey` over both the intent and
+   observed sides and unions/sorts the results), `resolvePath`,
+   `Evaluate`, or `aggregate`, all of which remain unimplemented.
+   Every test vector ported case-for-case from `collection_test.go`'s
+   own `TestCollection_ElementKey`.
+
+   **A deliberate, bounded gap, grounded differently from item 4's
+   numeric-grammar one.** Go's `ElementKey` formats any key-field or
+   set-element value via `fmt.Sprintf("%v", ...)`, including `float64`
+   (a different, non-trivial formatting algorithm from section A's own
+   `canonical_float` — verified empirically: Go's `%v` prints `1e+20`
+   where `canonical_float` prints the full plain-decimal digit run)
+   and arbitrary maps/slices. This port refuses both — narrower than
+   Go, same shape as item 4's residual gap, but **not** grounded in
+   rarity, which item 4's review round two already rejected as a
+   justification. The distinction is *kind*, not frequency: the
+   numeric comparator is general-purpose, with no principled reason to
+   exclude any numeric shape; an identity *key field* is different —
+   `BOUNDARY.md`'s own defaultability table already holds, for
+   `structural: key`, that *"identity is never guessed,"* so a schema
+   identifying a collection element by a float is already in tension
+   with a principle this document independently holds. Further
+   grounding: `collection.go`'s own comment calls its `TopologySet`
+   `ElementKey` *"a placeholder identity until the CIC Canonical
+   Object Encoding lands"* — the reference being ported is itself
+   explicit the set case isn't a finished contract. Deferred, named in
+   the module's own doc comment and tested, not silently absent.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
