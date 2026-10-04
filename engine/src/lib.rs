@@ -45,14 +45,18 @@
 //! Early. `error` and `reader` are extracted and working. `canonical`
 //! implements `Stage::Canonicalize`'s byte format (section A of
 //! `docs/MATERIALIZATION-SPEC.md`) as a standalone primitive, over whatever
-//! [`reader::Value`] tree it is handed — it is not yet wired into a pipeline
-//! stage, because `Parse`/`Normalize`/`Resolve`/`Validate`, the stages that
-//! would produce a materialized tree to canonicalize, do not exist yet.
-//! Nothing here is a stable API, and no module should depend on it as one.
+//! [`reader::Value`] tree it is handed. `role` implements one piece of
+//! `Stage::Normalize` — Role short/long form (`cic-primitives`' P0.2) —
+//! also as a standalone primitive. Neither is wired into a pipeline stage
+//! yet, because `Parse`, and the rest of `Normalize`/`Resolve`/`Validate`,
+//! do not exist yet. Nothing here is a stable API, and no module should
+//! depend on it as one.
 
 pub mod canonical;
 pub mod error;
 pub mod reader;
+pub mod role;
 
 pub use canonical::{digest, to_canonical_json};
 pub use error::{code, Error, Result, Stage};
+pub use role::{expand_role, Role};

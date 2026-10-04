@@ -90,6 +90,14 @@ pub mod code {
     /// `.nan`/`.inf`/`-.inf` core-schema tags, verified empirically, not
     /// hypothetical.
     pub const NON_FINITE_NUMBER: &str = "E_NON_FINITE_NUMBER";
+
+    /// A `role` member is not a legal short-form string, not a mapping, and
+    /// not absent — or is the string `"reference"`, which has no short form
+    /// at all (a reference's authority cannot be derived). Raised at
+    /// `Stage::Normalize`. Rule `R-SHORT`, kept identical to
+    /// `cic-primitives`' own `check_grammar.py` rule name for this, so the
+    /// two can be cross-checked directly.
+    pub const INVALID_ROLE: &str = "E_INVALID_ROLE";
 }
 
 /// The single error type this crate raises.
