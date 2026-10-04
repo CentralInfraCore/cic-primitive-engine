@@ -9,7 +9,6 @@
 //! rather than inventing a fresh one.
 
 use crate::canonical::{digest, to_canonical_json};
-use crate::conformance::Coverage;
 use crate::error::Result;
 use crate::plan::{CollectionPlan, ConformancePlan, ConsumedField, FieldPlan};
 use crate::reader::{Map, Value};
@@ -91,21 +90,22 @@ pub fn conformance_plan_digest(plan: &ConformancePlan) -> Result<String> {
 /// ```
 ///
 /// `value` present **iff** `coverage == "observed"` (F5's own rule,
-/// grounded in `classify_field_value`'s logic, not re-decided here).
-/// `fields` sorted by `path`, byte-wise — `consumed` is already a
-/// `BTreeMap<String, _>`, so its own iteration order already *is* that
-/// sort; this function does not re-sort what's already sorted.
+/// grounded in `classify_field_value`'s logic, not re-decided here) --
+/// enforced by `ConsumedField`'s own type (review-caught on PR #29: an
+/// earlier version read a `coverage`/`value: Option<Value>` pair and
+/// trusted the caller to keep them consistent, which nothing actually
+/// checked). `fields` sorted by `path`, byte-wise — `consumed` is
+/// already a `BTreeMap<String, _>`, so its own iteration order already
+/// *is* that sort; this function does not re-sort what's already sorted.
 #[must_use]
 pub fn observation_digest_projection(consumed: &BTreeMap<String, ConsumedField>) -> Value {
     let mut fields = Vec::with_capacity(consumed.len());
     for (path, cf) in consumed {
         let mut m = Map::default();
         m.push("path", Value::Str(path.clone()));
-        m.push("coverage", Value::Str(cf.coverage.as_str().to_string()));
-        if cf.coverage == Coverage::Observed {
-            if let Some(v) = &cf.value {
-                m.push("value", v.clone());
-            }
+        m.push("coverage", Value::Str(cf.coverage().as_str().to_string()));
+        if let Some(v) = cf.value() {
+            m.push("value", v.clone());
         }
         fields.push(Value::Map(m));
     }
@@ -243,37 +243,21 @@ mod tests {
 
     // value is present iff coverage == observed -- F5's own rule, checked
     // against all four B3 coverage values, not just the observed case.
+    // Review-caught on PR #29: ConsumedField is now an enum specifically
+    // so that an Observed-without-a-value (or non-Observed-with-a-value)
+    // state can't even be constructed to test against -- there is no
+    // longer a way to write the invalid case this test used to also
+    // have to rule out.
     #[test]
     fn observation_projection_only_carries_a_value_when_observed() {
         let mut consumed = BTreeMap::new();
         consumed.insert(
             "/observed".to_string(),
-            ConsumedField {
-                coverage: Coverage::Observed,
-                value: Some(Value::Str("v".into())),
-            },
+            ConsumedField::Observed(Value::Str("v".into())),
         );
-        consumed.insert(
-            "/absent".to_string(),
-            ConsumedField {
-                coverage: Coverage::Absent,
-                value: None,
-            },
-        );
-        consumed.insert(
-            "/unobserved".to_string(),
-            ConsumedField {
-                coverage: Coverage::Unobserved,
-                value: None,
-            },
-        );
-        consumed.insert(
-            "/unknown".to_string(),
-            ConsumedField {
-                coverage: Coverage::Unknown,
-                value: None,
-            },
-        );
+        consumed.insert("/absent".to_string(), ConsumedField::Absent);
+        consumed.insert("/unobserved".to_string(), ConsumedField::Unobserved);
+        consumed.insert("/unknown".to_string(), ConsumedField::Unknown);
 
         let got = observation_digest_projection(&consumed);
         let want = map(&[(
@@ -307,7 +291,7 @@ mod tests {
     // the exact gap F5 widened Relay's envelope-only digest to close.
     #[test]
     fn observation_digest_distinguishes_different_observed_values() {
-        use crate::conformance::Observation;
+        use crate::conformance::{Coverage, Observation};
 
         let plan = ConformancePlan {
             scalars: vec![FieldPlan {

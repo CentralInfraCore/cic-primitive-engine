@@ -2447,6 +2447,26 @@ known, rather than re-deriving it with a second walk of the plan/
 observed tree afterward, avoids a second code path that could silently
 drift from what `evaluate` actually did.
 
+**Review-caught, fixed before merge (PR #29): the pairing rule was
+enforced by convention, not by the type, and an invalid pairing
+digested without complaint.** The first version held `consumed` as
+`{coverage: Coverage, value: Option<Value>}` — two independently
+settable fields, so `Observed` paired with `None` (or any other
+coverage paired with `Some`) was perfectly constructible, and
+`observation_digest_projection` accepted it silently, happily
+producing a valid-looking SHA-256 digest of an F5-invalid preimage.
+Today's one caller (`evaluate`) always constructs the pairing
+correctly, but for a library whose entire purpose is proving a
+contract, a state the contract forbids that still type-checks and
+digests without complaint is itself a defect, independent of whether
+the current caller happens to avoid it. Fixed by making the forbidden
+pairing unrepresentable: `ConsumedField` is now an enum
+(`Observed(Value) | Absent | Unobserved | Unknown`), with `coverage()`/
+`value()` accessors — the same "invalid state, not just undesired
+state, should not type-check" discipline this document already applies
+elsewhere (B3's `Option<Value>` reasoning, `Value::BigInt`'s own
+invariant).
+
 **Tested against the exact gap F5 named, not just the shape.** Beyond
 pinning `PlanDigestProjection`'s field names/ordering down as a
 concrete test (not only trusting the doc prose — the same discipline

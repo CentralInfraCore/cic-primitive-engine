@@ -1200,6 +1200,21 @@ proof chain
    F5 already decided the preimage shape and ordering; nothing new is
    decided here.
 
+   **Review-caught, fixed before merge: the coverage/value pairing was
+   enforced by convention, not by the type.** The first version held
+   `consumed` as `{coverage, value: Option<Value>}` — two independent
+   fields, so `Observed` paired with `None` (or any other coverage
+   paired with `Some`) was constructible and digested without
+   complaint, an F5-invalid preimage producing a perfectly valid-
+   looking SHA-256 hash. `evaluate` always constructs the pairing
+   correctly today, but a state the contract forbids that still
+   type-checks is a defect in a library whose job is proving a
+   contract, independent of today's one caller. Fixed: `ConsumedField`
+   is now an enum (`Observed(Value) | Absent | Unobserved | Unknown`),
+   making the forbidden pairing unrepresentable — the same discipline
+   this document already applies elsewhere (B3's `Option<Value>`,
+   `Value::BigInt`'s invariant).
+
    **Tested against the exact gap F5 named, not just the shape.**
    Beyond pinning the projection's field names/ordering down as a
    concrete test (the same discipline review forced once this session

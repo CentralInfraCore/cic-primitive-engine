@@ -30,16 +30,59 @@ use crate::conformance::{classify_field_value, CompareType, Coverage, FieldVerdi
 use crate::reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// One path's contribution to F5's `ObservationDigestProjection` — the
-/// coverage the comparator used, and, only when that coverage is
-/// `Observed`, the observed value it actually consumed (grounded the same
-/// way F5 itself is: `observation.go`'s `ClassifyFieldValue` never reads
-/// a value for any other coverage state, so there is nothing a non-
-/// `Observed` entry could truthfully carry).
-#[derive(Debug, Clone)]
-pub struct ConsumedField {
-    pub coverage: Coverage,
-    pub value: Option<Value>,
+/// One path's contribution to F5's `ObservationDigestProjection` —
+/// `Coverage` paired with a value **exactly** when that pairing is
+/// legitimate (grounded the same way F5 itself is: `observation.go`'s
+/// `ClassifyFieldValue` never reads a value for any coverage state but
+/// `Observed`, so there is nothing a non-`Observed` entry could
+/// truthfully carry).
+///
+/// **Correction (review-caught on PR #29): an earlier version used
+/// `{ coverage: Coverage, value: Option<Value> }`, which let
+/// `Observed` pair with `None` (or any other coverage pair with
+/// `Some`) — a state F5 forbids, constructible anyway, and silently
+/// accepted by the projection builder rather than rejected.** For a
+/// library whose entire job is proving a contract, an invalid state
+/// that type-checks and digests without complaint is itself a defect,
+/// independent of whether today's one caller (`evaluate`) happens to
+/// always construct it correctly. Fixed by making the forbidden
+/// pairing unrepresentable: an enum, not a struct of two independent
+/// fields.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConsumedField {
+    Observed(Value),
+    Absent,
+    Unobserved,
+    Unknown,
+}
+
+impl ConsumedField {
+    #[must_use]
+    pub fn coverage(&self) -> Coverage {
+        match self {
+            ConsumedField::Observed(_) => Coverage::Observed,
+            ConsumedField::Absent => Coverage::Absent,
+            ConsumedField::Unobserved => Coverage::Unobserved,
+            ConsumedField::Unknown => Coverage::Unknown,
+        }
+    }
+
+    #[must_use]
+    pub fn value(&self) -> Option<&Value> {
+        match self {
+            ConsumedField::Observed(v) => Some(v),
+            ConsumedField::Absent | ConsumedField::Unobserved | ConsumedField::Unknown => None,
+        }
+    }
+
+    fn from_coverage(coverage: Coverage, observed_value: &Value) -> Self {
+        match coverage {
+            Coverage::Observed => ConsumedField::Observed(observed_value.clone()),
+            Coverage::Absent => ConsumedField::Absent,
+            Coverage::Unobserved => ConsumedField::Unobserved,
+            Coverage::Unknown => ConsumedField::Unknown,
+        }
+    }
 }
 
 /// Ported from `conformance.go`'s `FieldPlan`: one comparable field path
@@ -182,14 +225,12 @@ fn classify_at(
     fields.insert(path.to_string(), verdict);
     consumed.insert(
         path.to_string(),
-        ConsumedField {
-            coverage,
-            // F5's own rule, not invented here: a value is part of what
-            // the comparator consumed iff coverage is Observed -- every
-            // other state never reaches compare() at all (see
-            // classify_field_value, F6).
-            value: (coverage == Coverage::Observed).then(|| ov.unwrap_or(&Value::Null).clone()),
-        },
+        // F5's own rule, not invented here: a value is part of what the
+        // comparator consumed iff coverage is Observed -- every other
+        // state never reaches compare() at all (see classify_field_value,
+        // F6) -- enforced by construction, not by convention, via
+        // ConsumedField::from_coverage.
+        ConsumedField::from_coverage(coverage, ov.unwrap_or(&Value::Null)),
     );
 }
 
