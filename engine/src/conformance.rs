@@ -65,6 +65,38 @@ impl Coverage {
     }
 }
 
+/// Per-path coverage lookup for the not-yet-built object-level walker
+/// (`plan.rs`'s `evaluate`) — **not** a port of `observation.go`'s
+/// `Observation{Observed, AuthoritativeAbsent}` two-list envelope. There is
+/// no Go struct to adapt: B3's four-value [`Coverage`] enum is the model
+/// this engine already committed to (see this module's own doc comment),
+/// so the lookup is keyed on it directly rather than reconstructed from two
+/// path lists. A path with no explicit entry defaults to
+/// `Coverage::Unobserved`, mirroring `Observation.Coverage`'s own default
+/// case (`observation.go`: *"a path in neither set is unobserved"*).
+#[derive(Debug, Clone, Default)]
+pub struct Observation(std::collections::HashMap<String, Coverage>);
+
+impl Observation {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Records `path`'s coverage. A second call for the same path replaces
+    /// the first -- this type makes no claim about which call "should win"
+    /// for a path recorded twice; that is the caller's own invariant to
+    /// hold, same as it would be in Go.
+    pub fn set(&mut self, path: impl Into<String>, coverage: Coverage) {
+        self.0.insert(path.into(), coverage);
+    }
+
+    #[must_use]
+    pub fn coverage(&self, path: &str) -> Coverage {
+        self.0.get(path).copied().unwrap_or(Coverage::Unobserved)
+    }
+}
+
 /// `compare.go`'s `CompareType` — the field's `behavior.compare` annotation.
 /// Go's empty/unknown string defaults to `CompareExact` at the point a
 /// schema's annotation is parsed into this type; that parsing doesn't exist
