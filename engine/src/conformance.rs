@@ -23,6 +23,15 @@
 //! uses the four-value enum directly; there is no `Observation` struct here
 //! to adapt, because the object-level walker that would hold one is not
 //! built yet.
+//!
+//! # Named gap: `SetString`'s binary/octal/hex forms are not ported
+//!
+//! The numeric comparator's string grammar (see [`rat_from_string`]) covers
+//! `big.Rat.SetString`'s decimal and `"a/b"` fraction forms — not its
+//! `0b`/`0o`/`0x`-prefixed integer forms or hex-float `"p"` exponents.
+//! Reachable only from a plain authored string, never from a `json.Number`
+//! (Go's JSON decoder never produces one in a non-decimal form) — a real
+//! but low-probability residual gap, named rather than silently absent.
 
 use crate::canonical::{canonical_float, canonical_integer, to_canonical_json};
 use crate::reader::Value;
@@ -182,17 +191,94 @@ fn as_rational(v: &Value) -> Option<BigRational> {
         Value::Int(i) => Some(BigRational::from_integer(BigInt::from(*i))),
         Value::BigInt(s) => BigInt::from_str(s).ok().map(BigRational::from_integer),
         Value::Float(f) => BigRational::from_f64(*f),
-        Value::Str(s) => decimal_string_to_rational(s),
+        Value::Str(s) => rat_from_string(s),
         Value::Null | Value::Bool(_) | Value::Seq(_) | Value::Map(_) => None,
     }
 }
 
-/// Exact decimal-string → rational, mirroring `big.Rat.SetString`'s decimal
-/// grammar (`[sign] digits ['.' digits] [('e'|'E') [sign] digits]`) —
-/// **deliberately not** going through `f64`, which would silently reproduce
-/// `canonicalNumericString`'s float-rounding path (a *different* Go
-/// function, for a different purpose: section A's canonical-form
-/// normalization, not numeric-comparator equality).
+/// Ported from `compare.go`'s `ratFromString`, which is a thin wrapper over
+/// `big.Rat.SetString` with no narrowing of its own — so this function's
+/// grammar must match `SetString`'s, not a plausible-looking subset of it.
+///
+/// **Correction (review-caught on PR #25): an earlier version of this
+/// function implemented only the decimal/scientific form and claimed, too
+/// broadly, to mirror "`big.Rat.SetString`'s decimal grammar" — but
+/// `SetString` also accepts a signed fraction `"a/b"` (Go's own
+/// documentation: *"s can be given as a (possibly signed) fraction `a/b`,
+/// or as a floating-point number..."*), verified empirically (`"1/2"` →
+/// `1/2`, `"-1/2"` → `-1/2`, `"10/5"` → `2` auto-reduced, `"1/0"` → fails,
+/// `"3/-4"` → fails because *"the divisor may not be signed"*). Missing
+/// this meant `compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with Go
+/// — `comparable=false` here, `comparable=true, matched=true` there —
+/// exactly the kind of divergence section G's differential conformance
+/// exists to catch, caught here by review instead. Fixed by trying the
+/// fraction form first (decimal grammar has no `/`, so the two forms never
+/// overlap, mirroring `SetString`'s own either/or structure).
+///
+/// **Named, remaining, honestly-scoped gap, not silently claimed closed:**
+/// `SetString`'s *full* grammar also lets either side of a fraction, or a
+/// float's mantissa, use a `"0b"`/`"0o"`/`"0x"` prefix for a binary/octal/
+/// hexadecimal integer, with a base-2 `"p"` exponent for hex floats
+/// (verified: `"0x1p0"` → `1`; `"1_000"`'s digit-separator underscore also
+/// works in Go). None of that is implemented here. Reachable only from a
+/// plain authored YAML string being compared under `numeric` — never from
+/// a `json.Number`, which Go's own JSON decoder can never produce in a
+/// non-decimal form — so this is a real but low-probability residual gap,
+/// not a hypothetical one. Closing it fully is deferred, named here rather
+/// than discovered again later.
+fn rat_from_string(s: &str) -> Option<BigRational> {
+    if let Some(r) = fraction_from_string(s) {
+        return Some(r);
+    }
+    decimal_string_to_rational(s)
+}
+
+/// The `"a/b"` half of `SetString`'s grammar — decimal integers only (see
+/// this function's caller for the named 0b/0o/0x gap). The divisor may not
+/// be signed and may not be zero; the dividend may be, matching
+/// `SetString`'s own verified behaviour (`"0/5"` and `"-0/5"` both -> `0`).
+fn fraction_from_string(s: &str) -> Option<BigRational> {
+    let mut parts = s.split('/');
+    let num_part = parts.next()?;
+    let den_part = parts.next()?;
+    if parts.next().is_some() {
+        return None; // more than one '/' -- not a fraction SetString accepts
+    }
+    let numerator = parse_signed_decimal_integer(num_part)?;
+    let denominator = parse_unsigned_decimal_integer(den_part)?;
+    if denominator == BigInt::from(0) {
+        return None; // SetString fails on a zero divisor ("1/0")
+    }
+    Some(BigRational::new(numerator, denominator))
+}
+
+fn parse_signed_decimal_integer(s: &str) -> Option<BigInt> {
+    let (neg, digits) = match s.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, s.strip_prefix('+').unwrap_or(s)),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let v = BigInt::from_str(digits).ok()?;
+    Some(if neg { -v } else { v })
+}
+
+fn parse_unsigned_decimal_integer(s: &str) -> Option<BigInt> {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    BigInt::from_str(s).ok()
+}
+
+/// Exact decimal-string → rational, the floating-point half of
+/// `SetString`'s grammar restricted to a decimal mantissa (`[sign] digits
+/// ['.' digits] [('e'|'E') [sign] digits]`) — the `0b`/`0o`/`0x`-mantissa
+/// and `"p"`-exponent forms are the same named gap [`rat_from_string`]'s
+/// doc comment covers. **Deliberately not** going through `f64`, which
+/// would silently reproduce `canonicalNumericString`'s float-rounding path
+/// (a *different* Go function, for a different purpose: section A's
+/// canonical-form normalization, not numeric-comparator equality).
 ///
 /// Verified empirically against real Go `big.Rat.SetString` output for
 /// every case this function's tests exercise, including the one that
@@ -537,6 +623,49 @@ mod tests {
                 "{bad:?} must not parse"
             );
         }
+    }
+
+    // Review-caught gap on PR #25: the fraction half of SetString's grammar
+    // ("a/b") was missing entirely. Every vector here was generated by
+    // running real Go math/big.Rat.SetString in a Docker container in this
+    // session, not transcribed from memory.
+    #[test]
+    fn fraction_form_matches_go_big_rat() {
+        let good: &[(&str, i64, i64)] = &[
+            ("1/2", 1, 2),
+            ("-1/2", -1, 2),
+            ("+1/2", 1, 2),
+            ("10/5", 2, 1), // auto-reduced, matching Go
+            ("0/5", 0, 1),
+            ("-0/5", 0, 1),
+        ];
+        for (s, num, den) in good {
+            let r = rat_from_string(s).unwrap_or_else(|| panic!("{s} should parse"));
+            assert_eq!(*r.numer(), BigInt::from(*num), "{s}: numerator");
+            assert_eq!(*r.denom(), BigInt::from(*den), "{s}: denominator");
+        }
+        // "the divisor may not be signed" (Go's own SetString doc) -- and a
+        // zero divisor, a decimal numerator/denominator, and a
+        // doubled separator all fail in Go too.
+        for bad in ["1/0", "3/-4", "1.5/2", "1/2.5", "1//2"] {
+            assert!(rat_from_string(bad).is_none(), "{bad:?} must not parse");
+        }
+    }
+
+    // The exact scenario the review named: under the review's own claim,
+    // Go's Compare("1/2", "0.5", CompareNumeric) is comparable AND matched.
+    // This pins that down as a real test, not just a doc assertion.
+    #[test]
+    fn numeric_comparator_treats_fraction_string_as_its_value() {
+        let (matched, comparable) = compare(
+            &Value::Str("1/2".into()),
+            &Value::Str("0.5".into()),
+            CompareType::Numeric,
+        );
+        assert!(
+            comparable && matched,
+            "\"1/2\" must numeric-compare equal to \"0.5\", matching Go"
+        );
     }
 
     // Mirrors TestClassifyFieldValue in compare_test.go, case for case --

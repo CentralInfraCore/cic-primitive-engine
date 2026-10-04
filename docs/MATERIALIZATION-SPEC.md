@@ -2186,6 +2186,34 @@ own vectors, which only use values exactly representable in binary
 comparator diverge *from* the Go reference section G's differential
 conformance exists to compare against.
 
+**Review-caught gap (PR #25), fixed before merge: the numeric string
+grammar was missing `big.Rat.SetString`'s fraction form entirely.**
+`compare.go`'s `ratFromString` is a thin wrapper over `SetString` with
+no narrowing of its own, so the grammar this engine ports must match
+`SetString`'s, not a plausible-looking decimal/scientific subset of
+it. Go's own documentation: *"s can be given as a (possibly signed)
+fraction `a/b`, or as a floating-point number..."* — verified
+empirically (`"1/2"` → `1/2`, `"10/5"` → `2`, `"1/0"` fails, `"3/-4"`
+fails because *"the divisor may not be signed"*). Missing this meant
+`compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with Go —
+`comparable=false` here, `comparable=true, matched=true` there —
+exactly the divergence section G's differential conformance exists to
+catch, caught by review instead of by G's own harness (which cannot
+run yet; F1's object-level walker still doesn't exist). Fixed by
+trying the fraction form first (its grammar has no overlap with the
+decimal form, mirroring `SetString`'s own either/or structure).
+
+**Named, remaining, honestly-scoped gap, not silently claimed closed:**
+`SetString`'s *full* grammar also allows a `"0b"`/`"0o"`/`"0x"` prefix
+for a binary/octal/hexadecimal integer on either side of a fraction or
+as a float's mantissa, with a base-2 `"p"` exponent for hex floats
+(verified: `"0x1p0"` → `1`; Go's digit-separator underscore,
+`"1_000"`, also works). None of that is implemented. Reachable only
+from a plain authored YAML string compared under `numeric` — never
+from a `json.Number`, which Go's own JSON decoder can never produce in
+a non-decimal form — so this is real but low-probability, not
+hypothetical. Deferred, named here rather than discovered again later.
+
 **What this does not do:** implement `ConformancePlan`, `Evaluate`, or
 `aggregate` — the object-level walk that drives these primitives over
 a whole document and produces the `ConformanceResult`-equivalent

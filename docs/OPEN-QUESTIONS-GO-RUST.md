@@ -1045,6 +1045,25 @@ proof chain
    Not fixed here — fixing it would diverge *from* the Go reference
    section G exists to differentially compare against.
 
+   **Review-caught gap (PR #25), fixed before merge: the numeric
+   string grammar was missing `SetString`'s fraction form ("a/b")
+   entirely.** `compare.go`'s `ratFromString` wraps `SetString` with no
+   narrowing of its own, so this port's grammar had to match it, not a
+   plausible-looking decimal/scientific subset. Missing the fraction
+   form meant `compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with
+   Go (`comparable=false` here vs. `comparable=true, matched=true`
+   there) — exactly the divergence G exists to catch, caught by review
+   instead, since G's own harness can't run yet (F1's object-level
+   walker doesn't exist). Fixed by trying the fraction form first (no
+   grammar overlap with the decimal form).
+
+   **Named, remaining gap, not silently closed:** `SetString` also
+   accepts `0b`/`0o`/`0x`-prefixed integers (on either side of a
+   fraction, or as a float mantissa) and a `"p"` hex-float exponent —
+   none of that is ported. Reachable only from a plain authored string
+   under `numeric`, never from a `json.Number` — real but
+   low-probability, named rather than rediscovered later.
+
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
 chain-of-custody (which steps ran, with which I/O hashes), (2) the
