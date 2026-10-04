@@ -1778,15 +1778,22 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          engine/src/conformance.rs, ported from compare.go/
          observation.go and tested against that file's own vectors;
          the object-level ConformancePlan/Evaluate/aggregate walker
-         is NOT part of this -- see Open below), and the redundant-
+         is NOT part of this -- see Open below), F7 (the collection-
+         topology/element-identity PRIMITIVE -- Collection/
+         CollectionTopology/element_key, full fmt.Sprintf("%v", ...)
+         parity including Float/Seq/Map -- implemented in Rust,
+         engine/src/collection.rs, ported from collection.go and tested
+         against that file's own vectors; still not elementKeys/
+         resolvePath/the walker itself), and the redundant-
          coverage-projection question (CLOSED, decided no, in
          docs/RECEIPT-SCHEMA.md while closing section C in full --
          output_digest/B7 already satisfies the custody need, and no
          concrete audit-convenience need was ever established).
 Open:    the object-level comparator/verdict WALKER (ConformancePlan's
-         Rust equivalent, Evaluate, aggregate -- F6 closed the
-         per-field primitive these would call, not the walk itself, in
-         either language), and how the conformance/drift verdict
+         Rust equivalent, Evaluate, aggregate, elementKeys,
+         resolvePath -- F6/F7 closed the per-field/element-identity
+         primitives these would call, not the walk itself, in either
+         language), and how the conformance/drift verdict
          relates to the receipt (C) and to ProofTrace (E's finding) --
          three adjacent, distinct proof artifacts, not one.
 ```
@@ -2260,6 +2267,60 @@ being encoded, not taken from the documentation prose alone.
 a whole document and produces the `ConformanceResult`-equivalent
 verdict F5's two projections describe. That remains F1's open item,
 now scoped to exactly this.
+
+### F7. The collection-topology/element-identity primitive — implemented (Rust); still not the walker
+
+`engine/src/collection.rs` ports `collection.go`'s `Collection`/
+`CollectionTopology`/`ElementKey` — the piece `conformance.go`'s
+not-yet-ported `elementKeys` needs to tell a map- or set-topology
+collection's elements on the intent and observed sides apart. Every
+test vector ported case-for-case from `collection_test.go`'s own
+`TestCollection_ElementKey`. F1's object-level walker gap narrows
+again, is still not closed.
+
+**Review-caught gap (PR #27), fixed before merge: refusing `Float`/
+`Seq`/`Map` values was itself narrower than Go for no principled
+reason.** The first version of this primitive refused to format
+`Float`/`Seq`/`Map` key-field or set-element values at all, reasoning
+that an identity should never be "guessed" (`BOUNDARY.md`'s own
+defaultability table, `structural: key`: *"identity is never
+guessed"*). That reasoning holds for a map-topology *key field* — but
+not for a `TopologySet` element, where the *whole value already is*
+the identity by construction; there is nothing to guess, only
+something to format, exactly as Go's reference does unconditionally.
+Review correctly identified this as the same category of gap already
+rejected once this session for the numeric comparator's string
+grammar (F6, PR #25) — narrower than the reference for no reason
+beyond rarity.
+
+**Fixed: full `%v` parity**, verified empirically in a Docker
+container rather than assumed. `float64`'s `%v` is exactly
+`strconv.FormatFloat(f, 'g', -1, 64)`: plain decimal when the decimal
+exponent of the leading significant digit is `-4..=5`, scientific
+notation otherwise — confirmed by sweeping exponents from -8 to 25
+across multiple significant-digit counts; the threshold held at
+exactly that boundary regardless of digit count, a *different*
+algorithm from section A's own `canonical_float`, which never uses
+scientific notation at all. A slice's `%v` is `"[e1 e2 e3]"`
+(space-separated, each element recursively `%v`-formatted); a map's is
+`"map[k1:v1 k2:v2]"`, keys **sorted** — Go's `fmt` package has sorted
+map keys for deterministic `%v` output since Go 1.12 (verified
+empirically), which happens to be exactly this crate's own A2
+byte-wise key-sort rule, reused, not reinvented. The one remaining
+exception is `NaN`/`±Infinity` (`%v` would print `"NaN"`/`"+Inf"`/
+`"-Inf"`) — out of scope for a materialized value in this engine's own
+pipeline (`Stage::Canonicalize` already rejects non-finite floats),
+kept only as a defensive, documented exception for a `Value` handed to
+this function before that stage runs. `collection.go`'s own comment
+still calls `TopologySet`'s `ElementKey` *"a placeholder identity
+until the CIC Canonical Object Encoding lands"* — a property of the
+reference being ported, unrelated to how faithfully it's ported here.
+
+**What this does not do:** implement `elementKeys` (the function that
+actually calls `ElementKey` over both sides of a collection and unions/
+sorts the results) or any part of `resolvePath`/`Evaluate`/`aggregate`.
+Those, plus `ConformancePlan`/`FieldPlan`/`CollectionPlan`, remain F1's
+open item.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

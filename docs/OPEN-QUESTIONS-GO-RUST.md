@@ -911,14 +911,19 @@ fields, never receipt fields; see item 3 below), and F6 (the per-field
 comparator PRIMITIVE — `compare`/`classify_field`/
 `classify_field_value` — implemented in Rust, `engine/src/
 conformance.rs`, ported from `compare.go`/`observation.go` and tested
-against that file's own vectors; see item 4) are settled. **Open:**
-whether the receipt should *additionally* carry a redundant coverage
-projection as an audit convenience (not a custody requirement any more
-— a smaller question than this row used to pose), the object-level
+against that file's own vectors; see item 4), F7 (the collection-
+topology/element-identity PRIMITIVE — `Collection`/
+`CollectionTopology`/`element_key`, full `fmt.Sprintf("%v", ...)`
+parity including `Float`/`Seq`/`Map` — implemented in Rust,
+`engine/src/collection.rs`, ported from `collection.go` and tested
+against that file's own vectors; see item 5), and the redundant-coverage-projection
+question (CLOSED, decided no, in `docs/RECEIPT-SCHEMA.md` while
+closing section C in full) are settled. **Open:** the object-level
 comparator/verdict WALKER's actual implementation (`ConformancePlan`'s
-Rust equivalent, `Evaluate`, `aggregate` — F6 closed the per-field
-primitive these would call, not the walk, in either language), and how
-the materialization receipt relates to the separate conformance/drift
+Rust equivalent, `Evaluate`, `aggregate`, `elementKeys`, `resolvePath`
+— F6/F7 closed the per-field and element-identity primitives these
+would call, not the walk, in either language), and how the
+materialization receipt relates to the separate conformance/drift
 verdict artifact.
 **Blocks:** proof-chain completeness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
@@ -1082,6 +1087,44 @@ proof chain
    digit-separating underscores, including the one-underscore-right-
    after-a-prefix exception. Every claim and every rejection verified
    against real Go output in a Docker container before being encoded.
+5. **Closed — the collection-topology/element-identity PRIMITIVE,
+   implemented in Rust (`engine/src/collection.rs`), narrowing F1's gap
+   further rather than closing it.** Ports `collection.go`'s
+   `Collection`/`CollectionTopology`/`ElementKey` — not `elementKeys`
+   (the function that calls `ElementKey` over both the intent and
+   observed sides and unions/sorts the results), `resolvePath`,
+   `Evaluate`, or `aggregate`, all of which remain unimplemented.
+   Every test vector ported case-for-case from `collection_test.go`'s
+   own `TestCollection_ElementKey`.
+
+   **Review-caught gap (PR #27), fixed before merge: refusing to format
+   `Float`/`Seq`/`Map` values was narrower than Go for no principled
+   reason.** The first version refused all three, reasoning that an
+   identity should never be "guessed" (`BOUNDARY.md`'s defaultability
+   table, `structural: key`: *"identity is never guessed"*) — sound for
+   a map-topology *key field*, but not for a `TopologySet` element,
+   where the whole value already **is** the identity by construction;
+   there is nothing to guess, only something to format, exactly as Go
+   does unconditionally. Review correctly placed this in the same
+   category as item 4's rejected rarity-based narrowing (PR #25).
+
+   **Fixed: full `%v` parity**, verified empirically in a Docker
+   container. `float64`'s `%v` is `strconv.FormatFloat(f, 'g', -1,
+   64)`: plain decimal for a leading-digit decimal exponent of
+   `-4..=5`, scientific otherwise — the threshold held regardless of
+   significant-digit count, across a sweep from exponent -8 to 25, a
+   different algorithm from section A's own `canonical_float`. A
+   slice's `%v` is `"[e1 e2 e3]"`; a map's is `"map[k1:v1 k2:v2]"`,
+   keys **sorted** — Go's `fmt` has sorted map keys for deterministic
+   `%v` output since Go 1.12 (verified empirically), exactly this
+   crate's own A2 key-sort rule, reused. The one remaining exception is
+   `NaN`/`±Infinity` — out of scope for a materialized `Value` in this
+   engine's own pipeline (`Stage::Canonicalize` already rejects
+   non-finite floats), kept only as a defensive exception.
+   `collection.go`'s own comment still calls `TopologySet`'s
+   `ElementKey` *"a placeholder identity until the CIC Canonical
+   Object Encoding lands"* — a property of the reference, unrelated to
+   how faithfully it's ported here.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
