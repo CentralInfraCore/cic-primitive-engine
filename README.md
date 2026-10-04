@@ -15,16 +15,17 @@ Relay — consume the IR, never the YAML.
 > (`compare`/`classify_field_value`, ported from `CIC-Relay`'s
 > `compare.go`/`observation.go`), `collection` implements its
 > collection-topology/element-identity primitive (`element_key`, ported
-> from `collection.go`), and `plan` drives both over a whole document
+> from `collection.go`), `plan` drives both over a whole document
 > (`evaluate`, ported from `conformance.go`) — closing section F's
-> object-level-walker gap, though it still doesn't produce the
-> `conformance_plan_digest`/`observation_digest` fields F5 decided, since
-> that needs wiring to a `Normalize` stage that doesn't exist yet. None
-> of this is wired into a pipeline stage, because `Parse` and the rest
-> of `Normalize`/`Resolve`/`Validate` don't exist. Access's own
-> short/long form is deliberately not here yet — its instance grammar is
-> still undecided upstream (`cic-primitives#17`). Nothing here is a
-> stable API.
+> object-level-walker gap — and `digest_projection` produces F5's own
+> `conformance_plan_digest`/`observation_digest` from `plan`'s real
+> types. Go's analogous `IntentDigest` has no equivalent yet, since it
+> needs a `Normalize` stage this engine doesn't have. None of this is
+> wired into a pipeline stage, because `Parse` and the rest of
+> `Normalize`/`Resolve`/`Validate` don't exist. Access's own short/long
+> form is deliberately not here yet — its instance grammar is still
+> undecided upstream (`cic-primitives#17`). Nothing here is a stable
+> API.
 
 ---
 

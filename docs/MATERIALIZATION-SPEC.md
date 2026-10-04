@@ -1792,16 +1792,21 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          FieldPlan/CollectionPlan/evaluate/aggregate/elementKeys/
          resolvePath -- implemented in Rust, engine/src/plan.rs, ported
          from conformance.go and tested against all seven of that
-         file's own end-to-end OCI vectors).
-Open:    wiring F5's conformance_plan_digest/observation_digest
-         projections to the ConformancePlan/Observation types F8
-         introduces (F8's own ObjectVerdict deliberately omits both --
-         Go's analogous IntentDigest needs a SpecDigest-equivalent
-         expand+normalize step this engine's Normalize stage doesn't
-         have yet, so "intent digest" doesn't yet mean the same thing
-         here it does in Go), and how the conformance/drift verdict
-         relates to the receipt (C) and to ProofTrace (E's finding) --
-         three adjacent, distinct proof artifacts, not one.
+         file's own end-to-end OCI vectors), and F9 (F5's
+         conformance_plan_digest/observation_digest projections WIRED
+         to the real ConformancePlan/consumed-observation types F8
+         introduces -- engine/src/digest_projection.rs -- and verified
+         against the exact property F5 widened Relay's envelope-only
+         digest to guarantee: identical coverage, different observed
+         value, different observation_digest).
+Open:    Go's analogous IntentDigest still has no equivalent here --
+         it needs a SpecDigest-style expand+normalize step this
+         engine's Normalize stage doesn't have yet, so "intent digest"
+         doesn't yet mean the same thing here it does in Go, and F9
+         deliberately doesn't invent one -- and how the conformance/
+         drift verdict relates to the receipt (C) and to ProofTrace
+         (E's finding) -- three adjacent, distinct proof artifacts,
+         not one.
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -2414,10 +2419,48 @@ also omits: `SpecDigest` runs `ExpandSpec`/`normalizeNumbers` first,
 and this engine's `Normalize` stage doesn't exist yet, so "intent
 digest" doesn't yet mean the same thing here it does in Go). Wiring
 F5's two projections to the `ConformancePlan`/`Observation` types this
-file introduces is a separate, not-yet-done step. Nor does this decide
-how the conformance/drift verdict this produces relates procedurally
-to the materialization receipt (C) or to ProofTrace (E) — three
-distinct proof artifacts (F3), still not wired together.
+file introduces is a separate, not-yet-done step — see F9, immediately
+below. Nor does this decide how the conformance/drift verdict this
+produces relates procedurally to the materialization receipt (C) or to
+ProofTrace (E) — three distinct proof artifacts (F3), still not wired
+together.
+
+### F9. F5's two digests, wired to the real plan/observation types — implemented (Rust)
+
+`engine/src/digest_projection.rs` builds F5's `PlanDigestProjection`/
+`ObservationDigestProjection` `Value` trees from `plan.rs`'s own
+`ConformancePlan` and a new `ObjectVerdict::consumed` field, then
+digests each via section A's own `digest`/`to_canonical_json` — closing
+the gap F8's own doc comment named as a separate, not-yet-done step.
+F5 decided the preimage shape and ordering already; this module decides
+nothing new, it only builds that shape from this engine's existing
+types rather than a fresh one.
+
+**`ObjectVerdict::consumed` is a new field on an already-merged type
+(F8), added here because it's the only point that actually knows what
+F5's observation projection needs.** `evaluate` already resolves each
+planned path's observed value to decide a verdict; `consumed` records,
+per path, the `Coverage` used and — exactly when that coverage is
+`Observed`, per F5's own rule, grounded in `classify_field_value`'s
+logic — the observed value consumed. Capturing it where it is already
+known, rather than re-deriving it with a second walk of the plan/
+observed tree afterward, avoids a second code path that could silently
+drift from what `evaluate` actually did.
+
+**Tested against the exact gap F5 named, not just the shape.** Beyond
+pinning `PlanDigestProjection`'s field names/ordering down as a
+concrete test (not only trusting the doc prose — the same discipline
+review already forced once this session, PR #23), one test runs
+`evaluate` twice with identical coverage but a genuinely different
+observed value, and confirms `observation_digest` differs between the
+two runs — the precise property F5 widened Relay's envelope-only
+`observationDigest()` to guarantee, verified here as an executable
+fact, not only asserted in prose.
+
+**What this does not do:** decide the conformance-verdict artifact's
+own wire layout (still open, same as F5 left it), or wire either
+digest into an actual receipt or verdict record — there is no such
+record type yet, only the two digest values themselves.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
