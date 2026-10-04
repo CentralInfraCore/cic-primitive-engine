@@ -19,9 +19,12 @@ Relay — consume the IR, never the YAML.
 > (`evaluate`, ported from `conformance.go`) — closing section F's
 > object-level-walker gap — and `digest_projection` produces F5's own
 > `conformance_plan_digest`/`observation_digest` from `plan`'s real
-> types. Go's analogous `IntentDigest` has no equivalent yet, since it
-> needs a `Normalize` stage this engine doesn't have. None of this is
-> wired into a pipeline stage, because `Parse` and the rest of
+> types. The conformance/drift verdict artifact's own schema text lives
+> in `docs/VERDICT-SCHEMA.md`, not in this crate's own types directly.
+> Go's analogous `IntentDigest` has no equivalent yet, since it needs a
+> `Normalize` stage this engine doesn't have; no Go peer exists for
+> `conformance`/`collection`/`plan`/`digest_projection` at all. None of
+> this is wired into a pipeline stage, because `Parse` and the rest of
 > `Normalize`/`Resolve`/`Validate` don't exist. Access's own short/long
 > form is deliberately not here yet — its instance grammar is still
 > undecided upstream (`cic-primitives#17`). Nothing here is a stable

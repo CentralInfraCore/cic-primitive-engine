@@ -132,6 +132,22 @@ pub enum FieldVerdict {
     NotComparable,
 }
 
+impl FieldVerdict {
+    /// `observation.go`'s own five `FieldVerdict` string constants,
+    /// verbatim — the exact literal `docs/VERDICT-SCHEMA.md`'s `fields`
+    /// map commits to per path.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FieldVerdict::Conformant => "CONFORMANT",
+            FieldVerdict::Drift => "DRIFT",
+            FieldVerdict::ObservedAbsent => "OBSERVED_ABSENT",
+            FieldVerdict::Unobserved => "UNOBSERVED",
+            FieldVerdict::NotComparable => "NOT_COMPARABLE",
+        }
+    }
+}
+
 /// Ported from `compare.go`'s `Compare`: whether `observed` conforms to
 /// `intent` under `ct`. Returns `(matched, comparable)` — `matched` is
 /// meaningful only when `comparable` is `true`; the caller surfaces an
@@ -947,5 +963,16 @@ mod tests {
         assert_eq!(Coverage::Unknown.as_str(), "unknown");
         assert_eq!(CompareType::Exact.as_str(), "exact");
         assert_eq!(CompareType::Numeric.as_str(), "numeric");
+    }
+
+    // Verified directly against observation.go's own five FieldVerdict
+    // string constants -- the literal docs/VERDICT-SCHEMA.md commits to.
+    #[test]
+    fn field_verdict_strings_match_go_exactly() {
+        assert_eq!(FieldVerdict::Conformant.as_str(), "CONFORMANT");
+        assert_eq!(FieldVerdict::Drift.as_str(), "DRIFT");
+        assert_eq!(FieldVerdict::ObservedAbsent.as_str(), "OBSERVED_ABSENT");
+        assert_eq!(FieldVerdict::Unobserved.as_str(), "UNOBSERVED");
+        assert_eq!(FieldVerdict::NotComparable.as_str(), "NOT_COMPARABLE");
     }
 }

@@ -148,12 +148,12 @@ output `output_digest` commits to. **The smaller "additionally carry a
 redundant coverage projection" question B7's closure left is also now
 closed — decided no**, in `docs/RECEIPT-SCHEMA.md` while closing
 section C in full (no concrete audit-convenience need was ever
-established). Open: the comparator's object-level walk has no
-implementation in the new lib yet, in either language (the per-field
-primitive it would call does, per F6); and how the materialization
-receipt relates to the separate conformance/drift verdict (a third,
-distinct proof artifact alongside ProofTrace and the receipt) isn't
-decided.
+established). **Since settled: the comparator's object-level walk is
+now implemented in Rust (F8), and how the materialization receipt
+relates to the separate conformance/drift verdict (a third, distinct
+proof artifact alongside ProofTrace and the receipt) is now decided —
+independent (F10, `docs/VERDICT-SCHEMA.md`).** No Go peer exists for
+any of F6–F10 yet.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -925,12 +925,16 @@ Rust, `engine/src/plan.rs`, ported from `conformance.go` and tested
 against all seven of that file's own end-to-end OCI vectors; see item
 6), and F9 (F5's `conformance_plan_digest`/`observation_digest`
 projections WIRED to the real `ConformancePlan`/consumed-observation
-types F8 introduces — `engine/src/digest_projection.rs`, see item 7)
-are settled. **Open:** Go's analogous `IntentDigest` still has no
-equivalent here (it needs a `SpecDigest`-style expand+normalize step
-this engine's `Normalize` stage doesn't have yet, so F9 deliberately
-doesn't invent one), and how the materialization receipt relates to
-the separate conformance/drift verdict artifact.
+types F8 introduces — `engine/src/digest_projection.rs`, see item 7),
+and F10 (the conformance-verdict artifact's own wire layout —
+`docs/VERDICT-SCHEMA.md` — AND the procedural relationship between
+the verdict, the receipt, and ProofTrace, decided independent; see
+item 8) are settled. **Open:** Go's analogous `IntentDigest` still has
+no equivalent here (it needs a `SpecDigest`-style expand+normalize
+step this engine's `Normalize` stage doesn't have yet, so neither F9
+nor F10 invents one), and whether the verdict artifact is itself ever
+signed (`VERDICT-SCHEMA.md`'s own explicit non-decision, not inherited
+from the receipt's closed "no signature field").
 **Blocks:** proof-chain completeness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
 
@@ -1229,6 +1233,34 @@ proof chain
    artifact's own wire layout, or wire either digest into an actual
    receipt or verdict record — no such record type exists yet, only
    the two digest values themselves.
+8. **Closed — the conformance-verdict artifact's own schema text
+   (`docs/VERDICT-SCHEMA.md`), AND the procedural relationship between
+   the verdict, the receipt, and ProofTrace.** Four fields, none
+   invented: `verdict_schema_version` (the same Versioned-property
+   extension `receipt_schema_version` already used),
+   `object`/`fields` (F8's `ObjectConformance`/`FieldVerdict`, string
+   constants verbatim from `conformance.go`/`observation.go`), and
+   `conformance_plan_digest`/`observation_digest` (items 3/7). `fields`
+   needed no projection-level ordering rule, unlike `RECEIPT-
+   SCHEMA.md`'s evidence arrays — it's a genuine `Map`, not a list, and
+   section A's own A2 already sorts every `Map`'s keys byte-wise.
+
+   **Closes item 2's "how the receipt relates to the verdict"
+   question: independent.** Not a new design choice so much as a fact
+   already true of the implementation, named rather than left
+   implicit — `evaluate` (F8) takes no receipt-typed input and calls
+   nothing that produces one; C2's "every materialization call
+   produces a receipt" has no dependency on a verdict either. A
+   receipt proves where a value came from; a verdict proves whether an
+   observed value conforms to a declared intent — different questions
+   over different inputs, exactly why F3 drew them as separate
+   artifacts. ProofTrace stays further removed: it chains workflow
+   steps, with no structural awareness of this schema's fields.
+
+   **What this does not do:** decide whether this artifact is itself
+   signed (the receipt's closed "no signature field" is specific to
+   the receipt, not inherited here by default — genuinely open), or
+   address a Go peer (none exists for any of F6–F10).
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

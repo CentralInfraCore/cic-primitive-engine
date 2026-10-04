@@ -1792,21 +1792,26 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          FieldPlan/CollectionPlan/evaluate/aggregate/elementKeys/
          resolvePath -- implemented in Rust, engine/src/plan.rs, ported
          from conformance.go and tested against all seven of that
-         file's own end-to-end OCI vectors), and F9 (F5's
+         file's own end-to-end OCI vectors), F9 (F5's
          conformance_plan_digest/observation_digest projections WIRED
          to the real ConformancePlan/consumed-observation types F8
          introduces -- engine/src/digest_projection.rs -- and verified
          against the exact property F5 widened Relay's envelope-only
          digest to guarantee: identical coverage, different observed
-         value, different observation_digest).
+         value, different observation_digest), and F10 (the
+         conformance-verdict artifact's own wire layout --
+         docs/VERDICT-SCHEMA.md -- AND the procedural relationship
+         between the verdict, the receipt, and ProofTrace, decided
+         independent: evaluate's own signature has no receipt-typed
+         input and calls nothing that produces one).
 Open:    Go's analogous IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
-         doesn't yet mean the same thing here it does in Go, and F9
-         deliberately doesn't invent one -- and how the conformance/
-         drift verdict relates to the receipt (C) and to ProofTrace
-         (E's finding) -- three adjacent, distinct proof artifacts,
-         not one.
+         doesn't yet mean the same thing here it does in Go, and
+         neither F9 nor F10 invents one -- and whether the verdict
+         artifact is itself ever signed (VERDICT-SCHEMA.md's own
+         explicit non-decision, not inherited from the receipt's
+         closed "no signature field").
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -1998,15 +2003,19 @@ citation does not belong here" discipline settles it without one.
 
 **Not closed, deliberately:**
 - The comparator/verdict logic's object-level walk (`ConformancePlan`/
-  `Evaluate`/`aggregate`) has no implementation in the new lib yet, in
-  either language — this section (and F5/F6 below) establishes what it
-  produces and what the two digests commit to, not that code. The
-  per-field primitive it would drive (`compare`/`classify_field_value`)
-  is implemented in Rust (F6, added later).
-- How artifact 2 (receipt) and artifact 3 (conformance verdict) relate
-  procedurally — e.g. does computing a verdict require a receipt to
-  already exist, or are they independent outputs of the same
-  materialization call — is not decided here.
+  `Evaluate`/`aggregate`) had no implementation in the new lib yet, in
+  either language, at the time this was written — this section (and
+  F5/F6 below) establishes what it produces and what the two digests
+  commit to, not that code. **Since implemented in Rust: F6
+  (`compare`/`classify_field_value`), F7 (`Collection::element_key`),
+  and F8 (the walk itself, `ConformancePlan`/`evaluate`/`aggregate`/
+  `elementKeys`/`resolvePath`) — still no Go peer.**
+- **Update (F10): how artifact 2 (receipt) and artifact 3 (conformance
+  verdict) relate procedurally is now decided — independent.**
+  `evaluate` (F8) takes no receipt-typed input and calls nothing that
+  produces one; C2's "every materialization call produces a receipt"
+  has no dependency on a verdict either. See `docs/VERDICT-SCHEMA.md`
+  for the full reasoning.
 - **B7's own wire-layout question** (exactly how capability/coverage/
   provenance are nested/named next to `value` in the canonical tree) is
   not decided here either — that's C4/E2b's call, same as every other
@@ -2478,9 +2487,61 @@ two runs — the precise property F5 widened Relay's envelope-only
 fact, not only asserted in prose.
 
 **What this does not do:** decide the conformance-verdict artifact's
-own wire layout (still open, same as F5 left it), or wire either
-digest into an actual receipt or verdict record — there is no such
-record type yet, only the two digest values themselves.
+own wire layout (still open, same as F5 left it — see F10, immediately
+below) or wire either digest into an actual receipt — the receipt and
+the verdict stay the separate artifacts F3 already established.
+
+### F10. The conformance/drift verdict's own schema — field-by-field text (`docs/VERDICT-SCHEMA.md`)
+
+`docs/VERDICT-SCHEMA.md` writes the field-by-field layout for F3's
+artifact 3 — the one piece `docs/RECEIPT-SCHEMA.md` explicitly declines
+to define, since it is the receipt's (artifact 2) own schema, not the
+verdict's. Mirrors `RECEIPT-SCHEMA.md`'s own conventions (a contract,
+in `PRIMITIVE-IR.md`'s sense; every field cited to the decision
+requiring it; `PRIMITIVE-IR.md`'s Complete/Versioned properties
+extended here the same way they were extended there).
+
+**Four fields, all already decided elsewhere, none invented here:**
+`verdict_schema_version` (new, by the same Versioned-property extension
+`receipt_schema_version` already used), `object` (F8's
+`ObjectConformance`, three string constants verbatim from
+`conformance.go`), `fields` (F8's per-path `FieldVerdict`, five string
+constants verbatim from `observation.go`), and
+`conformance_plan_digest`/`observation_digest` (F5/F9).
+
+**`fields` needed no projection-level ordering rule, unlike
+`RECEIPT-SCHEMA.md`'s evidence arrays — because it's a `Map`, not a
+list.** `applied_defaults`/`derived_values` are lists, so F5/C4 each
+had to add an explicit "sort by path" rule before digesting one
+(section A's A6 never sorts a `Seq`). `fields` here is a genuine `Map`
+from path to verdict string, and section A's own A2 already sorts
+every `Map`'s keys byte-wise, unconditionally — using a map instead of
+a list settles this field's ordering as a side effect of the type
+chosen for it, not a new rule stated separately. Worth naming
+explicitly as a point of contrast, not merely an implementation detail.
+
+**Closes F4's last open item: the procedural relationship between the
+verdict, the receipt, and ProofTrace.** Decided: independent — not a
+new design choice so much as a fact already true of the
+implementation, named rather than left implicit. `evaluate` (F8) takes
+`intent`/`observed`/an `Observation`/a `ConformancePlan`; it has no
+receipt-typed parameter and calls nothing that produces one.
+Symmetrically, C2's "every materialization call produces a receipt"
+has no dependency on a verdict — most materializations (intent only,
+nothing yet observed) never compute one. A receipt proves *where a
+materialized value came from*; a verdict proves *whether an observed
+value conforms to a declared intent* — different questions over
+different inputs, exactly why F3 drew them as separate artifacts to
+begin with. ProofTrace (artifact 1, E) stays further removed still: it
+chains workflow steps, with no structural awareness of this schema's
+own fields.
+
+**What this does not do:** decide whether this artifact is itself
+signed (`RECEIPT-SCHEMA.md`'s "no signature field" was C4's own,
+receipt-specific closure — not extended here by default, genuinely
+open rather than silently inherited), add an intent-digest-equivalent
+field (same `Normalize`-stage gap F8/F9 already named), or address a
+Go peer for any of this (none exists).
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
