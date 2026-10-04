@@ -1057,12 +1057,18 @@ proof chain
    walker doesn't exist). Fixed by trying the fraction form first (no
    grammar overlap with the decimal form).
 
-   **Named, remaining gap, not silently closed:** `SetString` also
-   accepts `0b`/`0o`/`0x`-prefixed integers (on either side of a
-   fraction, or as a float mantissa) and a `"p"` hex-float exponent —
-   none of that is ported. Reachable only from a plain authored string
-   under `numeric`, never from a `json.Number` — real but
-   low-probability, named rather than rediscovered later.
+   **Review-caught gap, round two, fixed before merge: disclosing the
+   remaining gap honestly wasn't enough.** Review rejected shipping a
+   known, reachable Go/Rust divergence (`CompareNumeric("0x10", "16")`
+   would have disagreed) just because it was rare — section G's whole
+   purpose is differential equivalence, and the PR's own declared goal
+   was "port `Compare`." Fixed by porting `SetString`'s complete
+   grammar: binary/octal/hex integers and floats, each base's own
+   `"e"` (×10, unavailable for hex) or `"p"` (×2, available on *every*
+   base, including plain decimal — `"1p1"` → `2`) exponent, and
+   digit-separating underscores, including the one-underscore-right-
+   after-a-prefix exception. Every claim and every rejection verified
+   against real Go output in a Docker container before being encoded.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

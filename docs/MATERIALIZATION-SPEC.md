@@ -2203,16 +2203,29 @@ run yet; F1's object-level walker still doesn't exist). Fixed by
 trying the fraction form first (its grammar has no overlap with the
 decimal form, mirroring `SetString`'s own either/or structure).
 
-**Named, remaining, honestly-scoped gap, not silently claimed closed:**
-`SetString`'s *full* grammar also allows a `"0b"`/`"0o"`/`"0x"` prefix
-for a binary/octal/hexadecimal integer on either side of a fraction or
-as a float's mantissa, with a base-2 `"p"` exponent for hex floats
-(verified: `"0x1p0"` → `1`; Go's digit-separator underscore,
-`"1_000"`, also works). None of that is implemented. Reachable only
-from a plain authored YAML string compared under `numeric` — never
-from a `json.Number`, which Go's own JSON decoder can never produce in
-a non-decimal form — so this is real but low-probability, not
-hypothetical. Deferred, named here rather than discovered again later.
+**Review-caught gap, round two (PR #25), fixed before merge: the
+named gap above was itself not acceptable to leave open.** The first
+round's fix closed the fraction form but left `SetString`'s binary/
+octal/hex integer and float forms, their `"e"`/`"p"` exponents, and
+digit-separating underscores unported — disclosed honestly as a
+"real but low-probability" residual gap. Review rejected that
+framing: *the PR's own declared goal is "port `Compare`," and section
+G's entire purpose is Go↔Rust differential equivalence — a known,
+reachable semantic divergence doesn't become acceptable by being
+rare.* `CompareNumeric("0x10", "16")` really would disagree between
+languages (`comparable=true` in Go, `comparable=false` here) had this
+shipped. Fixed by porting `SetString`'s complete grammar: decimal,
+binary (`0b`), octal (`0o`) and hexadecimal (`0x`) integers and
+floats, each base's own float mantissa with `'.'`, a decimal `"e"`/
+`"E"` exponent (×10, unavailable for hex, where `e` is itself a valid
+digit) or a binary `"p"`/`"P"` exponent (×2, available on *every*
+base including plain decimal — verified: `"1p1"` → `2`), and a single
+underscore between any two digits of a run, plus — uniquely — one
+immediately after a base prefix before its first digit (`"0x_10"` →
+`16`, but doubled, trailing, or otherwise misplaced underscores all
+fail, verified case by case). Every claim here, and every rejection,
+was checked against real Go output in a Docker container before
+being encoded, not taken from the documentation prose alone.
 
 **What this does not do:** implement `ConformancePlan`, `Evaluate`, or
 `aggregate` — the object-level walk that drives these primitives over

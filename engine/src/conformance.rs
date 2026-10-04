@@ -24,20 +24,21 @@
 //! to adapt, because the object-level walker that would hold one is not
 //! built yet.
 //!
-//! # Named gap: `SetString`'s binary/octal/hex forms are not ported
+//! # The numeric comparator's string grammar matches `SetString` in full
 //!
-//! The numeric comparator's string grammar (see [`rat_from_string`]) covers
-//! `big.Rat.SetString`'s decimal and `"a/b"` fraction forms — not its
-//! `0b`/`0o`/`0x`-prefixed integer forms or hex-float `"p"` exponents.
-//! Reachable only from a plain authored string, never from a `json.Number`
-//! (Go's JSON decoder never produces one in a non-decimal form) — a real
-//! but low-probability residual gap, named rather than silently absent.
+//! [`rat_from_string`] ports `big.Rat.SetString`'s complete grammar, not a
+//! plausible-looking decimal/scientific subset of it — decimal, binary,
+//! octal and hex integers and floats, the `"a/b"` fraction form with either
+//! side independently based, `"e"`/`"p"` exponents, and digit-separating
+//! underscores. Closed across two review rounds on PR #25, each one
+//! verified against real Go output before being encoded — see that
+//! function's own doc comment for what each round found and fixed.
 
 use crate::canonical::{canonical_float, canonical_integer, to_canonical_json};
 use crate::reader::Value;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, Num};
 use std::str::FromStr;
 
 /// B3's coverage axis. See module docs for why this is four values, not
@@ -198,177 +199,262 @@ fn as_rational(v: &Value) -> Option<BigRational> {
 
 /// Ported from `compare.go`'s `ratFromString`, which is a thin wrapper over
 /// `big.Rat.SetString` with no narrowing of its own — so this function's
-/// grammar must match `SetString`'s, not a plausible-looking subset of it.
+/// grammar must match `SetString`'s *full* grammar, not a plausible-looking
+/// subset of it (Go's own doc for `SetString`, `go doc math/big.Rat.
+/// SetString`, is the normative source; every claim below was additionally
+/// verified empirically in a Go container, not taken from the doc text
+/// alone).
 ///
-/// **Correction (review-caught on PR #25): an earlier version of this
-/// function implemented only the decimal/scientific form and claimed, too
-/// broadly, to mirror "`big.Rat.SetString`'s decimal grammar" — but
-/// `SetString` also accepts a signed fraction `"a/b"` (Go's own
-/// documentation: *"s can be given as a (possibly signed) fraction `a/b`,
-/// or as a floating-point number..."*), verified empirically (`"1/2"` →
-/// `1/2`, `"-1/2"` → `-1/2`, `"10/5"` → `2` auto-reduced, `"1/0"` → fails,
-/// `"3/-4"` → fails because *"the divisor may not be signed"*). Missing
-/// this meant `compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with Go
-/// — `comparable=false` here, `comparable=true, matched=true` there —
-/// exactly the kind of divergence section G's differential conformance
-/// exists to catch, caught here by review instead. Fixed by trying the
-/// fraction form first (decimal grammar has no `/`, so the two forms never
-/// overlap, mirroring `SetString`'s own either/or structure).
-///
-/// **Named, remaining, honestly-scoped gap, not silently claimed closed:**
-/// `SetString`'s *full* grammar also lets either side of a fraction, or a
-/// float's mantissa, use a `"0b"`/`"0o"`/`"0x"` prefix for a binary/octal/
-/// hexadecimal integer, with a base-2 `"p"` exponent for hex floats
-/// (verified: `"0x1p0"` → `1`; `"1_000"`'s digit-separator underscore also
-/// works in Go). None of that is implemented here. Reachable only from a
-/// plain authored YAML string being compared under `numeric` — never from
-/// a `json.Number`, which Go's own JSON decoder can never produce in a
-/// non-decimal form — so this is a real but low-probability residual gap,
-/// not a hypothetical one. Closing it fully is deferred, named here rather
-/// than discovered again later.
+/// **Correction (review-caught on PR #25, in two rounds): an earlier
+/// version implemented only the decimal/scientific form.** Round one added
+/// the signed fraction form `"a/b"` (Go: *"s can be given as a (possibly
+/// signed) fraction `a/b`, or as a floating-point number..."*) after review
+/// showed `compare(Str("1/2"), Str("0.5"), Numeric)` disagreed with Go.
+/// Round two closed the rest: `SetString` also lets either side of a
+/// fraction, or a float's mantissa, carry a `"0b"`/`"0o"`/`"0x"` prefix for
+/// a binary/octal/hexadecimal integer; a float's exponent is `"e"`/`"E"`
+/// (×10, any non-hex base — hex can't use `e`, since `e` is itself a valid
+/// hex digit) or `"p"`/`"P"` (×2, *any* base, including decimal — verified:
+/// `"1p1"` → `2`); and a single underscore may separate two digits of any
+/// digit run, plus — uniquely — immediately after a base prefix and before
+/// its first digit (`"0x_10"` → `16`, but `"0x__10"`/`"0x_"`/`"_0x10"` all
+/// fail). Every one of these, and the places they fail, was checked against
+/// real Go output before being encoded below (this module's own tests
+/// carry the vectors). This closes the grammar-parity gap the first
+/// round's doc comment named rather than closed.
 fn rat_from_string(s: &str) -> Option<BigRational> {
-    if let Some(r) = fraction_from_string(s) {
-        return Some(r);
+    let bytes = s.as_bytes();
+    let mut i = 0usize;
+    let neg = parse_sign(bytes, &mut i);
+    let after_sign = i;
+
+    // Fraction and float/int forms never overlap (a fraction always has a
+    // top-level '/', a float/int literal never does) -- mirrors
+    // SetString's own either/or structure, tried in the same order.
+    let mut j = after_sign;
+    if let Some(r) = parse_fraction(bytes, &mut j) {
+        if j == bytes.len() {
+            return Some(if neg { -r } else { r });
+        }
     }
-    decimal_string_to_rational(s)
+
+    i = after_sign;
+    let v = parse_float_or_int(bytes, &mut i)?;
+    if i != bytes.len() {
+        return None; // trailing content outside the grammar
+    }
+    Some(if neg { -v } else { v })
 }
 
-/// The `"a/b"` half of `SetString`'s grammar — decimal integers only (see
-/// this function's caller for the named 0b/0o/0x gap). The divisor may not
-/// be signed and may not be zero; the dividend may be, matching
-/// `SetString`'s own verified behaviour (`"0/5"` and `"-0/5"` both -> `0`).
-fn fraction_from_string(s: &str) -> Option<BigRational> {
-    let mut parts = s.split('/');
-    let num_part = parts.next()?;
-    let den_part = parts.next()?;
-    if parts.next().is_some() {
-        return None; // more than one '/' -- not a fraction SetString accepts
+/// One of `SetString`'s four mantissa/integer radixes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Radix {
+    Dec,
+    Bin,
+    Oct,
+    Hex,
+}
+
+impl Radix {
+    fn value(self) -> u32 {
+        match self {
+            Radix::Dec => 10,
+            Radix::Bin => 2,
+            Radix::Oct => 8,
+            Radix::Hex => 16,
+        }
     }
-    let numerator = parse_signed_decimal_integer(num_part)?;
-    let denominator = parse_unsigned_decimal_integer(den_part)?;
+
+    fn is_digit(self, b: u8) -> bool {
+        match self {
+            Radix::Dec => b.is_ascii_digit(),
+            Radix::Bin => b == b'0' || b == b'1',
+            Radix::Oct => (b'0'..=b'7').contains(&b),
+            Radix::Hex => b.is_ascii_hexdigit(),
+        }
+    }
+}
+
+fn parse_sign(bytes: &[u8], i: &mut usize) -> bool {
+    match bytes.get(*i) {
+        Some(b'-') => {
+            *i += 1;
+            true
+        }
+        Some(b'+') => {
+            *i += 1;
+            false
+        }
+        _ => false,
+    }
+}
+
+/// `"0b"`/`"0B"`/`"0o"`/`"0O"`/`"0x"`/`"0X"`, consumed if present; `Dec`
+/// (consuming nothing) otherwise. A bare leading `"0"` is decimal, per
+/// `SetString`'s own doc: *"a leading 0 is considered a decimal leading 0;
+/// it does not indicate octal representation"* (verified: `"0123"` → `123`,
+/// not rejected and not treated as legacy octal).
+fn detect_prefix(bytes: &[u8], i: &mut usize) -> Radix {
+    if bytes.get(*i) == Some(&b'0') {
+        match bytes.get(*i + 1) {
+            Some(b'b' | b'B') => {
+                *i += 2;
+                return Radix::Bin;
+            }
+            Some(b'o' | b'O') => {
+                *i += 2;
+                return Radix::Oct;
+            }
+            Some(b'x' | b'X') => {
+                *i += 2;
+                return Radix::Hex;
+            }
+            _ => {}
+        }
+    }
+    Radix::Dec
+}
+
+/// Scans the longest valid run of `radix`-digits at `*i`, allowing a single
+/// underscore between any two digits, plus — only when `allow_leading` is
+/// set — a single underscore immediately at the start, before the first
+/// digit (the base-prefix exception). Returns the digits with underscores
+/// stripped; an empty result means "no digits here," not an error — the
+/// caller's own "at least one digit" and "whole string consumed" checks do
+/// the actual rejecting, the same structure `SetString` itself has (a
+/// misplaced underscore simply leaves unconsumed input behind).
+fn scan_digits(bytes: &[u8], i: &mut usize, radix: Radix, allow_leading: bool) -> String {
+    let mut out = String::new();
+    if allow_leading
+        && bytes.get(*i) == Some(&b'_')
+        && bytes.get(*i + 1).is_some_and(|b| radix.is_digit(*b))
+    {
+        *i += 1;
+    }
+    let mut last_was_digit = false;
+    loop {
+        match bytes.get(*i) {
+            Some(&b) if radix.is_digit(b) => {
+                out.push(b as char);
+                *i += 1;
+                last_was_digit = true;
+            }
+            Some(&b'_')
+                if last_was_digit && bytes.get(*i + 1).is_some_and(|b| radix.is_digit(*b)) =>
+            {
+                *i += 1;
+                last_was_digit = false;
+            }
+            _ => break,
+        }
+    }
+    out
+}
+
+/// The `"a/b"` half of `SetString`'s grammar: each side is an independently
+/// based integer (`"0x10/2"` → `8`, `"2/0x10"` → `1/8`), the divisor may
+/// not be signed and may not be zero (`"1/0"`, `"3/-4"` both fail); the
+/// dividend may be zero (`"0/5"`/`"-0/5"` both → `0`). Returns `None`
+/// (leaving `*i` unspecified) if there is no `/` at the top level, or
+/// either side fails to parse as a plain based integer — the caller must
+/// not assume `*i` advanced on `None`.
+fn parse_fraction(bytes: &[u8], i: &mut usize) -> Option<BigRational> {
+    let start = *i;
+    // Parse (or fail to parse) the dividend first, purely to advance `*i`
+    // past it, so the '/' check below looks right after whatever digits
+    // (if any) it found — the actual numerator value is re-extracted via
+    // the `?` below only once a '/' confirms this is a fraction at all.
+    let numerator = parse_unsigned_integer_any_base(bytes, i);
+    if bytes.get(*i) != Some(&b'/') {
+        *i = start; // not a fraction -- let the caller retry as float/int
+        return None;
+    }
+    let numerator = numerator?;
+    *i += 1;
+    let denominator = parse_unsigned_integer_any_base(bytes, i)?;
     if denominator == BigInt::from(0) {
-        return None; // SetString fails on a zero divisor ("1/0")
+        return None;
     }
     Some(BigRational::new(numerator, denominator))
 }
 
-fn parse_signed_decimal_integer(s: &str) -> Option<BigInt> {
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, s.strip_prefix('+').unwrap_or(s)),
-    };
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+fn parse_unsigned_integer_any_base(bytes: &[u8], i: &mut usize) -> Option<BigInt> {
+    let before = *i;
+    let radix = detect_prefix(bytes, i);
+    let had_prefix = *i != before;
+    let digits = scan_digits(bytes, i, radix, had_prefix);
+    if digits.is_empty() {
         return None;
     }
-    let v = BigInt::from_str(digits).ok()?;
-    Some(if neg { -v } else { v })
+    BigInt::from_str_radix(&digits, radix.value()).ok()
 }
 
-fn parse_unsigned_decimal_integer(s: &str) -> Option<BigInt> {
-    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+/// The floating-point/plain-integer half of `SetString`'s grammar: an
+/// optional base prefix, an integer-part digit run, an optional `'.'` and
+/// fractional-part digit run (at least one digit somewhere across the
+/// two), and an optional exponent — `"e"`/`"E"` (×10, forbidden for `Hex`,
+/// where `e` is a mantissa digit) or `"p"`/`"P"` (×2, any radix, including
+/// `Dec` — `"1p1"` → `2`). **Deliberately not** going through `f64`
+/// anywhere in this path, which would silently reproduce
+/// `canonicalNumericString`'s float-rounding path (a *different* Go
+/// function, for a different purpose: section A's canonical-form
+/// normalization, not numeric-comparator equality) — see this module's own
+/// doc comment on `"0.1"` (string) vs `0.1` (`f64`) for why that distinction
+/// is load-bearing, not pedantic.
+fn parse_float_or_int(bytes: &[u8], i: &mut usize) -> Option<BigRational> {
+    let before = *i;
+    let radix = detect_prefix(bytes, i);
+    let had_prefix = *i != before;
+    let int_digits = scan_digits(bytes, i, radix, had_prefix);
+    let mut frac_digits = String::new();
+    if bytes.get(*i) == Some(&b'.') {
+        *i += 1;
+        frac_digits = scan_digits(bytes, i, radix, false);
+    }
+    if int_digits.is_empty() && frac_digits.is_empty() {
         return None;
     }
-    BigInt::from_str(s).ok()
-}
-
-/// Exact decimal-string → rational, the floating-point half of
-/// `SetString`'s grammar restricted to a decimal mantissa (`[sign] digits
-/// ['.' digits] [('e'|'E') [sign] digits]`) — the `0b`/`0o`/`0x`-mantissa
-/// and `"p"`-exponent forms are the same named gap [`rat_from_string`]'s
-/// doc comment covers. **Deliberately not** going through `f64`, which
-/// would silently reproduce `canonicalNumericString`'s float-rounding path
-/// (a *different* Go function, for a different purpose: section A's
-/// canonical-form normalization, not numeric-comparator equality).
-///
-/// Verified empirically against real Go `big.Rat.SetString` output for
-/// every case this function's tests exercise, including the one that
-/// actually matters: `"0.1"` parses to the *exact* decimal `1/10`, not the
-/// binary-rounded value an `f64` route would give (`3602879701896397/
-/// 36028797018963968`, confirmed via `num_rational::BigRational::from_f64`
-/// in this session) — a real, Go-faithful asymmetry between how a
-/// `Value::Str` numeric literal and a `Value::Float` are each converted.
-/// This is not a bug to fix here: fixing it would make this comparator
-/// diverge *from* the Go reference it must stay differentially comparable
-/// against (section G's whole point). If the intent/observed data never
-/// actually mixes a decimal-string literal against a binary float for the
-/// same logical value, the asymmetry is latent, exactly as it is in Relay
-/// today — named so it is a known, inherited property, not a rediscovered
-/// surprise later.
-fn decimal_string_to_rational(s: &str) -> Option<BigRational> {
-    let bytes = s.as_bytes();
-    let mut i = 0usize;
-    let neg = match bytes.first() {
-        Some(b'-') => {
-            i += 1;
-            true
-        }
-        Some(b'+') => {
-            i += 1;
-            false
-        }
-        _ => false,
-    };
-    let start_int = i;
-    while i < bytes.len() && bytes[i].is_ascii_digit() {
-        i += 1;
-    }
-    let int_part = &s[start_int..i];
-    let mut frac_part = "";
-    if i < bytes.len() && bytes[i] == b'.' {
-        i += 1;
-        let start_frac = i;
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            i += 1;
-        }
-        frac_part = &s[start_frac..i];
-    }
-    if int_part.is_empty() && frac_part.is_empty() {
-        return None; // no digits anywhere -- not a number
-    }
-    let mut exp: i64 = 0;
-    if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
-        i += 1;
-        let exp_neg = match bytes.get(i) {
-            Some(b'-') => {
-                i += 1;
-                true
-            }
-            Some(b'+') => {
-                i += 1;
-                false
-            }
-            _ => false,
-        };
-        let start_exp = i;
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            i += 1;
-        }
-        if i == start_exp {
-            return None; // 'e'/'E' with no exponent digits
-        }
-        let e: i64 = s[start_exp..i].parse().ok()?;
-        exp = if exp_neg { -e } else { e };
-    }
-    if i != bytes.len() {
-        return None; // trailing content that isn't part of the grammar
-    }
-    let mut mantissa_digits = String::with_capacity(int_part.len() + frac_part.len());
-    mantissa_digits.push_str(int_part);
-    mantissa_digits.push_str(frac_part);
+    let mut mantissa_digits = String::with_capacity(int_digits.len() + frac_digits.len());
+    mantissa_digits.push_str(&int_digits);
+    mantissa_digits.push_str(&frac_digits);
     if mantissa_digits.is_empty() {
         mantissa_digits.push('0');
     }
-    let mantissa = BigInt::from_str(&mantissa_digits).ok()?;
-    let mantissa = if neg { -mantissa } else { mantissa };
-    let net_exponent = exp - i64::try_from(frac_part.len()).ok()?;
-    let ten = BigInt::from(10);
-    Some(if net_exponent >= 0 {
-        let scale = num_traits::Pow::pow(ten, u32::try_from(net_exponent).ok()?);
-        BigRational::from_integer(mantissa * scale)
-    } else {
-        let scale = num_traits::Pow::pow(ten, u32::try_from(-net_exponent).ok()?);
-        BigRational::new(mantissa, scale)
-    })
+    let mantissa = BigInt::from_str_radix(&mantissa_digits, radix.value()).ok()?;
+    let frac_len = u32::try_from(frac_digits.len()).ok()?;
+    let mut value = BigRational::new(
+        mantissa,
+        num_traits::Pow::pow(BigInt::from(radix.value()), frac_len),
+    );
+
+    match bytes.get(*i) {
+        Some(&b'e' | &b'E') if radix != Radix::Hex => {
+            *i += 1;
+            value = apply_exponent(bytes, i, value, 10)?;
+        }
+        Some(&b'p' | &b'P') => {
+            *i += 1;
+            value = apply_exponent(bytes, i, value, 2)?;
+        }
+        _ => {}
+    }
+    Some(value)
+}
+
+fn apply_exponent(
+    bytes: &[u8],
+    i: &mut usize,
+    value: BigRational,
+    exponent_base: u32,
+) -> Option<BigRational> {
+    let neg = parse_sign(bytes, i);
+    let digits = scan_digits(bytes, i, Radix::Dec, false);
+    if digits.is_empty() {
+        return None; // the marker consumed but no exponent digits -- invalid
+    }
+    let exp: u32 = digits.parse().ok()?;
+    let scale = BigRational::from_integer(num_traits::Pow::pow(BigInt::from(exponent_base), exp));
+    Some(if neg { value / scale } else { value * scale })
 }
 
 /// Ported from `observation.go`'s `ClassifyField`: coverage alone decides
@@ -582,13 +668,13 @@ mod tests {
         assert!(!comparable, "object -> not comparable under numeric");
     }
 
-    // The precision fact decimal_string_to_rational's own doc comment names:
-    // "0.1" parses EXACTLY as 1/10, not the binary-rounded f64 value --
-    // verified against real Go big.Rat.SetString("0.1") output in this
-    // session (1/10, not 3602879701896397/36028797018963968).
+    // The precision fact this module's own doc comment names: "0.1" parses
+    // EXACTLY as 1/10, not the binary-rounded f64 value -- verified against
+    // real Go big.Rat.SetString("0.1") output in this session (1/10, not
+    // 3602879701896397/36028797018963968).
     #[test]
     fn decimal_string_parses_exact_not_binary_rounded() {
-        let exact = decimal_string_to_rational("0.1").expect("valid decimal");
+        let exact = rat_from_string("0.1").expect("valid decimal");
         let from_binary_float = BigRational::from_f64(0.1).expect("finite");
         assert_ne!(
             exact, from_binary_float,
@@ -599,10 +685,11 @@ mod tests {
         assert_eq!(*exact.denom(), BigInt::from(10));
     }
 
-    // Every vector here was generated by running real Go math/big.Rat.SetString
-    // in a Docker container in this session, not transcribed from memory.
+    // Every vector in this and the next test was generated by running real
+    // Go math/big.Rat.SetString in a Docker container in this session, not
+    // transcribed from memory or from the Go doc comment's prose alone.
     #[test]
-    fn decimal_string_to_rational_matches_go_big_rat() {
+    fn decimal_and_fraction_forms_match_go_big_rat() {
         let cases: &[(&str, i64, i64)] = &[
             ("1.5", 3, 2),
             ("1e2", 100, 1),
@@ -611,27 +698,12 @@ mod tests {
             ("16.0", 16, 1),
             ("-0.5", -1, 2),
             ("1e-3", 1, 1000),
-        ];
-        for (s, num, den) in cases {
-            let r = decimal_string_to_rational(s).unwrap_or_else(|| panic!("{s} should parse"));
-            assert_eq!(*r.numer(), BigInt::from(*num), "{s}: numerator");
-            assert_eq!(*r.denom(), BigInt::from(*den), "{s}: denominator");
-        }
-        for bad in ["abc", "", "e5", "1.2.3"] {
-            assert!(
-                decimal_string_to_rational(bad).is_none(),
-                "{bad:?} must not parse"
-            );
-        }
-    }
-
-    // Review-caught gap on PR #25: the fraction half of SetString's grammar
-    // ("a/b") was missing entirely. Every vector here was generated by
-    // running real Go math/big.Rat.SetString in a Docker container in this
-    // session, not transcribed from memory.
-    #[test]
-    fn fraction_form_matches_go_big_rat() {
-        let good: &[(&str, i64, i64)] = &[
+            (".5", 1, 2),
+            ("-.5", -1, 2),
+            ("5.", 5, 1),
+            ("+5", 5, 1),
+            // Review-caught gap on PR #25, round one: the fraction half of
+            // SetString's grammar ("a/b") was missing entirely.
             ("1/2", 1, 2),
             ("-1/2", -1, 2),
             ("+1/2", 1, 2),
@@ -639,15 +711,90 @@ mod tests {
             ("0/5", 0, 1),
             ("-0/5", 0, 1),
         ];
-        for (s, num, den) in good {
+        for (s, num, den) in cases {
             let r = rat_from_string(s).unwrap_or_else(|| panic!("{s} should parse"));
             assert_eq!(*r.numer(), BigInt::from(*num), "{s}: numerator");
             assert_eq!(*r.denom(), BigInt::from(*den), "{s}: denominator");
         }
         // "the divisor may not be signed" (Go's own SetString doc) -- and a
-        // zero divisor, a decimal numerator/denominator, and a
-        // doubled separator all fail in Go too.
-        for bad in ["1/0", "3/-4", "1.5/2", "1/2.5", "1//2"] {
+        // zero divisor, a decimal numerator/denominator in a fraction, and
+        // a doubled separator all fail in Go too.
+        for bad in [
+            "abc", "", "e5", "1.2.3", "1/0", "3/-4", "1.5/2", "1/2.5", "1//2",
+        ] {
+            assert!(rat_from_string(bad).is_none(), "{bad:?} must not parse");
+        }
+    }
+
+    // Review-caught gap on PR #25, round two: SetString's full grammar also
+    // covers binary/octal/hex integers and floats (with their own "e"/"p"
+    // exponents) and digit-separating underscores -- not ported in round
+    // one, which closed only the decimal and plain fraction forms. Every
+    // vector here, including every rejection, was verified against real Go
+    // output in a Docker container before being encoded.
+    #[test]
+    fn based_integers_floats_and_underscores_match_go_big_rat() {
+        let good: &[(&str, i64, i64)] = &[
+            ("0b101", 5, 1),
+            ("0B101", 5, 1),
+            ("0o17", 15, 1),
+            ("0O17", 15, 1),
+            ("0x1A", 26, 1),
+            ("0X1a", 26, 1),
+            ("0x10", 16, 1),
+            ("0x10/2", 8, 1),
+            ("0b11/0x3", 1, 1),
+            ("2/0x10", 1, 8),
+            ("1_000", 1000, 1),
+            ("0x1_0", 16, 1),
+            ("1_0.5", 21, 2),
+            ("0b1_0", 2, 1),
+            ("0_0", 0, 1),
+            ("0x1p0", 1, 1),
+            ("0x1.8p1", 3, 1),
+            ("0x.8p0", 1, 2),
+            ("0x1.8", 3, 2),
+            ("0x1e5", 485, 1), // 'e' is a hex DIGIT here, not an exponent
+            ("0x1p-1", 1, 2),
+            ("0x0p0", 0, 1),
+            ("0123", 123, 1), // leading 0 is decimal, never legacy octal
+            ("00", 0, 1),
+            ("007", 7, 1),
+            ("-0x10", -16, 1),
+            ("0x1_A", 26, 1),
+            ("1_0e10", 100_000_000_000, 1),
+            ("0b1.1", 3, 2),
+            ("0o1.1", 9, 8),
+            ("0b1e1", 10, 1), // 'e' means x10 here -- unambiguous outside hex
+            ("0o1e1", 10, 1),
+            ("0x_10", 16, 1), // underscore immediately after a base prefix
+            ("0b_101", 5, 1),
+            ("0o_17", 15, 1),
+            ("1.2_3", 123, 100),
+            ("0x1P0", 1, 1),
+            ("0X1p0", 1, 1),
+            ("1p1", 2, 1), // 'p' (x2) works on a plain decimal mantissa too
+            ("1p-1", 1, 2),
+            ("1P1", 2, 1),
+            ("0b1p1", 2, 1),
+            ("0o1p1", 2, 1),
+            ("0b10.1p1", 5, 1),
+            ("0o10.1p1", 65, 4),
+            ("0x.1", 1, 16),
+            ("0b.1", 1, 2),
+            ("0o.1", 1, 8),
+        ];
+        for (s, num, den) in good {
+            let r = rat_from_string(s).unwrap_or_else(|| panic!("{s} should parse"));
+            assert_eq!(*r.numer(), BigInt::from(*num), "{s}: numerator");
+            assert_eq!(*r.denom(), BigInt::from(*den), "{s}: denominator");
+        }
+        for bad in [
+            "1/0", "3/-4", "0x-10", "_1", "1_", "1__0", "1_.5", "1._5", "0x__10", "0x_", "_0x10",
+            "1.2_", "1._2", "0x1._8", "0x1_.8", "0x.8_", "0x_.8", "0x1p_1", "0x1p1_", "0x1p_",
+            "1e_1", "1e1_", "+", "-", "/", "1/", "/1", "0x", "0b", "0o", "1e1p1", "10e", "10e+",
+            "10p", ".", "0x.", "0b.", "0o.",
+        ] {
             assert!(rat_from_string(bad).is_none(), "{bad:?} must not parse");
         }
     }
