@@ -1324,11 +1324,17 @@ on review — PR #24):**
 - **`receipt_schema_version`, added — decided yes.** Extends
   `PRIMITIVE-IR.md`'s own Versioned property to this sibling artifact,
   the same move this document already made for its Complete property.
-  A bare integer starting at `1`, not a complex versioning scheme — the
-  same minimalism C5 applied to `"schema-default"`. Named to avoid
-  colliding with D1.3's own `schema_version` field (the *domain*
-  schema's version, a different fact), a clash only visible once both
-  were written side by side.
+  A bare integer starting at `1`, bumped on any backward-incompatible
+  change to the receipt *contract* — field layout, requiredness,
+  ordering, field semantics, or digest/canonical interpretation, not
+  only the set of field names (review-caught on PR #26: a narrower
+  first wording risked implying only layout changes counted, which
+  this document's own `derived_values[].inputs` ordering decision,
+  same layout, different contract, disproves) — not a complex
+  versioning scheme otherwise, the same minimalism C5 applied to
+  `"schema-default"`. Named to avoid colliding with D1.3's own
+  `schema_version` field (the *domain* schema's version, a different
+  fact), a clash only visible once both were written side by side.
 - **No signature-related field — decided no.** Extends C1's own
   sibling-not-embedded reasoning one level further: a slot *inside*
   the receipt for a signature *of* the receipt would be a smaller

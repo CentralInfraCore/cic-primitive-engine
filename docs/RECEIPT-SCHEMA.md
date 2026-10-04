@@ -19,7 +19,10 @@ field                     type                source
 ---------------------------------------------------------------------------
 receipt_schema_version    integer             this document -- which
                                                        version of THIS
-                                                       field layout, not
+                                                       contract (layout,
+                                                       requiredness,
+                                                       ordering, field
+                                                       semantics), not
                                                        D1's schema_version
                                                        (the domain schema's
                                                        own version); see
@@ -189,10 +192,24 @@ requiredness: `PRIMITIVE-IR.md`'s own **Versioned** property (*"Every
 IR document declares its version. A consumer that has not declared
 support for that version must not be handed it"*) applies to this
 sibling artifact too, produced by the identical pipeline (C1). A bare
-integer, starting at `1`, incremented only when this document's own
-field layout changes incompatibly — not a complex versioning scheme,
-the same minimalism C5 already applied to `"schema-default"` as a
-literal, unversioned v1 constant. Named `receipt_schema_version`, not
+integer, starting at `1`.
+
+**Correction (review-caught on PR #26): "incremented when the field
+layout changes" was too narrow — a reader could take it to mean the
+*set of field names* is the only thing this version tracks.** This
+document's own content already disproves that scope: `derived_values[].
+inputs` kept its field name and type (`list[string]`) when this file
+decided it is a deduplicated sorted set rather than an execution-order
+trace (the "Required, cardinality, ordering" section, above) — the
+*layout* never changed, but the *contract* did, incompatibly, for any
+consumer that had assumed order was significant. **`receipt_schema_
+version` MUST increment on any backward-incompatible change to the
+receipt contract — not only field layout, but also requiredness,
+cardinality/ordering, a field's semantics, or its digest/canonical
+interpretation.** Still not a complex versioning scheme, the same
+minimalism C5 already applied to `"schema-default"` as a literal,
+unversioned v1 constant — a bare integer, bumped on any of the above,
+nothing more elaborate. Named `receipt_schema_version`, not
 `schema_version`, specifically to avoid colliding with D1.3's
 already-existing `schema_version` field, which is the *domain* schema's
 own version — a different fact entirely, found only because writing
