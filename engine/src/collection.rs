@@ -54,6 +54,20 @@ pub enum CollectionTopology {
     Map,
 }
 
+impl CollectionTopology {
+    /// `collection.go`'s own three `CollectionTopology` string constants
+    /// (`"atomic"`/`"set"`/`"map"`) -- the exact literal F5's
+    /// `PlanDigestProjection` commits to per collection.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CollectionTopology::Atomic => "atomic",
+            CollectionTopology::Set => "set",
+            CollectionTopology::Map => "map",
+        }
+    }
+}
+
 /// Ported from `collection.go`'s `Collection`. `keys` applies only to
 /// `CollectionTopology::Map`.
 #[derive(Debug, Clone, Default)]

@@ -923,13 +923,14 @@ verdict WALKER — `ConformancePlan`/`FieldPlan`/`CollectionPlan`/
 `evaluate`/`aggregate`/`elementKeys`/`resolvePath` — implemented in
 Rust, `engine/src/plan.rs`, ported from `conformance.go` and tested
 against all seven of that file's own end-to-end OCI vectors; see item
-6) are settled. **Open:** wiring F5's `conformance_plan_digest`/
-`observation_digest` projections to the real `ConformancePlan`/
-`Observation` types F8 introduces (deferred because Go's analogous
-`IntentDigest` needs a `SpecDigest`-equivalent expand+normalize step
-this engine's `Normalize` stage doesn't have yet), and how the
-materialization receipt relates to the separate conformance/drift
-verdict artifact.
+6), and F9 (F5's `conformance_plan_digest`/`observation_digest`
+projections WIRED to the real `ConformancePlan`/consumed-observation
+types F8 introduces — `engine/src/digest_projection.rs`, see item 7)
+are settled. **Open:** Go's analogous `IntentDigest` still has no
+equivalent here (it needs a `SpecDigest`-style expand+normalize step
+this engine's `Normalize` stage doesn't have yet, so F9 deliberately
+doesn't invent one), and how the materialization receipt relates to
+the separate conformance/drift verdict artifact.
 **Blocks:** proof-chain completeness
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#f--output-symmetry-partially-decided-not-closed`
 
@@ -1184,11 +1185,50 @@ proof chain
    plan* and the *full observation claim*, not `SpecDigest(intent)`
    (Go's actual `IntentDigest`, also not ported: `SpecDigest` runs
    `ExpandSpec`/`normalizeNumbers` first, and this engine's
-   `Normalize` stage doesn't exist yet). Wiring F5's two projections to
-   the real `ConformancePlan`/`Observation` types is a separate,
-   not-yet-done step. Nor does this decide how the verdict relates
-   procedurally to the receipt (C) or to ProofTrace (E) — three
-   distinct proof artifacts (F3), still not wired together.
+   `Normalize` stage doesn't exist yet). Nor does this decide how the
+   verdict relates procedurally to the receipt (C) or to ProofTrace
+   (E) — three distinct proof artifacts (F3), still not wired
+   together.
+7. **Closed — F5's two digests, wired to the real plan/observation
+   types item 6 introduces.** `engine/src/digest_projection.rs` builds
+   `PlanDigestProjection`/`ObservationDigestProjection` from
+   `ConformancePlan` and a new `ObjectVerdict::consumed` field (added
+   to item 6's already-merged type, since `evaluate` is the only point
+   that actually knows what F5's observation projection needs — a
+   value is recorded iff coverage is `Observed`, per F5's own rule),
+   then digests each via section A's own `digest`/`to_canonical_json`.
+   F5 already decided the preimage shape and ordering; nothing new is
+   decided here.
+
+   **Review-caught, fixed before merge: the coverage/value pairing was
+   enforced by convention, not by the type.** The first version held
+   `consumed` as `{coverage, value: Option<Value>}` — two independent
+   fields, so `Observed` paired with `None` (or any other coverage
+   paired with `Some`) was constructible and digested without
+   complaint, an F5-invalid preimage producing a perfectly valid-
+   looking SHA-256 hash. `evaluate` always constructs the pairing
+   correctly today, but a state the contract forbids that still
+   type-checks is a defect in a library whose job is proving a
+   contract, independent of today's one caller. Fixed: `ConsumedField`
+   is now an enum (`Observed(Value) | Absent | Unobserved | Unknown`),
+   making the forbidden pairing unrepresentable — the same discipline
+   this document already applies elsewhere (B3's `Option<Value>`,
+   `Value::BigInt`'s invariant).
+
+   **Tested against the exact gap F5 named, not just the shape.**
+   Beyond pinning the projection's field names/ordering down as a
+   concrete test (the same discipline review forced once this session
+   for the shape claim itself, PR #23), one test runs `evaluate` twice
+   with identical coverage but a genuinely different observed value
+   and confirms `observation_digest` differs — the precise property
+   F5 widened Relay's envelope-only `observationDigest()` to
+   guarantee, verified as an executable fact here, not only asserted
+   in prose.
+
+   **What this does not do:** decide the conformance-verdict
+   artifact's own wire layout, or wire either digest into an actual
+   receipt or verdict record — no such record type exists yet, only
+   the two digest values themselves.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

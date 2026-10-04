@@ -51,14 +51,18 @@
 //! per-field comparator primitive (`compare`/`classify_field_value`) and
 //! `collection` implements its topology/element-identity primitive
 //! (`Collection::element_key`); `plan` drives both over a whole document
-//! (`evaluate`), closing F1's object-level-walker gap. None of these are
-//! wired into a pipeline stage yet, because `Parse`, and the rest of
-//! `Normalize`/`Resolve`/`Validate`, do not exist yet. Nothing here is a
-//! stable API, and no module should depend on it as one.
+//! (`evaluate`), closing F1's object-level-walker gap, and records the
+//! per-path coverage/value data F5 needs; `digest_projection` turns that
+//! into F5's own two digests (`conformance_plan_digest`/
+//! `observation_digest`). None of these are wired into a pipeline stage
+//! yet, because `Parse`, and the rest of `Normalize`/`Resolve`/
+//! `Validate`, do not exist yet. Nothing here is a stable API, and no
+//! module should depend on it as one.
 
 pub mod canonical;
 pub mod collection;
 pub mod conformance;
+pub mod digest_projection;
 pub mod error;
 pub mod plan;
 pub mod reader;
@@ -69,8 +73,13 @@ pub use collection::{Collection, CollectionTopology};
 pub use conformance::{
     classify_field, classify_field_value, compare, CompareType, Coverage, FieldVerdict, Observation,
 };
+pub use digest_projection::{
+    conformance_plan_digest, observation_digest, observation_digest_projection,
+    plan_digest_projection,
+};
 pub use error::{code, Error, Result, Stage};
 pub use plan::{
-    evaluate, CollectionPlan, ConformancePlan, FieldPlan, ObjectConformance, ObjectVerdict,
+    evaluate, CollectionPlan, ConformancePlan, ConsumedField, FieldPlan, ObjectConformance,
+    ObjectVerdict,
 };
 pub use role::{expand_role, Role};

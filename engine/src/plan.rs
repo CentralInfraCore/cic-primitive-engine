@@ -17,22 +17,73 @@
 //!
 //! # What this does not do
 //!
-//! Produce `conformance_plan_digest`/`observation_digest` (F5) or
-//! `Go`'s own `IntentDigest`. F5 already decided these two digests commit
-//! to the *executed plan* and the *full observation claim* respectively —
-//! not simply `SpecDigest(intent)`, which is what Go's `IntentDigest`
-//! actually is, and which this engine's own `Normalize` stage (not yet
-//! built) would need to produce before an "intent digest" means the same
-//! thing here it does in Go (Go's `SpecDigest` runs `ExpandSpec` and
-//! `normalizeNumbers` first; this engine has no port of either yet).
-//! Wiring F5's two projections to the plan/observation types this file
-//! introduces is therefore its own, separate step — [`evaluate`] returns
-//! the verdict only.
+//! Produce `conformance_plan_digest`/`observation_digest` themselves, or
+//! Go's own `IntentDigest` (this engine's `Normalize` stage, which Go's
+//! analogous `SpecDigest` needs via `ExpandSpec`/`normalizeNumbers`,
+//! doesn't exist yet, so an "intent digest" wouldn't mean the same thing
+//! here it does in Go). [`evaluate`] does, however, now record exactly
+//! what F5's two projections need as [`ObjectVerdict::consumed`] — see
+//! `digest_projection.rs` for where that's turned into the actual digests.
 
 use crate::collection::Collection;
-use crate::conformance::{classify_field_value, CompareType, FieldVerdict, Observation};
+use crate::conformance::{classify_field_value, CompareType, Coverage, FieldVerdict, Observation};
 use crate::reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
+
+/// One path's contribution to F5's `ObservationDigestProjection` —
+/// `Coverage` paired with a value **exactly** when that pairing is
+/// legitimate (grounded the same way F5 itself is: `observation.go`'s
+/// `ClassifyFieldValue` never reads a value for any coverage state but
+/// `Observed`, so there is nothing a non-`Observed` entry could
+/// truthfully carry).
+///
+/// **Correction (review-caught on PR #29): an earlier version used
+/// `{ coverage: Coverage, value: Option<Value> }`, which let
+/// `Observed` pair with `None` (or any other coverage pair with
+/// `Some`) — a state F5 forbids, constructible anyway, and silently
+/// accepted by the projection builder rather than rejected.** For a
+/// library whose entire job is proving a contract, an invalid state
+/// that type-checks and digests without complaint is itself a defect,
+/// independent of whether today's one caller (`evaluate`) happens to
+/// always construct it correctly. Fixed by making the forbidden
+/// pairing unrepresentable: an enum, not a struct of two independent
+/// fields.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConsumedField {
+    Observed(Value),
+    Absent,
+    Unobserved,
+    Unknown,
+}
+
+impl ConsumedField {
+    #[must_use]
+    pub fn coverage(&self) -> Coverage {
+        match self {
+            ConsumedField::Observed(_) => Coverage::Observed,
+            ConsumedField::Absent => Coverage::Absent,
+            ConsumedField::Unobserved => Coverage::Unobserved,
+            ConsumedField::Unknown => Coverage::Unknown,
+        }
+    }
+
+    #[must_use]
+    pub fn value(&self) -> Option<&Value> {
+        match self {
+            ConsumedField::Observed(v) => Some(v),
+            ConsumedField::Absent | ConsumedField::Unobserved | ConsumedField::Unknown => None,
+        }
+    }
+
+    fn from_coverage(coverage: Coverage, observed_value: &Value) -> Self {
+        match coverage {
+            Coverage::Observed => ConsumedField::Observed(observed_value.clone()),
+            Coverage::Absent => ConsumedField::Absent,
+            Coverage::Unobserved => ConsumedField::Unobserved,
+            Coverage::Unknown => ConsumedField::Unknown,
+        }
+    }
+}
 
 /// Ported from `conformance.go`'s `FieldPlan`: one comparable field path
 /// and its comparator. `path` is canonical (`"/shape"`, or relative within
@@ -86,16 +137,20 @@ impl ObjectConformance {
 }
 
 /// Ported from `conformance.go`'s `ConformanceResult` -- minus
-/// `IntentDigest`/`ObservationDigest`. See this module's own doc comment
-/// for why those are deliberately not here yet. `fields` is a `BTreeMap`,
-/// not Go's unordered `map[string]FieldVerdict` -- deterministic iteration
-/// order (byte-wise by path) rather than Go's none at all, consistent with
-/// every other ordering decision this document has made explicit (F5, C4)
-/// rather than left to chance.
+/// `IntentDigest`/`ObservationDigest` themselves (see `digest_projection.
+/// rs` for those). `fields` is a `BTreeMap`, not Go's unordered
+/// `map[string]FieldVerdict` -- deterministic iteration order (byte-wise
+/// by path) rather than Go's none at all, consistent with every other
+/// ordering decision this document has made explicit (F5, C4) rather than
+/// left to chance. `consumed` is this engine's own addition, not Go's --
+/// exactly the per-path coverage/value data F5's `ObservationDigestProjection`
+/// needs, recorded at the only point that actually knows it (here), not
+/// reconstructed later by re-walking the plan a second time.
 #[derive(Debug, Clone)]
 pub struct ObjectVerdict {
     pub object: ObjectConformance,
     pub fields: BTreeMap<String, FieldVerdict>,
+    pub consumed: BTreeMap<String, ConsumedField>,
 }
 
 /// Ported from `conformance.go`'s `Evaluate`: the object-level conformance
@@ -110,16 +165,33 @@ pub fn evaluate(
     plan: &ConformancePlan,
 ) -> ObjectVerdict {
     let mut fields = BTreeMap::new();
+    let mut consumed = BTreeMap::new();
 
     for fp in &plan.scalars {
-        classify_at(&mut fields, intent, observed, obs, &fp.path, fp.compare);
+        classify_at(
+            &mut fields,
+            &mut consumed,
+            intent,
+            observed,
+            obs,
+            &fp.path,
+            fp.compare,
+        );
     }
 
     for cp in &plan.collections {
         for ek in element_keys(intent, observed, cp) {
             for ef in &cp.elements {
                 let path = format!("{}/{{{ek}}}/{}", cp.path, ef.path);
-                classify_at(&mut fields, intent, observed, obs, &path, ef.compare);
+                classify_at(
+                    &mut fields,
+                    &mut consumed,
+                    intent,
+                    observed,
+                    obs,
+                    &path,
+                    ef.compare,
+                );
             }
         }
     }
@@ -127,27 +199,39 @@ pub fn evaluate(
     ObjectVerdict {
         object: aggregate(&fields),
         fields,
+        consumed,
     }
 }
 
 fn classify_at(
     fields: &mut BTreeMap<String, FieldVerdict>,
+    consumed: &mut BTreeMap<String, ConsumedField>,
     intent: &Value,
     observed: &Value,
     obs: &Observation,
     path: &str,
     compare: CompareType,
 ) {
+    let coverage = obs.coverage(path);
     let iv = resolve_path(intent, path);
     let ov = resolve_path(observed, path);
     let verdict = classify_field_value(
-        obs.coverage(path),
+        coverage,
         iv.is_some(),
         iv.unwrap_or(&Value::Null),
         ov.unwrap_or(&Value::Null),
         compare,
     );
     fields.insert(path.to_string(), verdict);
+    consumed.insert(
+        path.to_string(),
+        // F5's own rule, not invented here: a value is part of what the
+        // comparator consumed iff coverage is Observed -- every other
+        // state never reaches compare() at all (see classify_field_value,
+        // F6) -- enforced by construction, not by convention, via
+        // ConsumedField::from_coverage.
+        ConsumedField::from_coverage(coverage, ov.unwrap_or(&Value::Null)),
+    );
 }
 
 /// Ported from `conformance.go`'s `aggregate`: reduces per-field verdicts
