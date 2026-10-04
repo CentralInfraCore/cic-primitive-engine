@@ -488,15 +488,23 @@ new or separate location — see C4's own entry below. **C3's
 `conformance_plan_digest`/`observation_digest` rows are also now
 closed, by F5** (added later, while closing F): neither is a receipt
 field at all — both belong to the conformance/drift verdict artifact
-(F3), with their own scope and byte-level semantics decided there. What's
-open: the signature-field layout question just named, and C4's actual
-schema *text* (field-by-field layout — no longer blocked on any
-unresolved field, just not yet written).
+(F3), with their own scope and byte-level semantics decided there.
+**C4's core field layout is also now closed** (added later, while
+writing and then, on review, tightening it): `docs/RECEIPT-SCHEMA.md`
+lays out every field, cited to its source decision, every field
+REQUIRED, the two evidence arrays sorted by `.path` byte-wise and
+required-but-possibly-`[]`, `derived_values[].inputs` a deduplicated
+sorted set. "Schema text: CLOSED" is corrected to "core field layout:
+CLOSED" — three *extension/meta* fields stay open: the signature-field
+layout question just named, the coverage-projection question (F1/F4),
+and a new, small question found while writing the text — whether each
+receipt INSTANCE needs its own schema-version field.
 **Blocks:** differential conformance (G); proof-chain integration; full
-closure pending C4's schema text and F's comparator implementation
-(C5's evidence record, C3's engine-doesn't-sign sub-decision, C3's
-unresolved/unknown-markers row, C4's which-repo question, and C3's
-conformance_plan_digest/observation_digest rows no longer block this)
+closure pending F's comparator implementation and the signature-slot/
+coverage-projection decisions (C5's evidence record, C3's
+engine-doesn't-sign sub-decision, C3's unresolved/unknown-markers row,
+C4's which-repo question, C3's conformance_plan_digest/
+observation_digest rows, and C4's schema text no longer block this)
 **Decision ref:** `docs/MATERIALIZATION-SPEC.md#c--receipt-schema-partially-decided-not-closed`
 
 1. **Closed:** sibling artifact bound by digest, not IR-embedded — this
@@ -625,10 +633,46 @@ conformance_plan_digest/observation_digest rows no longer block this)
    a required-properties document, not a working schema; no formal
    schema exists yet for either artifact. The receipt is its sibling
    per item 1, produced by the identical pipeline — narrower precedent
-   than first stated, but real. **Still genuinely open:** the exact
-   in-repo path (trivial, non-blocking) and the schema's actual
-   field-by-field text, which still cannot be written until item 3's
-   remaining field-set rows close.
+   than first stated, but real.
+
+   **Update: the schema's actual field-by-field text has since been
+   written** (`docs/RECEIPT-SCHEMA.md`) — every field cited to its
+   source decision, version-identity facts laid out flat (one key per
+   D1 identifier, not nested, since D1 established they vary
+   independently), signature and coverage-projection fields
+   deliberately omitted (still open, not decided by writing the
+   layout). Writing it also surfaced a latent overlap this tracker
+   never named: C3's `schema.digest` row (from `BOUNDARY.md`'s pre-D1
+   sketch) and D1.3's richer three-part domain-schema-identity group
+   were never reconciled as the same slot — now one field
+   (`schema_digest`), not two. Also surfaced, and left open rather than
+   invented: whether each receipt INSTANCE needs its own schema-version
+   field.
+
+   **Correction (review-caught on PR #24): a field-name/type list is
+   not a byte-level contract — the same gap F5 had to fix one section
+   up, recurring here.** Nothing in the first version said whether
+   `applied_defaults`/`derived_values` may be omitted when empty, or
+   what order their entries (or `derived_values[].inputs`) appear in —
+   and section A's A6 deliberately doesn't sort `Seq`s, so two
+   conforming implementations could emit different bytes for the same
+   semantic receipt. Fixed: every field is now REQUIRED (extending
+   `PRIMITIVE-IR.md`'s Complete property to this sibling artifact), the
+   two evidence arrays are required-but-possibly-`[]`, both sort by
+   `.path` byte-wise, and `derived_values[].inputs` is decided — newly,
+   not inherited from C5 — to be a deduplicated sorted path set, not an
+   execution-order trace. **Also corrected: calling this whole item
+   "CLOSED" overstated it** — the *core field layout* is closed; three
+   extension/meta questions (signature slot, coverage projection,
+   receipt-instance schema-version) stay open, same distinction this
+   file already draws elsewhere between what a closure settles and
+   what it doesn't.
+
+   **Still genuinely open:** the exact in-repo path (trivial,
+   non-blocking — it landed at `docs/RECEIPT-SCHEMA.md`, not a claim no
+   other path was possible), the signature-slot question, the
+   coverage-projection question, and the receipt-instance
+   schema-version question just found.
 5. **CLOSED — classification and evidence, both specified; review
    caught an overclaim here too, on the way to closing it.** B3's
    `provenance` was first wrongly scoped "intent/input side only,"
