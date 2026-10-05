@@ -36,6 +36,7 @@ package conformance
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"strconv"
 
@@ -52,6 +53,30 @@ const (
 	CoverageUnobserved Coverage = "unobserved"
 	CoverageUnknown    Coverage = "unknown"
 )
+
+// Valid reports whether c is one of the four coverage states this
+// package defines. Go's type system has no closed-enum guarantee the
+// way the Rust peer's Coverage enum does -- Coverage("garbage")
+// compiles and type-checks here, where the equivalent would not even
+// build on the Rust side. ClassifyField and Observation.Set call this
+// at their own boundary and panic rather than silently computing a
+// plausible-looking verdict for a value that was never a real
+// Coverage -- review-caught on PR #31: an invalid Coverage used to
+// fall through a switch's default case straight to UNOBSERVED,
+// indistinguishable from a genuinely unobserved field. The Go peer of
+// this crate's own "an invariant the type system can't enforce gets
+// checked and rejected at its boundary instead" pattern (compare
+// Value::BigInt's own invariant, or canonical_integer's .expect on the
+// Rust side) -- a panic, not a silent fallback, because this is a
+// programming error on the caller's part, not a runtime condition the
+// caller can usefully recover from.
+func (c Coverage) Valid() bool {
+	switch c {
+	case CoverageObserved, CoverageAbsent, CoverageUnobserved, CoverageUnknown:
+		return true
+	}
+	return false
+}
 
 // Observation is a per-path coverage lookup for the object-level walker
 // (the Go peer of plan.go, not yet written) -- not a port of Relay's
@@ -72,7 +97,15 @@ func NewObservation() *Observation {
 // the first -- this type makes no claim about which call "should win"
 // for a path recorded twice; that is the caller's own invariant to
 // hold, same as on the Rust side.
+//
+// Panics if c is not one of the four coverage states Coverage.Valid
+// recognizes -- see that method's doc comment for why this fails
+// closed instead of storing (and later silently misclassifying) a
+// value that was never a real Coverage.
 func (o *Observation) Set(path string, c Coverage) {
+	if !c.Valid() {
+		panic(fmt.Sprintf("conformance: invalid Coverage %q for path %q", string(c), path))
+	}
 	o.byPath[path] = c
 }
 
@@ -99,6 +132,20 @@ const (
 	CompareNumeric CompareType = "numeric"
 )
 
+// Valid reports whether ct is one of the two comparator types this
+// package defines. See Coverage.Valid's doc comment for why Compare
+// checks this and panics rather than silently falling back to one
+// comparator for any unrecognized value -- review-caught on PR #31:
+// Compare(..., CompareType("garbage")) used to silently run the exact
+// comparator, indistinguishable from an explicit CompareExact.
+func (ct CompareType) Valid() bool {
+	switch ct {
+	case CompareExact, CompareNumeric:
+		return true
+	}
+	return false
+}
+
 // FieldVerdict is the per-field conformance verdict -- identical to
 // observation.go's own five FieldVerdict string constants, the literal
 // docs/VERDICT-SCHEMA.md's fields map commits to per path.
@@ -116,7 +163,17 @@ const (
 // returns (matched, comparable) -- matched is meaningful only when
 // comparable is true; the caller surfaces an incomparable pair as
 // NOT_COMPARABLE, never as a false DRIFT.
+//
+// Panics if ct is not CompareExact or CompareNumeric -- deliberately
+// not folded into the (matched, comparable) result (e.g. as a false
+// "not comparable"), which would conflate a genuine NOT_COMPARABLE
+// verdict (both sides well-formed, just not comparable to each other)
+// with a caller passing a value that was never a real CompareType to
+// begin with. See CompareType.Valid's doc comment.
 func Compare(intent, observed interface{}, ct CompareType) (matched, comparable bool) {
+	if !ct.Valid() {
+		panic(fmt.Sprintf("conformance: invalid CompareType %q", string(ct)))
+	}
 	if ct == CompareNumeric {
 		return compareNumeric(intent, observed)
 	}
@@ -314,7 +371,16 @@ func asRational(v interface{}) (*big.Rat, bool) {
 // own doc comment): a device-reported indeterminate value is not
 // authoritative evidence either way, so conformance cannot be claimed
 // from it.
+//
+// Panics if coverage is not one of Coverage's four defined values --
+// see Coverage.Valid's doc comment. The switch below enumerates
+// CoverageUnobserved and CoverageUnknown explicitly rather than
+// folding both into one default case, specifically so that case can
+// never also catch a value Coverage.Valid would have rejected.
 func ClassifyField(coverage Coverage, intentPresent, matched bool) FieldVerdict {
+	if !coverage.Valid() {
+		panic(fmt.Sprintf("conformance: invalid Coverage %q", string(coverage)))
+	}
 	switch coverage {
 	case CoverageObserved:
 		if matched {
@@ -326,8 +392,11 @@ func ClassifyField(coverage Coverage, intentPresent, matched bool) FieldVerdict 
 			return VerdictDrift
 		}
 		return VerdictObservedAbsent
-	default: // CoverageUnobserved, CoverageUnknown
+	case CoverageUnobserved, CoverageUnknown:
 		return VerdictUnobserved
+	default:
+		// Unreachable: Valid() above already rejected anything else.
+		panic(fmt.Sprintf("conformance: invalid Coverage %q", string(coverage)))
 	}
 }
 

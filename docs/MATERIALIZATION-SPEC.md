@@ -2593,6 +2593,29 @@ the same not-yet-built-object-level-walker reason `conformance.rs`'s
 own doc comment gives), `CompareType`, `FieldVerdict`, `Compare`,
 `ClassifyField`, `ClassifyFieldValue`.
 
+**Review-caught, fixed before merge: Go's lack of a closed enum let an
+invalid `Coverage`/`CompareType` silently compute a plausible-looking
+wrong verdict.** `Coverage` and `CompareType` are `string`-backed types
+in Go, not Rust-style sum types — `Coverage("garbage")` compiles and
+type-checks, where the equivalent would not even build on the Rust
+side. `ClassifyField`'s switch used to end in a bare
+`default: return VerdictUnobserved`, so an invalid `Coverage` was
+silently indistinguishable from a genuinely unobserved field; `Compare`
+used to run the exact comparator for anything that wasn't literally
+`CompareNumeric`, so an invalid `CompareType` was silently
+indistinguishable from an explicit `CompareExact`. Both reproduced
+directly before being fixed. **Fix: `Coverage.Valid()`/
+`CompareType.Valid()`, checked at `Compare`, `ClassifyField` and
+`Observation.Set`'s own boundary, panicking on an invalid value rather
+than folding it into an existing verdict** (explicitly not into
+`NOT_COMPARABLE`, which would conflate a genuine incomparable-pair
+verdict with a caller error) — the Go peer of this crate's own
+"an invariant the type system can't enforce gets checked and rejected
+at its boundary instead" pattern (`Value::BigInt`'s own invariant,
+`canonical_integer`'s `.expect`), fail-closed rather than silently
+plausible, matching the exact principle PR #29's review already
+established for `ConsumedField` on the Rust side.
+
 **One piece needed no porting at all: the numeric comparator's string
 grammar.** `engine/src/conformance.rs`'s `rat_from_string` spent two
 PR #25 review rounds hand-porting `math/big.Rat.SetString`'s full

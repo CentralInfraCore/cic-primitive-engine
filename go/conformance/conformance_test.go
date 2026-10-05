@@ -193,6 +193,77 @@ func TestObservationDefaultsToUnobserved(t *testing.T) {
 	}
 }
 
+func expectPanic(t *testing.T, name string, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Errorf("%s: expected a panic, got none", name)
+		}
+	}()
+	fn()
+}
+
+// Review-caught on PR #31: an invalid Coverage/CompareType -- a value
+// Go's type system cannot rule out the way the Rust peer's enums do --
+// used to silently fall through to a plausible-looking verdict instead
+// of being rejected. ClassifyField(garbage, ...) returned UNOBSERVED
+// (indistinguishable from a genuinely unobserved field) and
+// Compare(..., garbage) silently ran the exact comparator
+// (indistinguishable from an explicit CompareExact). Both are now
+// expected to panic -- fail closed, not silently plausible.
+//
+// Each test below was first run against the pre-fix code (coverage's
+// switch ending in a bare "default: return VerdictUnobserved", and
+// Compare's "if ct == CompareNumeric {...}; return compareExact(...)")
+// to confirm it actually failed to panic there, not just that it
+// passes now -- the same sabotage-and-restore discipline this repo's
+// Rust side already applies to its own new tests.
+func TestInvalidCoverageFailsClosedInClassifyField(t *testing.T) {
+	expectPanic(t, "ClassifyField", func() {
+		ClassifyField(Coverage("garbage"), true, false)
+	})
+}
+
+func TestInvalidCompareTypeFailsClosedInCompare(t *testing.T) {
+	expectPanic(t, "Compare", func() {
+		Compare("1", "1", CompareType("garbage"))
+	})
+}
+
+func TestInvalidCoverageFailsClosedInClassifyFieldValue(t *testing.T) {
+	expectPanic(t, "ClassifyFieldValue (bad coverage)", func() {
+		ClassifyFieldValue(Coverage("garbage"), true, "x", "x", CompareExact)
+	})
+	expectPanic(t, "ClassifyFieldValue (bad compare type, observed)", func() {
+		ClassifyFieldValue(CoverageObserved, true, "x", "x", CompareType("garbage"))
+	})
+}
+
+func TestInvalidCoverageFailsClosedInObservationSet(t *testing.T) {
+	expectPanic(t, "Observation.Set", func() {
+		NewObservation().Set("/x", Coverage("garbage"))
+	})
+}
+
+func TestValidReportsExactlyTheDefinedConstants(t *testing.T) {
+	for _, c := range []Coverage{CoverageObserved, CoverageAbsent, CoverageUnobserved, CoverageUnknown} {
+		if !c.Valid() {
+			t.Errorf("Coverage %q should be valid", c)
+		}
+	}
+	if Coverage("garbage").Valid() {
+		t.Error("Coverage(\"garbage\") should not be valid")
+	}
+	for _, ct := range []CompareType{CompareExact, CompareNumeric} {
+		if !ct.Valid() {
+			t.Errorf("CompareType %q should be valid", ct)
+		}
+	}
+	if CompareType("garbage").Valid() {
+		t.Error("CompareType(\"garbage\") should not be valid")
+	}
+}
+
 // The exact string literals docs/VERDICT-SCHEMA.md's fields map and
 // F5's ObservationDigestProjection commit to per path -- verified
 // directly against observation.go's own constants.
