@@ -3,9 +3,10 @@
 **A module does not interpret CIC schema. This engine interprets it,
 materializes it, and proves it; the module works only on the closed data set.**
 
-A Rust **library and CLI** that turns a CIC composition into validated,
-materialized `PrimitiveIR`. Generators — YANG, RESTCONF, Kubernetes, Go, the
-Relay — consume the IR, never the YAML.
+A Rust **library and CLI**, with a Go module alongside it (`go/`), that
+turns a CIC composition into validated, materialized `PrimitiveIR`.
+Generators — YANG, RESTCONF, Kubernetes, Go, the Relay — consume the IR,
+never the YAML.
 
 > **Status: early.** `error` and `reader` are extracted and working.
 > `canonical` implements `Stage::Canonicalize`'s byte format, `role`
@@ -22,13 +23,17 @@ Relay — consume the IR, never the YAML.
 > types. The conformance/drift verdict artifact's own schema text lives
 > in `docs/VERDICT-SCHEMA.md`, not in this crate's own types directly.
 > Go's analogous `IntentDigest` has no equivalent yet, since it needs a
-> `Normalize` stage this engine doesn't have; no Go peer exists for
-> `conformance`/`collection`/`plan`/`digest_projection` at all. None of
-> this is wired into a pipeline stage, because `Parse` and the rest of
-> `Normalize`/`Resolve`/`Validate` don't exist. Access's own short/long
-> form is deliberately not here yet — its instance grammar is still
-> undecided upstream (`cic-primitives#17`). Nothing here is a stable
-> API.
+> `Normalize` stage this engine doesn't have. **`go/` now carries a Go
+> peer for two of the five Rust modules above** — `go/canonical`
+> (section A) and `go/conformance` (section F's comparator primitive),
+> each independently verified against the same decided contract, not
+> against each other yet (step 5 of this effort, a shared/differential
+> corpus, hasn't landed). No Go peer exists yet for `collection`, `plan`
+> or `digest_projection`. None of this is wired into a pipeline stage,
+> because `Parse` and the rest of `Normalize`/`Resolve`/`Validate` don't
+> exist, in either language. Access's own short/long form is
+> deliberately not here yet — its instance grammar is still undecided
+> upstream (`cic-primitives#17`). Nothing here is a stable API.
 
 ---
 
@@ -160,6 +165,15 @@ cargo run -p cic-primitive-engine-cli -- read <file.yaml>
 ```
 
 No local toolchain? `docker run --rm -v "$PWD":/w -w /w rust:1-slim cargo test --workspace`
+
+The Go module (`go/`) is independent of the Cargo workspace above — its
+own `go.mod`, no cgo, no dependency on this crate or on `CIC-Relay`.
+
+```bash
+cd go && go build ./... && go vet ./... && go test ./...
+```
+
+No local toolchain? `docker run --rm -v "$PWD/go":/w -w /w golang:1.25-alpine go test ./...`
 
 ## Licence
 

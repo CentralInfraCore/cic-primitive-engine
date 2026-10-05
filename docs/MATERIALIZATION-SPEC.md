@@ -1803,8 +1803,16 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          docs/VERDICT-SCHEMA.md -- AND the procedural relationship
          between the verdict, the receipt, and ProofTrace, decided
          independent: evaluate's own signature has no receipt-typed
-         input and calls nothing that produces one).
-Open:    Go's analogous IntentDigest still has no equivalent here --
+         input and calls nothing that produces one), and F11 (F6's
+         comparator primitive -- Compare/ClassifyField/
+         ClassifyFieldValue -- now has a Go peer too, go/conformance,
+         independently verified against the identical contract F6
+         already implements in Rust; go/canonical, the Go peer of
+         section A's canonical.rs, lands alongside it as a
+         prerequisite -- see the F11 subsection, below).
+Open:    No Go peer yet for F7 (collection.rs) or F8/F9 (plan.rs/
+         digest_projection.rs) -- F11 covers only F6. Go's analogous
+         IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
          doesn't yet mean the same thing here it does in Go, and
@@ -1902,9 +1910,12 @@ canonicalization.
 (F8, `engine/src/plan.rs`) together port `compare.go`/`observation.go`/
 `collection.go`/`conformance.go` in full, tested against every real Go
 vector those files' own test suites carry, including all seven of
-`conformance_test.go`'s end-to-end OCI scenarios. Still **no Go peer**
-— the comparator exists only in Rust, the mirror image of the gap this
-paragraph originally named. What F8 does not produce is
+`conformance_test.go`'s end-to-end OCI scenarios. **Update (Go peer,
+`go/conformance`):** the comparator (`compare`/`ClassifyFieldValue`,
+F6's slice only) now has a Go peer too, independently verified against
+the identical contract -- see the Go-peer subsection after F10, below.
+`Collection::element_key` (F7) and the object-level walker (F8) still
+have none. What F8 does not produce is
 `conformance_plan_digest`/`observation_digest` (F5's two projections) —
 wiring those to the real plan/observation types is a separate,
 not-yet-done step, named in `plan.rs`'s own doc comment.
@@ -2009,7 +2020,9 @@ citation does not belong here" discipline settles it without one.
   commit to, not that code. **Since implemented in Rust: F6
   (`compare`/`classify_field_value`), F7 (`Collection::element_key`),
   and F8 (the walk itself, `ConformancePlan`/`evaluate`/`aggregate`/
-  `elementKeys`/`resolvePath`) — still no Go peer.**
+  `elementKeys`/`resolvePath`). Update: F6 now also has a Go peer
+  (`go/conformance`, see the Go-peer subsection after F10, below) —
+  F7/F8 still have none.**
 - **Update (F10): how artifact 2 (receipt) and artifact 3 (conformance
   verdict) relate procedurally is now decided — independent.**
   `evaluate` (F8) takes no receipt-typed input and calls nothing that
@@ -2542,6 +2555,64 @@ receipt-specific closure — not extended here by default, genuinely
 open rather than silently inherited), add an intent-digest-equivalent
 field (same `Normalize`-stage gap F8/F9 already named), or address a
 Go peer for any of this (none exists).
+
+### F11. A Go peer for F6's comparator primitive — `go/canonical`, `go/conformance`
+
+Every F6-F10 primitive above exists only in Rust — the "no Go peer"
+line repeated at each one. This begins closing that, starting with F6
+(the smallest, most self-contained of the four: F7/F8/F9 all build on
+it). New, independent Go module at this repo's own `go/` (its own
+`go.mod`, no cgo, no dependency on this crate or on `CIC-Relay` — same
+"migration source, not a build dependency" policy A0/`canonical.rs`'s
+own doc comment already applies to the Rust side).
+
+**`go/canonical` — section A's byte format, the Go peer of
+`engine/src/canonical.rs`.** Unlike the Rust side, which had to
+hand-port Go's own behaviour because it had no access to Go's standard
+library, this package mostly just calls that library directly:
+`encoding/json`'s string marshaling already **is** A4's escaping rule
+(not a separately-verified approximation of it), and `sort.Strings`
+already **is** A2's key order. The one piece written by hand is the
+one-pass tree walk `ToCanonicalJSON`/`Digest` that mirrors
+`canonical.rs`'s own two-function API exactly — `CIC-Relay`'s own
+`pkg/canonicaljson`/`core/nexus/iac/number.go`/`digest.go` split the
+identical logic across three files and two passes (a `normalizeNumbers`
+pass, then `canonicaljson.ToJSON`); this package merges them into one
+pass, matching the single-function contract section A already decided,
+not reproducing that migration source's internal plumbing (the same
+A0 "migration source, not a second contract" principle applied here as
+everywhere else it already governs this document).
+
+**`go/conformance` — F6's comparator, the Go peer of
+`engine/src/conformance.rs`.** Same public surface: `Coverage` (B3's
+four values, including `unknown` — Relay's own two-list
+`Observation{Observed, AuthoritativeAbsent}` envelope has no fourth
+state and is not what this type adapts, exactly as on the Rust side),
+`Observation` (a fresh per-path map, not a port of that envelope, for
+the same not-yet-built-object-level-walker reason `conformance.rs`'s
+own doc comment gives), `CompareType`, `FieldVerdict`, `Compare`,
+`ClassifyField`, `ClassifyFieldValue`.
+
+**One piece needed no porting at all: the numeric comparator's string
+grammar.** `engine/src/conformance.rs`'s `rat_from_string` spent two
+PR #25 review rounds hand-porting `math/big.Rat.SetString`'s full
+grammar, because Rust has no access to that function itself. This
+package has nothing to port here — it calls `big.Rat.SetString`
+directly, exactly as `compare.go`'s own `ratFromString` already does.
+The grammar-parity test vectors are kept as a differential pin against
+the Rust side's own table (confirming both sides still agree on what
+`SetString` does), not as new coverage of anything this package itself
+implements.
+
+**What this does not do:** port F7 (`collection.rs`), F8 (`plan.rs`) or
+F9 (`digest_projection.rs`) to Go — each is a separate, larger step
+(F7/F8 in particular require a value-tree representation decision this
+package sidesteps by using Go's own `interface{}` directly, matching
+`compare.go`'s own convention rather than inventing a parallel `Value`
+enum) — or wire up a cross-language differential corpus comparing this
+package's output to `engine/src/conformance.rs`'s (a planned, separate
+step; each side is independently verified against the decided contract
+here, not against each other yet).
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
