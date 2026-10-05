@@ -400,3 +400,35 @@ func TestNonObservedConstructorsHaveNoValueParameter(t *testing.T) {
 	_ = NewUnobservedConsumedField()
 	_ = NewUnknownConsumedField()
 }
+
+// Review-caught on PR #34: per-state constructors close off
+// constructing a WRONG coverage/value combination, but Go's zero
+// value exists for every struct regardless of whether any constructor
+// was ever called -- var zero ConsumedField compiles to {coverage:
+// "", value: nil} with no error. Valid() exists specifically to catch
+// this at whatever boundary consumes a ConsumedField (go/
+// digestprojection's own ObservationDigestProjection, in this
+// package's case).
+func TestZeroValueConsumedFieldIsNotValid(t *testing.T) {
+	var zero ConsumedField
+	if zero.Valid() {
+		t.Error("the zero value must not be Valid()")
+	}
+	if v, ok := zero.Value(); ok || v != nil {
+		t.Errorf("zero.Value() = (%v, %v), want (nil, false)", v, ok)
+	}
+}
+
+func TestValidConsumedFieldsReportValid(t *testing.T) {
+	for _, cf := range []ConsumedField{
+		NewObservedConsumedField("x"),
+		NewObservedConsumedField(nil), // observed, but the value itself is nil -- still valid
+		NewAbsentConsumedField(),
+		NewUnobservedConsumedField(),
+		NewUnknownConsumedField(),
+	} {
+		if !cf.Valid() {
+			t.Errorf("%+v should be Valid()", cf)
+		}
+	}
+}

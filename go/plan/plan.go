@@ -245,6 +245,37 @@ func (c ConsumedField) Value() (interface{}, bool) {
 	return c.value, true
 }
 
+// Valid reports whether c is one of the four states the exported
+// constructors (or fromCoverage) can actually produce.
+//
+// Review-caught on PR #34: closing off the public CONSTRUCTORS (PR
+// #33's own fix) does not close off Go's zero value, which exists for
+// every struct type regardless of whether any constructor was ever
+// called. var zero plan.ConsumedField compiles to {coverage: "",
+// value: nil} with no error -- zero.Coverage() is the empty string,
+// not a rejection -- and nothing stopped it from flowing straight into
+// ObservationDigestProjection's output ({"path": p, "coverage": ""}),
+// which canonical.ToCanonicalJSON then digests without complaint: a
+// SHA-256 of an invalid semantic state, the exact "invalid state
+// type-checks, canonicalizes and digests without complaint" shape PR
+// #29 already named a defect, reached this time through Go's zero
+// value rather than through either a struct literal or a constructor
+// argument. Per-state constructors close off the FIRST category (a
+// wrong coverage/value combination); they cannot close off the
+// SECOND (never having called a constructor at all) -- only an
+// explicit check at the consuming boundary can, which is what this
+// method is for.
+func (c ConsumedField) Valid() bool {
+	switch c.coverage {
+	case conformance.CoverageObserved:
+		return true
+	case conformance.CoverageAbsent, conformance.CoverageUnobserved, conformance.CoverageUnknown:
+		return c.value == nil
+	default:
+		return false
+	}
+}
+
 // ObjectVerdict is the object-level conformance verdict -- the Go
 // peer of plan.rs's own ObjectVerdict, minus IntentDigest/
 // ObservationDigest themselves (the future F9 Go peer's job). Fields

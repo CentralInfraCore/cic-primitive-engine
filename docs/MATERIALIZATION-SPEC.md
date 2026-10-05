@@ -1819,9 +1819,15 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          Evaluate/aggregate/elementKeys/resolvePath -- now also has a
          Go peer, go/plan, peering against plan.rs's already-FIXED
          multi-key resolve_path, not conformance.go's original bug --
-         see the F13 subsection, below).
-Open:    No Go peer yet for F9 (digest_projection.rs) -- F11/F12/F13
-         cover F6/F7/F8 only. Go's analogous
+         see the F13 subsection, below), and F14 (F9's digest wiring --
+         PlanDigestProjection/ConformancePlanDigest/
+         ObservationDigestProjection/ObservationDigest -- now also has
+         a Go peer, go/digestprojection, which must sort consumed's
+         keys itself where the Rust side gets that for free from
+         BTreeMap -- see the F14 subsection, below). Every Rust module
+         from F6 through F9 now has a Go peer; none have been
+         cross-checked against each other yet (G's own job).
+Open:    Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
@@ -2820,6 +2826,87 @@ protect; added only where a real one exists, not everywhere the
 pattern *could* apply. Also does not port F9 (`digest_projection.rs`)
 to Go, or wire up the cross-language differential corpus (same two
 items F11/F12 already named, still open).
+
+### F14. A Go peer for F9's digest wiring — `go/digestprojection`
+
+Same pattern as F11/F12/F13, closing F9's own Go-side gap: `go/
+digestprojection` is the Go peer of `engine/src/digest_projection.rs`
+(F9), same public surface (`PlanDigestProjection`,
+`ConformancePlanDigest`, `ObservationDigestProjection`,
+`ObservationDigest`). This module decides nothing new on either side
+of the language boundary — F5 already specified both projections'
+exact shape and ordering rule, F9 already wired it to the Rust types;
+this package builds the identical shape from `go/plan`'s own types and
+digests it with `go/canonical`.
+
+**Sorting is this package's own job, where the Rust side gets it for
+free.** `digest_projection.rs`'s own doc comment notes that
+`consumed` is already a `BTreeMap<String, _>`, so its iteration order
+already *is* the byte-wise-by-path sort F5 requires — "this function
+does not re-sort what's already sorted." `go/plan` deliberately chose
+a plain Go map for `ObjectVerdict.Consumed` instead (that package's
+own doc comment: "a future caller... sorts keys at the point it
+actually needs them"). `go/digestprojection` is exactly that future
+caller, and that point: `ObservationDigestProjection` sorts
+`consumed`'s keys itself — a real, visible difference in *where* the
+sort happens, not a gap.
+
+**`PlanDigestProjection` validates `cp` itself, extending F13's own
+lesson to a second, independent entry point for a `ConformancePlan`.**
+`plan.Evaluate` already calls `ConformancePlan.Validate()` at its own
+boundary (F13's review fix) — but `PlanDigestProjection`/
+`ConformancePlanDigest` can be called on a plan that was never passed
+to `Evaluate` at all, to digest the plan on its own. Without an
+independent check here, an invalid `CompareType`/`CollectionTopology`
+string would flow straight into the `"compare"`/`"topology"` fields:
+unlike a value digested through `canonical.ToCanonicalJSON`'s own
+exhaustive type switch (which already rejects anything outside its
+known shapes), a bare `string(fp.Compare)` conversion never rejects
+anything — `"garbage"` is just as valid a Go `string` as `"exact"` is.
+Applied proactively here, before a review round had to ask for it a
+second time on this exact category of gap.
+
+**Review-caught on PR #34 anyway, a fourth instance of the same
+underlying principle: `ConsumedField`'s Go zero value is not one of
+its own four legitimate states, and F13's per-state constructors
+cannot close that off.** `var zero plan.ConsumedField` compiles to
+`{coverage: "", value: nil}` with no error — Go gives every struct a
+zero value regardless of whether any constructor was ever called,
+which no amount of constructor discipline can prevent (unlike the
+*combination* problem F13 fixed, which constructors genuinely do
+close off). Before this fix, that zero value flowed straight through
+`ObservationDigestProjection` into a legitimate-looking
+`{"path": p, "coverage": ""}` entry, canonicalized and SHA-256'd with
+no error at all — reproduced directly: a map with one zero-value
+entry digested successfully. **Fix: `ConsumedField.Valid()`** (`go/
+plan`), checked by `ObservationDigestProjection` for every entry,
+panicking on anything that isn't one of the four states its own
+constructors actually produce. The general lesson, now four times
+over (`Value::BigInt` → B3's `Option<Value>` → `ConsumedField`'s enum
+→ `Coverage`/`CompareType`/`CollectionTopology`'s `Valid()` → now
+this): closing off the *constructors* of a type is necessary but not
+sufficient in a language with implicit zero values; the *consuming*
+boundary must check too.
+
+**Minor, non-blocking review note addressed in the same pass:** the
+three internal sorts here used `sort.Slice` (unstable); switched to
+`sort.SliceStable` to match `plan.rs`'s own `sort_by` (stable), so two
+entries sharing a path (which the contract does not currently forbid)
+keep a deterministic relative order rather than one that could vary
+between runs. Whether duplicate paths should be rejected outright by
+`ConformancePlan.Validate()` is a separate, still-open question this
+fix does not answer — noted for the differential-corpus step, which
+would surface any resulting nondeterminism immediately.
+
+**What this does not do:** wire up the cross-language differential
+corpus comparing this package's output to `digest_projection.rs`'s
+(the same item F11/F12/F13 already named, still open — this closes
+the last Rust module without a Go peer, F6 through F9, but none of
+the four packages have been cross-checked against each other yet).
+Does not address `conformance_plan_digest`/`observation_digest`'s own
+pipeline wiring either — same as the Rust side, nothing here is wired
+into an actual `Parse`/`Normalize`/`Resolve`/`Validate` stage, because
+none of those exist yet in either language.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
