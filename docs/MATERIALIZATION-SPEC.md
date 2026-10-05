@@ -1809,9 +1809,15 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          independently verified against the identical contract F6
          already implements in Rust; go/canonical, the Go peer of
          section A's canonical.rs, lands alongside it as a
-         prerequisite -- see the F11 subsection, below).
-Open:    No Go peer yet for F7 (collection.rs) or F8/F9 (plan.rs/
-         digest_projection.rs) -- F11 covers only F6. Go's analogous
+         prerequisite -- see the F11 subsection, below), and F12 (F7's
+         collection-topology/element-identity primitive -- Collection/
+         CollectionTopology/ElementKey -- now also has a Go peer,
+         go/collection, which caught and fixed a real, previously-
+         uncaught negative-zero divergence between the Rust port and
+         real Go in the process -- see F7's own correction and the F12
+         subsection, below).
+Open:    No Go peer yet for F8/F9 (plan.rs/digest_projection.rs) --
+         F11/F12 cover F6/F7 only. Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
@@ -2365,6 +2371,23 @@ reference being ported, unrelated to how faithfully it's ported here.
 `Evaluate`, or `aggregate` — see F8, immediately below, for why that's
 no longer an open gap either.
 
+**Correction (found while building this crate's Go peer, `go/collection`,
+F12 below, PR #32 — not caught by review on PR #27): `go_float_display`
+folded negative zero to `"0"` unconditionally, on the unverified
+assumption that `fmt.Sprintf("%v", ...)` treats zero the way section
+A's own `canonical_float` does.** It does not. Verified empirically:
+real Go's `json.Unmarshal([]byte("-0.0"), &f)` followed by
+`fmt.Sprintf("%v", f)` prints `"-0"` — the sign survives decoding,
+because `f == 0.0` is true for both IEEE754 zeros but they are not the
+same bit pattern. The previous test vector asserted `(-0.0, "0")`,
+which was simply wrong and went uncaught because nobody had actually
+run that one vector against real Go output before encoding it, despite
+the test's own comment claiming every vector had been — the exact same
+category of lapse PR #25's `rat_from_string` grammar gap and PR #28's
+`resolvePath` bug both already named for this session, now found a
+third time, from the Go-peer side rather than a human review catching
+it. Fixed: `is_sign_negative()` now decides which literal to return.
+
 ### F8. The object-level walker — implemented (Rust), closing F1's executable-logic gap
 
 `engine/src/plan.rs` ports `conformance.go`'s `FieldPlan`/
@@ -2627,15 +2650,82 @@ the Rust side's own table (confirming both sides still agree on what
 `SetString` does), not as new coverage of anything this package itself
 implements.
 
-**What this does not do:** port F7 (`collection.rs`), F8 (`plan.rs`) or
-F9 (`digest_projection.rs`) to Go — each is a separate, larger step
-(F7/F8 in particular require a value-tree representation decision this
-package sidesteps by using Go's own `interface{}` directly, matching
-`compare.go`'s own convention rather than inventing a parallel `Value`
-enum) — or wire up a cross-language differential corpus comparing this
-package's output to `engine/src/conformance.rs`'s (a planned, separate
-step; each side is independently verified against the decided contract
-here, not against each other yet).
+**What this does not do:** port F8 (`plan.rs`) or F9
+(`digest_projection.rs`) to Go — each is a separate, larger step — or
+wire up a cross-language differential corpus comparing this package's
+output to `engine/src/conformance.rs`'s (a planned, separate step;
+each side is independently verified against the decided contract here,
+not against each other yet). F7 (`collection.rs`) now also has a Go
+peer — see F12, immediately below.
+
+### F12. A Go peer for F7's collection-topology/element-identity primitive — `go/collection`
+
+Same pattern as F11, one step further: `go/collection` is the Go peer
+of `engine/src/collection.rs` (F7), same public surface
+(`CollectionTopology`, `Collection`, `ElementKey`).
+
+**Needed even less hand-porting than `go/conformance` did.**
+`collection.rs`'s own `go_display`/`go_float_display` exist only
+because Rust has no built-in equivalent of Go's `fmt.Sprintf("%v",
+...)` — this package has one, and calls it directly on the real
+`interface{}` tree, correctly reproducing plain-vs-scientific float
+notation, slice/map rendering and sorted map keys for free, because
+that behavior already **is** what this package is peering against,
+not an approximation of it. A missing map-topology key field needed no
+special case either: indexing `m[k]` for an absent key already returns
+the nil `interface{}` zero value, and `fmt.Sprintf("%v", nil)` already
+prints `"<nil>"` — both automatic, where `collection.rs` had to
+hand-replicate them.
+
+**Review-caught blocker on PR #32, fixed before merge: `elem`'s input
+domain was assumed, not validated.** Calling `fmt.Sprintf("%v", elem)`
+directly, as the first version of this file did, happily formats
+**any** Go value — a struct, a pointer, a `[]float64`, a
+`map[int]string` — into a plausible-looking identity with no
+equivalent in the Rust peer's closed `Value`-tree (`collection.rs`'s
+`elem` is a `&Value`, which simply cannot be any of those shapes).
+Worse, the non-finite pre-check (`containsNonFinite`) only ever
+recursed into `[]interface{}`/`map[string]interface{}`, so a
+`[]float64{1, NaN}` slipped past it entirely and produced `"[1 NaN]"`
+— the exact "NaN masquerading as a stable identity" result that check
+exists to prevent, just via a container shape it didn't recognize.
+Reproduced directly before fixing: `ElementKey(struct{ X int }{1})`
+→ `"{1}"`, `ElementKey([]float64{1, 2})` → `"[1 2]"`. **Fix: a new,
+shared `canonical.IsValue(v)` (exported from `go/canonical`, not
+redefined per-package) validates `elem` is nil/bool/string/a numeric
+kind/`json.Number`, or a `[]interface{}`/`map[string]interface{}`
+built recursively from the same set — this package's own value domain,
+the Go peer of what Rust's `Value` enum can hold by construction.**
+`ElementKey` panics on anything `IsValue` refuses, for the whole
+element (not only the key fields a map-topology lookup actually
+reads — a struct value nested in an unrelated field must be rejected
+too). The same "the type system can't close this off, so the boundary
+must" principle PR #31 already established for `Coverage`/
+`CompareType`, now shared as one authority rather than redefined a
+third time.
+
+**Found a real, previously-uncaught cross-language divergence while
+building this:** F7's own negative-zero bug, named in its own
+subsection above — `collection.rs`'s `go_float_display` folded `-0.0`
+to `"0"`, but real Go's `%v` prints `"-0"`. This package's own test for
+the same vector caught it immediately (it just calls `fmt.Sprintf`
+directly, so there was nowhere for the bug to hide on this side), and
+the Rust side was fixed to match, in the same PR as this package — the
+first time in this effort the Go-peer work itself found a bug, rather
+than a human review.
+
+**Applying PR #31's review lesson proactively, before a second review
+round had to ask for it:** `CollectionTopology`, like `Coverage`/
+`CompareType` before it, is a `string`-backed Go type with no
+closed-enum guarantee. `CollectionTopology.Valid()` is checked at
+`ElementKey`'s own boundary, panicking on an invalid value rather than
+silently falling through to `TopologyAtomic`'s behavior — written in
+from the start this time, not added after a review round found the gap
+a third time.
+
+**What this does not do:** port F8 (`plan.rs`) or F9
+(`digest_projection.rs`) to Go, or wire up the cross-language
+differential corpus (same two items F11 already named, still open).
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

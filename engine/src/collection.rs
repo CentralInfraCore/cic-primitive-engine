@@ -184,7 +184,23 @@ fn go_float_display(f: f64) -> Option<String> {
         return None;
     }
     if f == 0.0 {
-        return Some("0".to_string()); // folds -0.0 the same way canonical_float does
+        // Correction (found while building this crate's Go peer,
+        // go/collection, PR #32): unlike `canonical_float` (section A, a
+        // DIFFERENT algorithm, not reused here -- see this module's own
+        // doc comment), `fmt.Sprintf("%v", ...)` does NOT fold negative
+        // zero. Verified empirically: real Go's `json.Unmarshal("-0.0",
+        // &f)` followed by `fmt.Sprintf("%v", f)` prints "-0", not "0" --
+        // the sign survives decoding. This function's own early return
+        // used to fold both signs to "0" unconditionally, which this
+        // crate's own test suite never caught because nobody had run
+        // this specific vector against real Go output before encoding
+        // it; `is_sign_negative()` distinguishes the two IEEE754 zeros
+        // even though `f == 0.0` is true for both.
+        return Some(if f.is_sign_negative() {
+            "-0".to_string()
+        } else {
+            "0".to_string()
+        });
     }
     // Rust's `{:e}` is exactly the normalized form this needs: one
     // nonzero digit before the point, the shortest round-trip digit
@@ -340,7 +356,6 @@ mod tests {
             (1e-100, "1e-100"),
             (-16.5, "-16.5"),
             (0.0, "0"),
-            (-0.0, "0"),
         ];
         for (f, want) in cases {
             assert_eq!(set.element_key(&Value::Float(*f)), *want, "{f}");
@@ -358,6 +373,37 @@ mod tests {
         // NaN/Infinity: the one residual, defensively-handled exception.
         assert_eq!(set.element_key(&Value::Float(f64::NAN)), "");
         assert_eq!(set.element_key(&Value::Float(f64::INFINITY)), "");
+    }
+
+    // Correction (found while building this crate's Go peer,
+    // go/collection, PR #32, not caught by review on PR #27): this
+    // module's own `go_float_display` used to fold -0.0 to "0"
+    // unconditionally, on the assumption that `fmt.Sprintf("%v", ...)`
+    // treats zero the way section A's own `canonical_float` does. It
+    // does not. Verified empirically: real Go's
+    // `json.Unmarshal([]byte("-0.0"), &f)` followed by
+    // `fmt.Sprintf("%v", f)` prints "-0" -- the sign survives decoding,
+    // because `f == 0.0` is true for both IEEE754 zeros but they are
+    // not the same bit pattern. The previous test vector asserted
+    // `(-0.0, "0")`, which was simply wrong and went uncaught because
+    // nobody had actually run this one vector against real Go output
+    // before encoding it, despite this test's own comment claiming
+    // every vector had been.
+    #[test]
+    fn negative_zero_keeps_its_sign_unlike_canonical_float() {
+        let set = Collection {
+            topology: CollectionTopology::Set,
+            keys: vec![],
+        };
+        assert_eq!(set.element_key(&Value::Float(0.0_f64)), "0");
+        assert_eq!(set.element_key(&Value::Float(-0.0_f64)), "-0");
+        // Authored YAML text parses to a genuine sign-preserving negative
+        // zero too, not just the literal -- the same precision-and-sign
+        // fidelity this crate's own big-integer handling already insists
+        // on elsewhere (Value::BigInt).
+        let parsed: f64 = "-0.0".parse().expect("valid float literal");
+        assert!(parsed.is_sign_negative());
+        assert_eq!(set.element_key(&Value::Float(parsed)), "-0");
     }
 
     // Review-caught on PR #27: a TopologySet element can itself be a
