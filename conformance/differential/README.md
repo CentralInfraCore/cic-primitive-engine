@@ -39,7 +39,7 @@ does not attempt to answer it now, and does not need to.
 differential/
   comparator/    -- F6: conformance.Compare / ClassifyField / ClassifyFieldValue
   collection/    -- F7: collection.ElementKey
-  plan/          -- F8: plan.Evaluate                          (not yet landed)
+  plan/          -- F8: plan.Evaluate
   digest/        -- F9: digestprojection.*                     (not yet landed)
 ```
 
@@ -94,6 +94,36 @@ where real Go's `%v` prints `"-0"`) was found and fixed against —
 landing it here means that specific regression now also fails loudly
 for either language on its own, through the identical fixture, not
 only through each crate's own hand-written unit test.
+
+`plan/`'s own fields:
+
+```text
+input.json:
+  intent        object        the intent-side document
+  observed      object        the observed-side document
+  observation   [object]      [{path: string, coverage: string}, ...] -- builds the Observation
+  plan.scalars  [object]      [{path: string, compare: string}, ...]
+  plan.collections  [object]  [{path, topology, keys: [string], elements: [{path, compare}]}, ...]
+
+expected.json:
+  object   string              the one ObjectConformance both languages must produce
+  fields   map[string]string   the COMPLETE path -> FieldVerdict map Evaluate must produce --
+                                full equality, not a subset: the plan alone determines
+                                every path that can appear, so this also proves state-only
+                                fields (declared nowhere in the plan) never leak in, without
+                                a separate "forbidden fields" check
+  why      string              human-readable context, not compared
+```
+
+Ported from `plan.rs`'s own `oci_conformant`/`oci_extra_state_fields_are_
+not_drift`/`oci_drift`/`oci_not_comparable`/`oci_unobserved`/`oci_desired_
+absent_is_conformant`/`unknown_coverage_flows_through_to_unobserved_
+verdict`/`multi_key_collection_identity_resolves_back_to_its_element`
+tests. The multi-key vector is F8's own inherited-Relay-bug fix
+(`resolvePath`'s single-`"="`-split bug, PR #28) — intent and observed
+deliberately differ, so a silently-failed path resolution (both sides
+falling back to the same missing-path default) would produce a false
+`CONFORMANT` instead of the `DRIFT` this vector actually requires.
 
 ## A named limitation: JSON numeric literals don't parse identically on both sides
 

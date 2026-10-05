@@ -1,0 +1,7 @@
+{
+  "object": "DRIFT",
+  "fields": {
+    "/nics/{name=nic-0,zone=eu}/subnet": "DRIFT"
+  },
+  "why": "proves resolvePath actually resolves a path Evaluate generated from its own multi-key ElementKey, not merely that both sides happen to compare equal by both falling back to a missing-path default -- intent and observed deliberately differ, so only a correctly-resolved pair produces this DRIFT; a silently-failed resolution would have both sides fall back to the same missing-path default and produce a false CONFORMANT instead. This is F8's own inherited-Relay-bug fix (PR #28), now also checked through a shared fixture both languages read identically."
+}

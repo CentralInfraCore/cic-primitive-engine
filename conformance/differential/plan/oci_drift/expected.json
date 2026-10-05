@@ -1,0 +1,10 @@
+{
+  "object": "DRIFT",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "CONFORMANT",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "DRIFT"
+  },
+  "why": "a single element's subnet ref mismatch drifts only that field; the object verdict aggregates to DRIFT even though every other field is CONFORMANT"
+}
