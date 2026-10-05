@@ -1815,9 +1815,13 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          go/collection, which caught and fixed a real, previously-
          uncaught negative-zero divergence between the Rust port and
          real Go in the process -- see F7's own correction and the F12
-         subsection, below).
-Open:    No Go peer yet for F8/F9 (plan.rs/digest_projection.rs) --
-         F11/F12 cover F6/F7 only. Go's analogous
+         subsection, below), and F13 (F8's object-level walker --
+         Evaluate/aggregate/elementKeys/resolvePath -- now also has a
+         Go peer, go/plan, peering against plan.rs's already-FIXED
+         multi-key resolve_path, not conformance.go's original bug --
+         see the F13 subsection, below).
+Open:    No Go peer yet for F9 (digest_projection.rs) -- F11/F12/F13
+         cover F6/F7/F8 only. Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
@@ -2726,6 +2730,96 @@ a third time.
 **What this does not do:** port F8 (`plan.rs`) or F9
 (`digest_projection.rs`) to Go, or wire up the cross-language
 differential corpus (same two items F11 already named, still open).
+
+### F13. A Go peer for F8's object-level walker — `go/plan`
+
+Same pattern as F11/F12, one step further: `go/plan` is the Go peer
+of `engine/src/plan.rs` (F8), same public surface (`FieldPlan`,
+`CollectionPlan`, `ConformancePlan`, `ObjectConformance`,
+`ConsumedField`, `ObjectVerdict`, `Evaluate`). All seven of
+`conformance_test.go`'s end-to-end OCI vectors ported case-for-case
+(mirroring `plan.rs`'s own test suite, which already did this once),
+plus the `unknown`-coverage and multi-key-identity tests `plan.rs`
+itself added beyond a straight port.
+
+**Peers against `plan.rs`'s *fixed* `resolve_path`, not
+`conformance.go`'s original `resolvePath`.** Real Go's own
+`resolvePath` splits a `"{...}"` segment on only the first `"="`
+(`strings.Cut`), which breaks for the multi-key identity
+`go/collection`'s `ElementKey` already builds
+(`"name=nic-0,zone=eu"`) — the same inherited Relay bug F8 found and
+fixed on the Rust side on PR #28, not a Go↔Rust divergence
+(`conformance_test.go` never exercises a multi-key `CollectionPlan`,
+so Go's own test suite never caught it either). Per A0's standing
+policy, this package peers against the fixed contract, not the
+original bug: a `"{...}"` segment is parsed as the comma-separated
+`"k=v"` list `ElementKey` itself builds, every pair matched via
+`collection.GoDisplay` (reused, not a second copy), all pairs
+required to match. Verified with the same sabotage-and-restore
+discipline F8's own review round used: temporarily reintroducing the
+single-split bug makes the multi-key test fail with a false
+`CONFORMANT` (both sides silently resolving to `nil`, which compares
+equal to itself) — confirming the test actually catches what it
+claims to, not just that it passes.
+
+**`Evaluate` validates `intent`/`observed` against `canonical.IsValue`
+at its own boundary, extending F12's lesson rather than waiting for a
+review round to ask for it on this package too** — every value
+`resolvePath`/`collection.ElementKey` touch downstream is therefore
+already known-valid before this package's own code ever runs.
+`go/collection`'s `GoDisplay` was changed from package-private to
+exported in the same PR (a pure visibility fix, no behavior change) so
+`resolvePath` can reuse it rather than growing a second, drifting
+copy — mirroring `collection.rs`'s own `pub(crate)` visibility choice,
+which this package's doc comment had already anticipated but the Go
+code hadn't actually implemented until now.
+
+**Review-caught on PR #33, two blockers, same underlying principle
+applied one level up from F11/F12's own call sites.**
+
+*First: a malformed `ConformancePlan` could silently produce an
+ordinary verdict, because whether `Compare`/`ElementKey`'s own
+PR #31/#32 panics actually fire depends on execution path, not on the
+plan being well-formed.* `ClassifyFieldValue` never calls `Compare` at
+all unless coverage is `Observed`, so a `FieldPlan` with
+`CompareType("garbage")` on a field that is `Unobserved` never panics
+— it just verdicts `UNOBSERVED`. A `CollectionPlan` whose `Path` never
+resolves to any elements never calls `ElementKey` at all, so
+`CollectionTopology("garbage")` never surfaces either. Both reproduced
+directly before fixing: a plan built with either garbage value
+produced a normal-looking `ObjectVerdict`, no panic, nothing. Fixed:
+`ConformancePlan.Validate()`, called unconditionally at `Evaluate`'s
+own entry — checking every `FieldPlan.Compare` and every
+`CollectionPlan.Collection.Topology` up front, independent of which
+paths the rest of the walk happens to take for a given intent/observed
+pair.
+
+*Second: `ConsumedField`'s original two-argument constructor
+(`NewConsumedField(coverage, observedValue)`) rejected an invalid
+`Coverage`, but still silently accepted and discarded `observedValue`
+for every non-`Observed` coverage* —
+`NewConsumedField(CoverageAbsent, "I should not exist")` built a
+valid-looking `ConsumedField` with no error, the same "forbidden
+pairing silently accepted" shape PR #29 already named a defect on the
+Rust side, just reached through an unused constructor argument rather
+than a struct literal. **Fix: one constructor per state**
+(`NewObservedConsumedField(value)` / `NewAbsentConsumedField()` /
+`NewUnobservedConsumedField()` / `NewUnknownConsumedField()`),
+mirroring the Rust enum's four variants one-for-one, plus a
+package-private `fromCoverage` (mirroring `plan.rs`'s own non-`pub`
+`from_coverage`) for `classifyAt`'s own internal use. There is no
+longer an argument position for a caller to mistakenly believe
+survives into `Absent`/`Unobserved`/`Unknown` — not "accepted and
+ignored," but "the parameter does not exist."
+
+**What this does not do:** decide `ObjectConformance` needs a
+`Valid()`+panic guard — nothing in this package ever receives one as
+untrusted external input (only `aggregate` ever produces one, from its
+own exhaustive switch), so there is no boundary for such a guard to
+protect; added only where a real one exists, not everywhere the
+pattern *could* apply. Also does not port F9 (`digest_projection.rs`)
+to Go, or wire up the cross-language differential corpus (same two
+items F11/F12 already named, still open).
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

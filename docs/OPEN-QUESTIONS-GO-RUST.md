@@ -152,13 +152,16 @@ established). **Since settled: the comparator's object-level walk is
 now implemented in Rust (F8), and how the materialization receipt
 relates to the separate conformance/drift verdict (a third, distinct
 proof artifact alongside ProofTrace and the receipt) is now decided —
-independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6 and F7 now
-have Go peers (F11, `go/conformance`, plus `go/canonical` as its
-prerequisite; F12, `go/collection`) — each independently verified
-against the same contract, not yet cross-checked against the Rust
-side. Building F12 caught a real, previously-uncaught negative-zero
-divergence between `collection.rs`'s Go-formatting port and real Go,
-fixed in the same pass.** No Go peer exists yet for F8, F9 or F10.
+independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6, F7 and F8
+now have Go peers (F11, `go/conformance`, plus `go/canonical` as its
+prerequisite; F12, `go/collection`; F13, `go/plan`) — each
+independently verified against the same contract, not yet
+cross-checked against the Rust side. Building F12 caught a real,
+previously-uncaught negative-zero divergence between `collection.rs`'s
+Go-formatting port and real Go, fixed in the same pass. F13 peers
+against `plan.rs`'s own already-fixed multi-key `resolve_path`, not
+`conformance.go`'s original single-split bug.** No Go peer exists yet
+for F9 or F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1319,8 +1322,47 @@ proof chain
     boundary from the start, rather than waiting for a review round to
     ask for it a third time.
 
+    **Review-caught on PR #32 itself, fixed before merge: `ElementKey`
+    called `fmt.Sprintf("%v", elem)` on an unvalidated `interface{}`,
+    which formats ANY Go value — a struct, a `[]float64` — into a
+    plausible identity with no Rust equivalent, and let a
+    `[]float64{1, NaN}` slip past the non-finite check entirely
+    (`"[1 NaN]"`).** Fixed with a new, shared `canonical.IsValue(v)`
+    (exported from `go/canonical`, not redefined per package) —
+    `ElementKey` panics on anything outside that domain.
+
     **What this does not do:** port F8/F9 to Go, or the cross-language
     differential corpus (same two items item 9 already named).
+
+11. **(F13) A Go peer for F8, closing the Go side's own object-level
+    walker gap** — `go/plan`, same pattern as F11/F12. Peers against
+    `plan.rs`'s already-FIXED multi-key `resolve_path`, not
+    `conformance.go`'s original `resolvePath` (which splits a
+    `"{...}"` segment on only the first `"="`, breaking multi-key
+    identity — the same inherited Relay bug F8 found on PR #28, not a
+    Go↔Rust divergence). Verified with the same sabotage-and-restore
+    discipline: reintroducing the single-split bug makes the
+    multi-key test fail with a false `CONFORMANT`, confirming the test
+    actually catches what it claims to.
+
+    `ConsumedField` uses Go's actual closest equivalent to the Rust
+    peer's enum guarantee, not the `Valid()`+panic pattern: unexported
+    fields plus a single constructor (`NewConsumedField`) enforcing
+    F5's rule (a value is present iff coverage is `Observed`) — code
+    outside the package cannot construct the forbidden pairing at
+    all. `Evaluate` validates `intent`/`observed` against
+    `canonical.IsValue` at its own boundary, extending F12's lesson
+    before a review round had to ask for it here too.
+    `go/collection`'s `GoDisplay` was exported (previously
+    package-private, despite its own doc comment already claiming
+    otherwise) in the same PR so `resolvePath` can reuse it.
+
+    **What this does not do:** add a `Valid()`+panic guard to
+    `ObjectConformance` — nothing in this package ever receives one as
+    untrusted input, only `aggregate` ever produces one from its own
+    exhaustive switch, so there is no boundary for such a guard to
+    protect. Also does not port F9 to Go, or the cross-language
+    differential corpus (same two items already named).
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
