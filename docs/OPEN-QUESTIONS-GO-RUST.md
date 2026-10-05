@@ -152,11 +152,13 @@ established). **Since settled: the comparator's object-level walk is
 now implemented in Rust (F8), and how the materialization receipt
 relates to the separate conformance/drift verdict (a third, distinct
 proof artifact alongside ProofTrace and the receipt) is now decided —
-independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6 now has a
-Go peer (F11, `go/conformance`, plus `go/canonical` as its
-prerequisite) — independently verified against the same contract, not
-yet cross-checked against the Rust side.** No Go peer exists yet for
-F7, F8, F9 or F10.
+independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6 and F7 now
+have Go peers (F11, `go/conformance`, plus `go/canonical` as its
+prerequisite; F12, `go/collection`) — each independently verified
+against the same contract, not yet cross-checked against the Rust
+side. Building F12 caught a real, previously-uncaught negative-zero
+divergence between `collection.rs`'s Go-formatting port and real Go,
+fixed in the same pass.** No Go peer exists yet for F8, F9 or F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1289,6 +1291,36 @@ proof chain
    cross-language differential corpus — each side is independently
    verified against the decided contract here, not against each other
    yet (that is a separate, later step).
+
+10. **(F12) A Go peer for F7, one step further** — `go/collection`,
+    same pattern as F11. Needed even less hand-porting: `collection.rs`'s
+    own `go_display`/`go_float_display` exist only because Rust has no
+    built-in equivalent of `fmt.Sprintf("%v", ...)`; this package calls
+    it directly. The only hand-written piece is a recursive
+    non-finite-value pre-check (`%v` would print `"NaN"`/`"+Inf"` as if
+    it were a stable identity). A missing map-topology key field needed
+    no special case either — Go's own `m[k]` zero-value-on-missing-key
+    plus `fmt.Sprintf("%v", nil)` already produce `"<nil>"` for free,
+    where `collection.rs` had to hand-replicate it.
+
+    **Found a real, previously-uncaught cross-language divergence
+    while building this — the first time the Go-peer work itself found
+    a bug, rather than a human review:** `collection.rs`'s own
+    `go_float_display` folded `-0.0` to `"0"`, assuming (without
+    checking) that `%v` treats zero the way section A's `canonical_float`
+    does. Real Go's `%v` on a genuine negative zero prints `"-0"` —
+    verified via `json.Unmarshal([]byte("-0.0"), &f)` then
+    `fmt.Sprintf("%v", f)`. `go/collection`'s own test for the same
+    vector caught it immediately, since it has nowhere for the bug to
+    hide; fixed on the Rust side in the same PR.
+
+    **Applying PR #31's review lesson proactively:**
+    `CollectionTopology.Valid()` is checked at `ElementKey`'s own
+    boundary from the start, rather than waiting for a review round to
+    ask for it a third time.
+
+    **What this does not do:** port F8/F9 to Go, or the cross-language
+    differential corpus (same two items item 9 already named).
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
