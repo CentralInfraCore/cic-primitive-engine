@@ -152,16 +152,17 @@ established). **Since settled: the comparator's object-level walk is
 now implemented in Rust (F8), and how the materialization receipt
 relates to the separate conformance/drift verdict (a third, distinct
 proof artifact alongside ProofTrace and the receipt) is now decided —
-independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6, F7 and F8
-now have Go peers (F11, `go/conformance`, plus `go/canonical` as its
-prerequisite; F12, `go/collection`; F13, `go/plan`) — each
-independently verified against the same contract, not yet
-cross-checked against the Rust side. Building F12 caught a real,
-previously-uncaught negative-zero divergence between `collection.rs`'s
-Go-formatting port and real Go, fixed in the same pass. F13 peers
-against `plan.rs`'s own already-fixed multi-key `resolve_path`, not
-`conformance.go`'s original single-split bug.** No Go peer exists yet
-for F9 or F10.
+independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6 through F9
+now all have Go peers (F11, `go/conformance`, plus `go/canonical` as
+its prerequisite; F12, `go/collection`; F13, `go/plan`; F14, `go/
+digestprojection`) — each independently verified against the same
+contract, not yet cross-checked against each other. Building F12
+caught a real, previously-uncaught negative-zero divergence between
+`collection.rs`'s Go-formatting port and real Go, fixed in the same
+pass. F13 peers against `plan.rs`'s own already-fixed multi-key
+`resolve_path`, not `conformance.go`'s original single-split bug. F14
+has to sort `consumed`'s keys itself, where the Rust side gets that
+for free from `BTreeMap`.** No Go peer exists yet for F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1347,15 +1348,35 @@ proof chain
 
     `ConsumedField` uses Go's actual closest equivalent to the Rust
     peer's enum guarantee, not the `Valid()`+panic pattern: unexported
-    fields plus a single constructor (`NewConsumedField`) enforcing
-    F5's rule (a value is present iff coverage is `Observed`) — code
+    fields plus one constructor PER STATE
+    (`NewObservedConsumedField`/`NewAbsentConsumedField`/
+    `NewUnobservedConsumedField`/`NewUnknownConsumedField`, plus a
+    package-private `fromCoverage` for internal use) enforcing F5's
+    rule (a value is present iff coverage is `Observed`) — code
     outside the package cannot construct the forbidden pairing at
-    all. `Evaluate` validates `intent`/`observed` against
-    `canonical.IsValue` at its own boundary, extending F12's lesson
-    before a review round had to ask for it here too.
-    `go/collection`'s `GoDisplay` was exported (previously
-    package-private, despite its own doc comment already claiming
-    otherwise) in the same PR so `resolvePath` can reuse it.
+    all, and there is no argument position left to even attempt
+    passing a value into the three non-`Observed` constructors.
+    **Correction (review-caught on PR #33 itself): the first version
+    used a single two-argument constructor that rejected an invalid
+    `Coverage` but still silently accepted and discarded a value for
+    any non-`Observed` coverage — the same "forbidden pairing silently
+    accepted" shape PR #29 already named a defect on the Rust side,
+    just reached through an unused constructor argument.** `Evaluate`
+    validates `intent`/`observed` against `canonical.IsValue` at its
+    own boundary, extending F12's lesson before a review round had to
+    ask for it here too. `go/collection`'s `GoDisplay` was exported
+    (previously package-private, despite its own doc comment already
+    claiming otherwise) in the same PR so `resolvePath` can reuse it.
+
+    **Second review-caught blocker on PR #33: a malformed
+    `ConformancePlan` could silently escape detection, because
+    `Compare`/`ElementKey`'s own panics only fire if execution happens
+    to exercise them** — `ClassifyFieldValue` never calls `Compare` at
+    all unless coverage is `Observed`, and `elementKeys` never calls
+    `ElementKey` at all if a collection's path resolves to no
+    elements. Fixed: `ConformancePlan.Validate()`, called
+    unconditionally at `Evaluate`'s own entry, independent of which
+    paths a given intent/observed pair happens to take.
 
     **What this does not do:** add a `Valid()`+panic guard to
     `ObjectConformance` — nothing in this package ever receives one as
@@ -1363,6 +1384,37 @@ proof chain
     exhaustive switch, so there is no boundary for such a guard to
     protect. Also does not port F9 to Go, or the cross-language
     differential corpus (same two items already named).
+
+12. **(F14) A Go peer for F9's digest wiring, closing the last gap
+    from F6 through F9** — `go/digestprojection`, same pattern as
+    F11/F12/F13. Decides nothing new on either side: F5 already
+    specified both projections' exact shape and ordering rule, F9
+    already wired it to the Rust types; this package builds the
+    identical shape from `go/plan`'s own types and digests it with
+    `go/canonical`.
+
+    **Sorting is this package's own job, where the Rust side gets it
+    for free:** `plan.rs`'s `consumed` is a `BTreeMap<String, _>`, so
+    its iteration order already *is* F5's required sort; `go/plan`
+    deliberately chose a plain Go map instead (sorting deferred to
+    "the point it actually needs them"), and this package is exactly
+    that point — `ObservationDigestProjection` sorts `consumed`'s keys
+    itself.
+
+    **Applying F13's own review lesson proactively this time, before a
+    review round had to ask for it a second time:**
+    `PlanDigestProjection` calls `ConformancePlan.Validate()` itself,
+    since it is a second, independent entry point for a plan (not only
+    reachable through `plan.Evaluate`) — without it, an invalid
+    `CompareType`/`CollectionTopology` string would flow straight into
+    the `"compare"`/`"topology"` output fields, since a bare
+    `string(...)` conversion never rejects anything a Go string could
+    hold.
+
+    **What this does not do:** wire up the cross-language differential
+    corpus (the same item F11/F12/F13 already named, still open — this
+    closes F6 through F9's own Go-peer gap, but none of the four
+    packages have been cross-checked against each other yet).
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

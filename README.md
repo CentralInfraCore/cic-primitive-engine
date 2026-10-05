@@ -24,19 +24,20 @@ never the YAML.
 > in `docs/VERDICT-SCHEMA.md`, not in this crate's own types directly.
 > Go's analogous `IntentDigest` has no equivalent yet, since it needs a
 > `Normalize` stage this engine doesn't have. **`go/` now carries a Go
-> peer for four of the five Rust modules above** — `go/canonical`
-> (section A), `go/conformance` (section F's comparator primitive),
-> `go/collection` (section F's collection-topology/element-identity
-> primitive) and `go/plan` (section F's object-level walker), each
-> independently verified against the same decided contract, not
-> against each other yet (a shared/differential corpus hasn't landed).
-> Building `go/collection` caught a real, previously-uncaught
-> negative-zero formatting divergence between `collection.rs` and real
-> Go, fixed on the Rust side in the same pass; `go/plan` peers against
-> `plan.rs`'s already-fixed multi-key path resolution, not
-> `conformance.go`'s original single-split bug. No Go peer exists yet
-> for `digest_projection`. None of this is wired into a pipeline stage,
-> because `Parse` and the rest of `Normalize`/`Resolve`/`Validate` don't
+> peer for all five Rust modules above** — `go/canonical` (section A),
+> `go/conformance` (section F's comparator primitive), `go/collection`
+> (section F's collection-topology/element-identity primitive),
+> `go/plan` (section F's object-level walker) and
+> `go/digestprojection` (F9's digest wiring), each independently
+> verified against the same decided contract, not against each other
+> yet (a shared/differential corpus hasn't landed). Building
+> `go/collection` caught a real, previously-uncaught negative-zero
+> formatting divergence between `collection.rs` and real Go, fixed on
+> the Rust side in the same pass; `go/plan` peers against `plan.rs`'s
+> already-fixed multi-key path resolution, not `conformance.go`'s
+> original single-split bug. None of this is wired into a pipeline
+> stage, because `Parse` and the rest of `Normalize`/`Resolve`/
+> `Validate` don't
 > exist, in either language. Access's own short/long form is
 > deliberately not here yet — its instance grammar is still undecided
 > upstream (`cic-primitives#17`). Nothing here is a stable API.
