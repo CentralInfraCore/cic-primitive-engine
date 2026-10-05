@@ -1,0 +1,5 @@
+{
+  "topology": "map",
+  "keys": ["name"],
+  "elem": {"subnet": "a"}
+}

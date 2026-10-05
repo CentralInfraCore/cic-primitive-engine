@@ -38,9 +38,9 @@ does not attempt to answer it now, and does not need to.
 ```text
 differential/
   comparator/    -- F6: conformance.Compare / ClassifyField / ClassifyFieldValue
-  collection/     -- F7: collection.ElementKey                 (not yet landed)
-  plan/           -- F8: plan.Evaluate                          (not yet landed)
-  digest/         -- F9: digestprojection.*                     (not yet landed)
+  collection/    -- F7: collection.ElementKey
+  plan/          -- F8: plan.Evaluate                          (not yet landed)
+  digest/        -- F9: digestprojection.*                     (not yet landed)
 ```
 
 One group per F-primitive, landed incrementally — matching how F6
@@ -70,6 +70,30 @@ Every vector here was ported from `conformance.rs`'s own
 `classify_field_value_mirrors_go`/`unknown_coverage_classifies_like_
 unobserved` tests (themselves already checked against real Go output
 earlier in this effort) — not invented fresh for this corpus.
+
+`collection/`'s own fields:
+
+```text
+input.json:
+  topology  string    "atomic" | "set" | "map"
+  keys      [string]  key field names, byte-wise order doesn't matter (only meaningful for "map")
+  elem      any       the element value
+
+expected.json:
+  identity  string    the one ElementKey result both languages must produce
+  why       string    human-readable context, not compared
+```
+
+Ported from `collection.rs`'s own `element_key_mirrors_go`/
+`float_values_get_the_same_identity_go_does`/
+`nested_seq_and_map_values_match_go_v_formatting`/
+`negative_zero_keeps_its_sign_unlike_canonical_float` tests. Includes
+the exact negative-zero vector F12's own cross-language bugfix
+(`collection.rs`'s `go_float_display` used to fold `-0.0` to `"0"`,
+where real Go's `%v` prints `"-0"`) was found and fixed against —
+landing it here means that specific regression now also fails loudly
+for either language on its own, through the identical fixture, not
+only through each crate's own hand-written unit test.
 
 ## A named limitation: JSON numeric literals don't parse identically on both sides
 

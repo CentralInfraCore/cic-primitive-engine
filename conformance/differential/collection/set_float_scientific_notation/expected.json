@@ -1,0 +1,4 @@
+{
+  "identity": "1e+06",
+  "why": "fmt.Sprintf(\"%v\", ...) for float64 uses scientific notation outside the -4..5 decimal-exponent range -- a different algorithm from section A's own canonical_float, which never uses scientific notation at all"
+}

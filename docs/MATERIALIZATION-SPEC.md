@@ -1826,16 +1826,16 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          keys itself where the Rust side gets that for free from
          BTreeMap -- see the F14 subsection, below), and F15 (the
          cross-language differential corpus itself,
-         conformance/differential/ -- comparator/ (F6) landed, run by
-         both engine/tests/differential.rs and go/conformance/
-         differential_test.go against the identical JSON fixtures --
-         the first point in this effort where Rust and Go are actually
-         checked against EACH OTHER, not each independently verified
-         against the decided contract in prose -- see the F15
-         subsection, below). Every Rust module from F6 through F9 now
-         has a Go peer, and the first of the four has actually been
-         cross-checked against it.
-Open:    F15's own collection/plan/digest differential groups (F7-F9,
+         conformance/differential/ -- comparator/ (F6) and
+         collection/ (F7) landed, run by both
+         engine/tests/differential.rs and go/*/differential_test.go
+         against the identical JSON fixtures -- the first point in
+         this effort where Rust and Go are actually checked against
+         EACH OTHER, not each independently verified against the
+         decided contract in prose -- see the F15 subsection, below).
+         Every Rust module from F6 through F9 now has a Go peer, and
+         two of the four have actually been cross-checked against it.
+Open:    F15's own plan/digest differential groups (F8/F9,
          not yet landed). Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
@@ -2948,14 +2948,23 @@ and `../canonicalize/`'s YAML vectors for exactly the YAML-semantics
 question this layer does not attempt to answer.
 
 **Landed incrementally, like F6 through F9 themselves: `comparator/`
-(F6) only, for now.** Eight vectors, ported from `conformance.rs`'s
-own `classify_field_value_mirrors_go`/`unknown_coverage_classifies_
+(F6) first.** Eight vectors, ported from `conformance.rs`'s own
+`classify_field_value_mirrors_go`/`unknown_coverage_classifies_
 like_unobserved` tests (already checked against real Go output
 earlier in this effort), not invented fresh — covering every one of
 `FieldVerdict`'s five values, a harness invariant enforced on both
 sides so a corpus that happened to never exercise one of them couldn't
-silently pass. `collection/`/`plan/`/`digest/` (F7-F9) are later,
-separate additions.
+silently pass.
+
+**`collection/` (F7) landed next, same PR cycle as this subsection's
+own update.** Ten vectors, ported from `collection.rs`'s own
+`element_key_mirrors_go`/`float_values_get_the_same_identity_go_does`/
+`nested_seq_and_map_values_match_go_v_formatting`/
+`negative_zero_keeps_its_sign_unlike_canonical_float` tests — including
+the exact negative-zero vector F12's own cross-language bugfix was
+found and fixed against, now also checked through this shared fixture
+rather than only each crate's own hand-written unit test.
+`plan/`/`digest/` (F8/F9) are later, separate additions.
 
 **A real structural conflict, found and fixed in the same pass:**
 `engine/tests/conformance.rs`'s own `the_corpus_is_not_empty` walks
@@ -2981,11 +2990,11 @@ being numeric at all), so none of the eight vectors here depend on it
 — named in `differential/README.md` for whichever future vector
 author's case might.
 
-**What this does not do:** add `collection/`, `plan/` or `digest/`
-groups (F7-F9's own differential vectors — separate, later additions,
-same incremental pattern F6-F9 themselves followed); decide anything
-about `Parse`'s own future differential corpus, which this layer
-explicitly defers rather than pre-empts.
+**What this does not do:** add `plan/` or `digest/` groups (F8/F9's
+own differential vectors — separate, later additions, same
+incremental pattern F6-F9 themselves followed); decide anything about
+`Parse`'s own future differential corpus, which this layer explicitly
+defers rather than pre-empts.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

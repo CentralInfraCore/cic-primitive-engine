@@ -8,7 +8,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use cic_primitive_engine::{classify_field_value, reader, CompareType, Coverage, Stage};
+use cic_primitive_engine::{
+    classify_field_value, reader, Collection, CollectionTopology, CompareType, Coverage, Stage,
+};
 use reader::Value;
 
 fn corpus_root() -> PathBuf {
@@ -93,6 +95,28 @@ fn parse_compare(s: &str) -> CompareType {
     }
 }
 
+fn parse_topology(s: &str) -> CollectionTopology {
+    match s {
+        "atomic" => CollectionTopology::Atomic,
+        "set" => CollectionTopology::Set,
+        "map" => CollectionTopology::Map,
+        other => panic!("unknown topology {other:?}"),
+    }
+}
+
+fn str_seq_field(v: &Value, key: &str) -> Vec<String> {
+    match map_get(v, key) {
+        Some(Value::Seq(items)) => items
+            .iter()
+            .map(|item| match item {
+                Value::Str(s) => s.clone(),
+                _ => panic!("expected every element of {key:?} to be a string"),
+            })
+            .collect(),
+        _ => panic!("expected sequence field {key:?}"),
+    }
+}
+
 /// `conformance/differential/comparator/` -- F6's `classify_field_value`.
 /// Every vector's expected `FieldVerdict` is pinned by this engine's own
 /// already-decided literal (`FieldVerdict::as_str`), so a failure here means
@@ -147,4 +171,43 @@ fn comparator_vectors() {
             "no vector in differential/comparator exercises verdict {verdict}"
         );
     }
+}
+
+/// `conformance/differential/collection/` -- F7's `Collection::element_key`.
+/// Includes the exact negative-zero vector F12's own cross-language bugfix
+/// (`collection.rs`'s `go_float_display` used to fold `-0.0` to `"0"`) was
+/// found and fixed against -- landing it here means that specific
+/// regression now also fails loudly for either language on its own,
+/// through the identical fixture, not only through each crate's own
+/// hand-written unit test.
+#[test]
+fn collection_vectors() {
+    let vectors = load_vectors("collection");
+    assert!(
+        !vectors.is_empty(),
+        "differential/collection has no vectors -- an empty corpus trivially passes"
+    );
+
+    let mut failures = Vec::new();
+    for v in &vectors {
+        let topology = parse_topology(str_field(&v.input, "topology"));
+        let keys = str_seq_field(&v.input, "keys");
+        let elem = map_get(&v.input, "elem").unwrap_or(&Value::Null);
+        let collection = Collection { topology, keys };
+
+        let got = collection.element_key(elem);
+        let want = str_field(&v.expected, "identity");
+
+        if got != want {
+            failures.push(format!("{}: got {got:?}, want {want:?}", v.name));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} collection vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
 }

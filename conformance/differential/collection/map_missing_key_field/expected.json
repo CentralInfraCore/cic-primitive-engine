@@ -1,0 +1,4 @@
+{
+  "identity": "name=<nil>",
+  "why": "a missing key field is rendered explicitly as <nil>, matching fmt.Sprintf(\"%v\", nil) -- never omitted, never an empty string"
+}

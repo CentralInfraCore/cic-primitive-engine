@@ -1,0 +1,4 @@
+{
+  "identity": "-0",
+  "why": "fmt.Sprintf(\"%v\", ...) does NOT fold negative zero the way section A's canonical_float does -- this exact vector is what the F12 cross-language bugfix (collection.rs's go_float_display used to fold both signs to \"0\") was found and fixed against"
+}
