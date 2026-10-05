@@ -1,0 +1,4 @@
+{
+  "verdict": "UNOBSERVED",
+  "why": "unobserved -> UNOBSERVED regardless of the observed value -- the comparator must never even be invoked"
+}

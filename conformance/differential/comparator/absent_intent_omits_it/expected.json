@@ -1,0 +1,4 @@
+{
+  "verdict": "OBSERVED_ABSENT",
+  "why": "authoritative absent + intent does not declare the field -> OBSERVED_ABSENT (desired-absent, is absent)"
+}

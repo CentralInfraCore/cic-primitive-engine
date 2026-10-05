@@ -3,6 +3,15 @@
 Language-independent vectors. Each directory holds `input.yaml` and
 `expected.yaml`; any implementation of this engine must agree with all of them.
 
+This covers `reader/` and `canonicalize/` — `Stage::Read`/
+`Stage::Canonicalize` semantics, YAML in, YAML syntax is the point.
+`differential/` is a second, separate corpus layer with its own README,
+its own JSON-only vector format and its own harness
+(`engine/tests/differential.rs`, `go/*/differential_test.go`) — it
+checks whether the F6-F9 primitives agree across languages given an
+already-parsed value, a different question from whether two YAML
+readers agree with each other. See `differential/README.md`.
+
 `expected.yaml` states an `outcome` of `accepted` or `rejected`, and for a
 rejection the stable `code` and `stage`. The human-readable `why` is context for
 the reader and is **not** compared — a corpus that asserts on prose becomes a

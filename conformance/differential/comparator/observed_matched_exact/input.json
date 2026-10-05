@@ -1,0 +1,7 @@
+{
+  "coverage": "observed",
+  "intent_present": true,
+  "intent": "VM.Standard.E4.Flex",
+  "observed": "VM.Standard.E4.Flex",
+  "compare": "exact"
+}

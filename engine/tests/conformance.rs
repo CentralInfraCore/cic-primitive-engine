@@ -138,6 +138,16 @@ fn the_corpus_is_not_empty() {
         .unwrap_or_else(|e| panic!("{}: {e}", root.display()))
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.is_dir())
+        // `differential/` is a directory of GROUPS (comparator/,
+        // collection/, ...), each holding `input.json`/`expected.json`
+        // vectors with no accepted/rejected outcome at all -- a
+        // structurally different corpus type (see its own README), with
+        // its own dedicated test (tests/differential.rs) enforcing its
+        // own non-empty/full-coverage invariants. Scanning it here as if
+        // it held `input.yaml`/`expected.yaml` vectors directly would
+        // fail on a directory shape this generic check was never meant
+        // to understand, not catch a real gap.
+        .filter(|p| p.file_name().and_then(|n| n.to_str()) != Some("differential"))
         .collect();
     assert!(
         !groups.is_empty(),

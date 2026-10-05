@@ -162,7 +162,11 @@ caught a real, previously-uncaught negative-zero divergence between
 pass. F13 peers against `plan.rs`'s own already-fixed multi-key
 `resolve_path`, not `conformance.go`'s original single-split bug. F14
 has to sort `consumed`'s keys itself, where the Rust side gets that
-for free from `BTreeMap`.** No Go peer exists yet for F10.
+for free from `BTreeMap`. F15 is the first point any of F6-F9's Go
+peers have actually been cross-checked against Rust, not just each
+independently verified against the decided contract — a new JSON-only
+corpus layer, `conformance/differential/`, `comparator/` (F6) landed
+first.** No Go peer exists yet for F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1411,10 +1415,69 @@ proof chain
     `string(...)` conversion never rejects anything a Go string could
     hold.
 
+    **Correction (review-caught on PR #34 itself, a fourth instance of
+    the same principle): F13's per-state `ConsumedField` constructors
+    close off constructing a WRONG coverage/value combination, but not
+    Go's zero value, which exists for every struct regardless of
+    whether any constructor was ever called.** `var zero
+    plan.ConsumedField` used to flow straight through
+    `ObservationDigestProjection` into a legitimate-looking
+    `{"path": p, "coverage": ""}` entry, digested with no error.
+    Fixed: `ConsumedField.Valid()`, checked at that function's own
+    boundary. Also switched `PlanDigestProjection`'s three internal
+    sorts from `sort.Slice` to `sort.SliceStable`, matching `plan.rs`'s
+    own stable `sort_by` (review-noted, non-blocking).
+
     **What this does not do:** wire up the cross-language differential
-    corpus (the same item F11/F12/F13 already named, still open — this
-    closes F6 through F9's own Go-peer gap, but none of the four
-    packages have been cross-checked against each other yet).
+    corpus (the same item F11/F12/F13 already named — closed next, by
+    F15).
+
+13. **(F15) The cross-language differential corpus itself** —
+    `conformance/differential/`, run by both
+    `engine/tests/differential.rs` and `go/conformance/
+    differential_test.go` against identical JSON fixtures. The first
+    point in this effort where Rust and Go are actually checked
+    against EACH OTHER, not each independently verified against the
+    decided contract in prose.
+
+    **Deliberately JSON, not YAML — a scope decision.** `../reader/`'s
+    and `../canonicalize/`'s existing corpus is YAML because YAML
+    syntax is the very thing those vectors pin. This layer asks a
+    narrower question — given the same already-parsed value, do F6-F9
+    agree on what it means — which has nothing to do with how that
+    value was spelled in source text; mixing the two would conflate
+    two separate theorems into one test. JSON needs no reader on
+    either side: valid YAML by construction, so Rust keeps using its
+    existing `reader::parse` unmodified, while Go — no YAML reader
+    yet, that is `Parse`'s own job — reads it with `encoding/json`
+    directly. `Parse`, when it exists, gets its own later differential
+    corpus reusing `../reader/`'s and `../canonicalize/`'s YAML
+    vectors.
+
+    **Landed incrementally: `comparator/` (F6) only, for now** — eight
+    vectors ported from already Go-verified Rust tests, covering every
+    `FieldVerdict` value, a harness invariant enforced on both sides.
+    `collection/`/`plan/`/`digest/` (F7-F9) are later, separate
+    additions.
+
+    **Found and fixed a real structural conflict in the same pass:**
+    the existing `the_corpus_is_not_empty` generic scanner
+    (`engine/tests/conformance.rs`) walked `differential/` as if it
+    held vectors directly, when it holds groups of them — reproduced
+    directly (`cargo test --workspace` failed before the fix) and
+    fixed by excluding `differential` from that scan, with a comment
+    explaining why.
+
+    **A named limitation:** Go's `encoding/json` decodes every JSON
+    number into `float64`; Rust's `reader::parse` preserves the
+    literal's own int/float spelling. Neither of F6's two comparators
+    is sensitive to this, so none of the eight vectors depend on it —
+    named in `differential/README.md` for whichever future vector
+    author's case might.
+
+    **What this does not do:** add `collection/`/`plan/`/`digest/`
+    groups (F7-F9's own differential vectors, separate later
+    additions); decide `Parse`'s own future differential corpus.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

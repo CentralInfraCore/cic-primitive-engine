@@ -1824,10 +1824,19 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          ObservationDigestProjection/ObservationDigest -- now also has
          a Go peer, go/digestprojection, which must sort consumed's
          keys itself where the Rust side gets that for free from
-         BTreeMap -- see the F14 subsection, below). Every Rust module
-         from F6 through F9 now has a Go peer; none have been
-         cross-checked against each other yet (G's own job).
-Open:    Go's analogous
+         BTreeMap -- see the F14 subsection, below), and F15 (the
+         cross-language differential corpus itself,
+         conformance/differential/ -- comparator/ (F6) landed, run by
+         both engine/tests/differential.rs and go/conformance/
+         differential_test.go against the identical JSON fixtures --
+         the first point in this effort where Rust and Go are actually
+         checked against EACH OTHER, not each independently verified
+         against the decided contract in prose -- see the F15
+         subsection, below). Every Rust module from F6 through F9 now
+         has a Go peer, and the first of the four has actually been
+         cross-checked against it.
+Open:    F15's own collection/plan/digest differential groups (F7-F9,
+         not yet landed). Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
@@ -2907,6 +2916,76 @@ Does not address `conformance_plan_digest`/`observation_digest`'s own
 pipeline wiring either — same as the Rust side, nothing here is wired
 into an actual `Parse`/`Normalize`/`Resolve`/`Validate` stage, because
 none of those exist yet in either language.
+
+### F15. The cross-language differential corpus itself — `conformance/differential/`
+
+Closes the item F11 through F14 each left open: a new corpus layer,
+`conformance/differential/`, with its own README, run by both
+`engine/tests/differential.rs` (Rust) and `go/conformance/
+differential_test.go` (Go) against the identical fixture files — the
+first point in this entire Go-peer effort where the two languages are
+actually checked against each other's output, not merely each
+independently verified against the decided contract in prose.
+
+**Deliberately JSON, not YAML — a scope decision, not a workaround.**
+`../reader/`'s and `../canonicalize/`'s existing corpus is YAML,
+because YAML's own syntax (scalar typing, explicit tags, anchors,
+duplicate-key handling) is the very thing those vectors pin. This
+layer asks a narrower, different question — *given the same
+already-parsed value, do F6-F9 agree on what it means* — which has
+nothing to do with how that value was spelled in source text. Mixing
+the two would conflate two separate theorems ("the two YAML readers
+agree" and "the two F6-F9 implementations agree") into one test, so a
+failure couldn't tell you which one actually broke. JSON needs no
+reader at all on either side: it's valid YAML by construction, so
+Rust keeps using its existing `reader::parse` unmodified, while Go —
+which has no YAML reader yet, since that is `Parse`'s own job, not yet
+built in either language — reads it with the standard library's
+`encoding/json` directly. Neither side gains a new dependency, and
+neither result depends on the other's parser. `Parse`, when it
+exists, gets its own, later differential corpus reusing `../reader/`'s
+and `../canonicalize/`'s YAML vectors for exactly the YAML-semantics
+question this layer does not attempt to answer.
+
+**Landed incrementally, like F6 through F9 themselves: `comparator/`
+(F6) only, for now.** Eight vectors, ported from `conformance.rs`'s
+own `classify_field_value_mirrors_go`/`unknown_coverage_classifies_
+like_unobserved` tests (already checked against real Go output
+earlier in this effort), not invented fresh — covering every one of
+`FieldVerdict`'s five values, a harness invariant enforced on both
+sides so a corpus that happened to never exercise one of them couldn't
+silently pass. `collection/`/`plan/`/`digest/` (F7-F9) are later,
+separate additions.
+
+**A real structural conflict, found and fixed in the same pass:**
+`engine/tests/conformance.rs`'s own `the_corpus_is_not_empty` walks
+every directory directly under `conformance/` as a vector-holding
+group — `differential/` is a directory of *groups* instead
+(`comparator/`, eventually `collection/`, ...), a different shape that
+generic scanner was never built to understand. Reproduced directly
+(`cargo test --workspace` failed on `comparator: input.yaml: No such
+file or directory` before this fix): explicitly excluded
+`differential` from that scan, with a comment explaining why — it has
+its own dedicated test enforcing its own invariants, so skipping it
+here isn't skipping a check, only routing it to the right one.
+
+**A named limitation, not papered over:** Go's `encoding/json`
+decodes every JSON number into `float64`, where Rust's `reader::parse`
+preserves the literal's own int/float spelling (`Value::Int` vs
+`Value::Float`) — a real asymmetry in how the *same bytes* become each
+language's native value. Neither of F6's two comparators is actually
+sensitive to it (the numeric comparator treats int/float/BigInt
+identically by design; the exact comparator's numeric-or-not check
+doesn't care which numeric kind, only whether both sides agree on
+being numeric at all), so none of the eight vectors here depend on it
+— named in `differential/README.md` for whichever future vector
+author's case might.
+
+**What this does not do:** add `collection/`, `plan/` or `digest/`
+groups (F7-F9's own differential vectors — separate, later additions,
+same incremental pattern F6-F9 themselves followed); decide anything
+about `Parse`'s own future differential corpus, which this layer
+explicitly defers rather than pre-empts.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 
