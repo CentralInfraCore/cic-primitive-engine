@@ -152,8 +152,11 @@ established). **Since settled: the comparator's object-level walk is
 now implemented in Rust (F8), and how the materialization receipt
 relates to the separate conformance/drift verdict (a third, distinct
 proof artifact alongside ProofTrace and the receipt) is now decided —
-independent (F10, `docs/VERDICT-SCHEMA.md`).** No Go peer exists for
-any of F6–F10 yet.
+independent (F10, `docs/VERDICT-SCHEMA.md`).** **Update: F6 now has a
+Go peer (F11, `go/conformance`, plus `go/canonical` as its
+prerequisite) — independently verified against the same contract, not
+yet cross-checked against the Rust side.** No Go peer exists yet for
+F7, F8, F9 or F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1261,6 +1264,31 @@ proof chain
    signed (the receipt's closed "no signature field" is specific to
    the receipt, not inherited here by default — genuinely open), or
    address a Go peer (none exists for any of F6–F10).
+
+9. **(F11) A Go peer for F6, the first of F6–F10 to get one** — a new,
+   independent Go module (`go/`, this repo's own `go.mod`, no cgo, no
+   dependency on this crate or on `CIC-Relay`). `go/canonical`
+   (section A's byte format) lands first as F6's own prerequisite;
+   unlike the Rust side, which had to hand-port Go's behaviour because
+   it had no access to Go's standard library, this package mostly just
+   calls that library directly (`encoding/json` marshaling already IS
+   A4's escaping, `sort.Strings` already IS A2's key order) and merges
+   `CIC-Relay`'s own split two-pass logic
+   (`pkg/canonicaljson`+`core/nexus/iac/{number,digest}.go`) into one
+   pass, matching `canonical.rs`'s single-function contract rather than
+   that migration source's internal plumbing. `go/conformance` (F6
+   itself) then mirrors `conformance.rs`'s public surface exactly,
+   including B3's four-value `Coverage` (not Relay's two-list
+   envelope). One piece needed zero porting: the numeric comparator's
+   string grammar, which `rat_from_string` spent two PR #25 review
+   rounds hand-porting on the Rust side specifically because Rust has
+   no access to `math/big.Rat.SetString` — this package just calls that
+   function directly, exactly as `compare.go` already does.
+
+   **What this does not do:** port F7/F8/F9 to Go, or wire up a
+   cross-language differential corpus — each side is independently
+   verified against the decided contract here, not against each other
+   yet (that is a separate, later step).
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
