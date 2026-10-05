@@ -178,3 +178,18 @@ func TestPlanDigestProjectionFailsClosedOnMalformedPlan(t *testing.T) {
 		})
 	})
 }
+
+// The review's own exact regression case: closing off ConsumedField's
+// public constructors (PR #33) does not close off Go's zero value,
+// which exists for every struct regardless of whether any constructor
+// was ever called. var zero plan.ConsumedField is {coverage: "",
+// value: nil} -- not one of the four legitimate states -- and before
+// this fix it flowed straight through to a legitimate-looking
+// {"path": "/x", "coverage": ""} entry, canonicalized and SHA-256'd
+// with no error at all.
+func TestObservationProjectionRejectsZeroConsumedField(t *testing.T) {
+	var zero plan.ConsumedField
+	expectPanic(t, "zero-value ConsumedField", func() {
+		ObservationDigestProjection(map[string]plan.ConsumedField{"/x": zero})
+	})
+}

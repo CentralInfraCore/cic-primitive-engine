@@ -2866,6 +2866,38 @@ anything — `"garbage"` is just as valid a Go `string` as `"exact"` is.
 Applied proactively here, before a review round had to ask for it a
 second time on this exact category of gap.
 
+**Review-caught on PR #34 anyway, a fourth instance of the same
+underlying principle: `ConsumedField`'s Go zero value is not one of
+its own four legitimate states, and F13's per-state constructors
+cannot close that off.** `var zero plan.ConsumedField` compiles to
+`{coverage: "", value: nil}` with no error — Go gives every struct a
+zero value regardless of whether any constructor was ever called,
+which no amount of constructor discipline can prevent (unlike the
+*combination* problem F13 fixed, which constructors genuinely do
+close off). Before this fix, that zero value flowed straight through
+`ObservationDigestProjection` into a legitimate-looking
+`{"path": p, "coverage": ""}` entry, canonicalized and SHA-256'd with
+no error at all — reproduced directly: a map with one zero-value
+entry digested successfully. **Fix: `ConsumedField.Valid()`** (`go/
+plan`), checked by `ObservationDigestProjection` for every entry,
+panicking on anything that isn't one of the four states its own
+constructors actually produce. The general lesson, now four times
+over (`Value::BigInt` → B3's `Option<Value>` → `ConsumedField`'s enum
+→ `Coverage`/`CompareType`/`CollectionTopology`'s `Valid()` → now
+this): closing off the *constructors* of a type is necessary but not
+sufficient in a language with implicit zero values; the *consuming*
+boundary must check too.
+
+**Minor, non-blocking review note addressed in the same pass:** the
+three internal sorts here used `sort.Slice` (unstable); switched to
+`sort.SliceStable` to match `plan.rs`'s own `sort_by` (stable), so two
+entries sharing a path (which the contract does not currently forbid)
+keep a deterministic relative order rather than one that could vary
+between runs. Whether duplicate paths should be rejected outright by
+`ConformancePlan.Validate()` is a separate, still-open question this
+fix does not answer — noted for the differential-corpus step, which
+would surface any resulting nondeterminism immediately.
+
 **What this does not do:** wire up the cross-language differential
 corpus comparing this package's output to `digest_projection.rs`'s
 (the same item F11/F12/F13 already named, still open — this closes
