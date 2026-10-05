@@ -9,9 +9,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cic_primitive_engine::{
-    classify_field_value, reader, Collection, CollectionTopology, CompareType, Coverage, Stage,
+    classify_field_value, evaluate, reader, Collection, CollectionPlan, CollectionTopology,
+    CompareType, ConformancePlan, Coverage, FieldPlan, Observation, Stage,
 };
 use reader::Value;
+use std::collections::BTreeMap;
 
 fn corpus_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -206,6 +208,120 @@ fn collection_vectors() {
     assert!(
         failures.is_empty(),
         "{} of {} collection vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+fn build_observation(v: &Value) -> Observation {
+    let mut obs = Observation::new();
+    let Some(Value::Seq(items)) = map_get(v, "observation") else {
+        panic!("expected sequence field \"observation\"");
+    };
+    for item in items {
+        let path = str_field(item, "path");
+        let coverage = parse_coverage(str_field(item, "coverage"));
+        obs.set(path, coverage);
+    }
+    obs
+}
+
+fn build_field_plan(v: &Value) -> FieldPlan {
+    FieldPlan {
+        path: str_field(v, "path").to_string(),
+        compare: parse_compare(str_field(v, "compare")),
+    }
+}
+
+fn build_seq<T>(v: &Value, key: &str, f: impl Fn(&Value) -> T) -> Vec<T> {
+    match map_get(v, key) {
+        Some(Value::Seq(items)) => items.iter().map(f).collect(),
+        _ => panic!("expected sequence field {key:?}"),
+    }
+}
+
+fn build_plan(v: &Value) -> ConformancePlan {
+    let plan_v = map_get(v, "plan").unwrap_or_else(|| panic!("expected field \"plan\""));
+    let scalars = build_seq(plan_v, "scalars", build_field_plan);
+    let collections = build_seq(plan_v, "collections", |cp| CollectionPlan {
+        path: str_field(cp, "path").to_string(),
+        collection: Collection {
+            topology: parse_topology(str_field(cp, "topology")),
+            keys: str_seq_field(cp, "keys"),
+        },
+        elements: build_seq(cp, "elements", build_field_plan),
+    });
+    ConformancePlan {
+        scalars,
+        collections,
+    }
+}
+
+fn fields_from_value(v: &Value) -> BTreeMap<String, String> {
+    let Some(Value::Map(m)) = map_get(v, "fields") else {
+        panic!("expected mapping field \"fields\"");
+    };
+    let mut out = BTreeMap::new();
+    for k in m.keys() {
+        let val = m.get(k).expect("key came from this map's own key list");
+        let Value::Str(s) = val else {
+            panic!("expected string value for field {k:?}");
+        };
+        out.insert(k.to_string(), s.clone());
+    }
+    out
+}
+
+/// `conformance/differential/plan/` -- F8's `evaluate`. Includes the exact
+/// multi-key-identity vector F8's own review round found and fixed
+/// (`resolve_path`'s inherited Relay bug, PR #28) -- intent and observed
+/// deliberately differ, so a silently-failed path resolution (both sides
+/// falling back to the same missing-path default) would produce a false
+/// `CONFORMANT` instead of the `DRIFT` this vector actually requires.
+#[test]
+fn plan_vectors() {
+    let vectors = load_vectors("plan");
+    assert!(
+        !vectors.is_empty(),
+        "differential/plan has no vectors -- an empty corpus trivially passes"
+    );
+
+    let mut failures = Vec::new();
+    for v in &vectors {
+        let intent = map_get(&v.input, "intent").unwrap_or(&Value::Null);
+        let observed = map_get(&v.input, "observed").unwrap_or(&Value::Null);
+        let obs = build_observation(&v.input);
+        let plan = build_plan(&v.input);
+
+        let verdict = evaluate(intent, observed, &obs, &plan);
+
+        let want_object = str_field(&v.expected, "object");
+        if verdict.object.as_str() != want_object {
+            failures.push(format!(
+                "{}: object: got {}, want {want_object}",
+                v.name,
+                verdict.object.as_str()
+            ));
+        }
+
+        let got_fields: BTreeMap<String, String> = verdict
+            .fields
+            .iter()
+            .map(|(k, fv)| (k.clone(), fv.as_str().to_string()))
+            .collect();
+        let want_fields = fields_from_value(&v.expected);
+        if got_fields != want_fields {
+            failures.push(format!(
+                "{}: fields mismatch\n    got:  {got_fields:?}\n    want: {want_fields:?}",
+                v.name
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} plan vectors failed:\n  {}",
         failures.len(),
         vectors.len(),
         failures.join("\n  ")

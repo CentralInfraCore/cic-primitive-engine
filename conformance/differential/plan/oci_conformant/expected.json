@@ -1,0 +1,10 @@
+{
+  "object": "CONFORMANT",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "CONFORMANT",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT"
+  },
+  "why": "the full OCI vertical slice: numeric normalization (16 vs 16.0) and map-collection element identity both resolve correctly; state-only fields (provider_id, lifecycle_state, private_ip) are absent from the plan, so they never appear in fields at all -- this IS the proof that unplanned state is never drift, by construction, not a separate check"
+}

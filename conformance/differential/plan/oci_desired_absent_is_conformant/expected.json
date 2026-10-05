@@ -1,0 +1,11 @@
+{
+  "object": "CONFORMANT",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "CONFORMANT",
+    "/boot_volume": "OBSERVED_ABSENT",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT"
+  },
+  "why": "intent does not declare boot_volume, and the observation authoritatively confirms it is absent -- OBSERVED_ABSENT (desired-absent, is absent), which keeps the object verdict CONFORMANT, not DRIFT"
+}

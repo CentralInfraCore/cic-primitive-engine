@@ -1826,16 +1826,17 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          keys itself where the Rust side gets that for free from
          BTreeMap -- see the F14 subsection, below), and F15 (the
          cross-language differential corpus itself,
-         conformance/differential/ -- comparator/ (F6) and
-         collection/ (F7) landed, run by both
+         conformance/differential/ -- comparator/ (F6),
+         collection/ (F7) and plan/ (F8) landed, run by both
          engine/tests/differential.rs and go/*/differential_test.go
          against the identical JSON fixtures -- the first point in
          this effort where Rust and Go are actually checked against
          EACH OTHER, not each independently verified against the
          decided contract in prose -- see the F15 subsection, below).
          Every Rust module from F6 through F9 now has a Go peer, and
-         two of the four have actually been cross-checked against it.
-Open:    F15's own plan/digest differential groups (F8/F9,
+         three of the four have actually been cross-checked against
+         it.
+Open:    F15's own digest differential group (F9,
          not yet landed). Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
@@ -2964,7 +2965,20 @@ own update.** Ten vectors, ported from `collection.rs`'s own
 the exact negative-zero vector F12's own cross-language bugfix was
 found and fixed against, now also checked through this shared fixture
 rather than only each crate's own hand-written unit test.
-`plan/`/`digest/` (F8/F9) are later, separate additions.
+
+**`plan/` (F8) landed next.** Eight vectors, ported from `plan.rs`'s
+own `oci_conformant`/`oci_extra_state_fields_are_not_drift`/
+`oci_drift`/`oci_not_comparable`/`oci_unobserved`/`oci_desired_absent_
+is_conformant`/`unknown_coverage_flows_through_to_unobserved_verdict`/
+`multi_key_collection_identity_resolves_back_to_its_element` tests.
+`expected.json`'s `fields` is asserted for **full equality**, not a
+subset — the plan alone determines every path that can appear, so
+this is also the proof that state-only fields never leak into the
+verdict, without needing a separate "forbidden fields" check. The
+multi-key vector is F8's own inherited-Relay-bug fix (`resolvePath`'s
+single-`"="`-split bug, PR #28), now also checked through the shared
+fixture rather than only each crate's own hand-written unit test.
+`digest/` (F9) is the one remaining addition.
 
 **A real structural conflict, found and fixed in the same pass:**
 `engine/tests/conformance.rs`'s own `the_corpus_is_not_empty` walks
@@ -2990,11 +3004,11 @@ being numeric at all), so none of the eight vectors here depend on it
 — named in `differential/README.md` for whichever future vector
 author's case might.
 
-**What this does not do:** add `plan/` or `digest/` groups (F8/F9's
-own differential vectors — separate, later additions, same
-incremental pattern F6-F9 themselves followed); decide anything about
-`Parse`'s own future differential corpus, which this layer explicitly
-defers rather than pre-empts.
+**What this does not do:** add a `digest/` group (F9's own
+differential vectors — a separate, later addition, same incremental
+pattern F6-F9 themselves followed); decide anything about `Parse`'s
+own future differential corpus, which this layer explicitly defers
+rather than pre-empts.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

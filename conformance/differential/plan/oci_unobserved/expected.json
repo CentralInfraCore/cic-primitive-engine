@@ -1,0 +1,10 @@
+{
+  "object": "INCOMPLETE",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "UNOBSERVED",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT"
+  },
+  "why": "a planned field the observation never covered is UNOBSERVED, never a false CONFORMANT -- and with no DRIFT present, the object verdict is INCOMPLETE, not CONFORMANT, since full conformance cannot be claimed"
+}

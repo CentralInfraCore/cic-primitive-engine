@@ -1,0 +1,26 @@
+{
+  "intent": {
+    "nics": [
+      {"name": "nic-0", "zone": "eu", "subnet": "prod-a"}
+    ]
+  },
+  "observed": {
+    "nics": [
+      {"name": "nic-0", "zone": "eu", "subnet": "prod-WRONG"}
+    ]
+  },
+  "observation": [
+    {"path": "/nics/{name=nic-0,zone=eu}/subnet", "coverage": "observed"}
+  ],
+  "plan": {
+    "scalars": [],
+    "collections": [
+      {
+        "path": "/nics",
+        "topology": "map",
+        "keys": ["name", "zone"],
+        "elements": [{"path": "subnet", "compare": "exact"}]
+      }
+    ]
+  }
+}

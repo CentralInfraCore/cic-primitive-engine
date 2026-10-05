@@ -1,0 +1,10 @@
+{
+  "object": "INCOMPLETE",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "UNOBSERVED",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT"
+  },
+  "why": "unknown coverage (B2's own addition, no Relay equivalent) must flow through the object-level walker the same way ClassifyFieldValue (F6) already decided it does -- classified as UNOBSERVED, not lost or mishandled at the walker layer"
+}

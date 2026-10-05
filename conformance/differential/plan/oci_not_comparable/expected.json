@@ -1,0 +1,10 @@
+{
+  "object": "DRIFT",
+  "fields": {
+    "/shape": "CONFORMANT",
+    "/memory_gb": "NOT_COMPARABLE",
+    "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+    "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT"
+  },
+  "why": "an observed string under the numeric comparator against an intent integer is not a false DRIFT -- NOT_COMPARABLE, which still aggregates the object verdict to DRIFT (NOT_COMPARABLE counts the same as DRIFT for aggregation)"
+}
