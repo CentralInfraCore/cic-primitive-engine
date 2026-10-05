@@ -1,0 +1,4 @@
+{
+  "verdict": "UNOBSERVED",
+  "why": "unknown coverage (B2's own addition, no Relay equivalent) classifies the same as unobserved -- a device-reported indeterminate value is not authoritative evidence either way"
+}

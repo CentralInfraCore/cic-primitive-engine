@@ -1,0 +1,4 @@
+{
+  "verdict": "DRIFT",
+  "why": "authoritative absent + intent declares the field -> DRIFT (missing)"
+}

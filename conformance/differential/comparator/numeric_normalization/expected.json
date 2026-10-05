@@ -1,0 +1,4 @@
+{
+  "verdict": "CONFORMANT",
+  "why": "16 and 16.0 are numerically equal under the numeric comparator, even though they are different JSON number spellings -> CONFORMANT"
+}

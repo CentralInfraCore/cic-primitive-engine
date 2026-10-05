@@ -1,0 +1,7 @@
+{
+  "coverage": "observed",
+  "intent_present": true,
+  "intent": 16,
+  "observed": 16.0,
+  "compare": "numeric"
+}

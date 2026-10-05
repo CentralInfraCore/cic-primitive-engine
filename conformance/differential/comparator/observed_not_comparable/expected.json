@@ -1,0 +1,4 @@
+{
+  "verdict": "NOT_COMPARABLE",
+  "why": "a string and a number are never comparable under the exact comparator, regardless of their digits -> NOT_COMPARABLE, never a false DRIFT"
+}

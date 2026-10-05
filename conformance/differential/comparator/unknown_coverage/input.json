@@ -1,0 +1,7 @@
+{
+  "coverage": "unknown",
+  "intent_present": true,
+  "intent": "x",
+  "observed": "fault",
+  "compare": "exact"
+}

@@ -29,8 +29,12 @@ never the YAML.
 > (section F's collection-topology/element-identity primitive),
 > `go/plan` (section F's object-level walker) and
 > `go/digestprojection` (F9's digest wiring), each independently
-> verified against the same decided contract, not against each other
-> yet (a shared/differential corpus hasn't landed). Building
+> verified against the same decided contract. **A cross-language
+> differential corpus, `conformance/differential/`, has now landed for
+> the first of the four** (`comparator/`, F6 — JSON-only fixtures, run
+> by both `engine/tests/differential.rs` and `go/conformance/
+> differential_test.go`); `collection`/`plan`/`digest` groups follow
+> later, the same way F6 through F9 themselves did. Building
 > `go/collection` caught a real, previously-uncaught negative-zero
 > formatting divergence between `collection.rs` and real Go, fixed on
 > the Rust side in the same pass; `go/plan` peers against `plan.rs`'s
@@ -162,6 +166,12 @@ key, and alias expansion. They became `INV-041` and `INV-042` there.
 
 That is also why `cic-primitives`' Python checker is kept as a **permanent**
 differential oracle rather than a transitional one.
+
+`conformance/differential/` is a second, separate layer: strict JSON
+fixtures (not YAML — see its own README for why), checking whether the
+Rust and Go sides of F6-F9 actually agree with each other, not just
+each with the decided contract in prose. `comparator/` (F6) is landed;
+`collection`/`plan`/`digest` follow later.
 
 ## Building
 
