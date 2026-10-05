@@ -1,0 +1,6 @@
+{
+  "consumed": [
+    {"path": "/a", "coverage": "observed", "value": 16},
+    {"path": "/b", "coverage": "unknown"}
+  ]
+}

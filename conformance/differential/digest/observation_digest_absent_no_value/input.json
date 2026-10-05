@@ -1,0 +1,5 @@
+{
+  "consumed": [
+    {"path": "/boot_volume", "coverage": "absent"}
+  ]
+}

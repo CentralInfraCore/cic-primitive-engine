@@ -31,10 +31,12 @@ never the YAML.
 > `go/digestprojection` (F9's digest wiring), each independently
 > verified against the same decided contract. **A cross-language
 > differential corpus, `conformance/differential/`, has now landed for
-> three of the four** (`comparator`/F6, `collection`/F7, `plan`/F8 —
-> JSON-only fixtures, run by both `engine/tests/differential.rs` and
-> `go/*/differential_test.go`); the `digest` group follows later, the
-> same way F6 through F9 themselves did. Building
+> all four** (`comparator`/F6, `collection`/F7, `plan`/F8, `digest`/F9
+> — JSON-only fixtures, run by both `engine/tests/differential.rs` and
+> `go/*/differential_test.go`) — every Rust F-module from F6 through F9
+> has now been cross-checked against its Go peer, not merely each
+> independently verified against the decided contract in prose.
+> Building
 > `go/collection` caught a real, previously-uncaught negative-zero
 > formatting divergence between `collection.rs` and real Go, fixed on
 > the Rust side in the same pass; `go/plan` peers against `plan.rs`'s
@@ -170,8 +172,9 @@ differential oracle rather than a transitional one.
 `conformance/differential/` is a second, separate layer: strict JSON
 fixtures (not YAML — see its own README for why), checking whether the
 Rust and Go sides of F6-F9 actually agree with each other, not just
-each with the decided contract in prose. `comparator/` (F6),
-`collection/` (F7) and `plan/` (F8) are landed; `digest` follows later.
+each with the decided contract in prose. All four groups
+(`comparator`/F6, `collection`/F7, `plan`/F8, `digest`/F9) are now
+landed.
 
 ## Building
 

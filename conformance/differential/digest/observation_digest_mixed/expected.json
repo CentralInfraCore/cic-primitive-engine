@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:0c74654367849146fee85765f989336be0de63451d7970e4910452250ab6933a",
+  "why": "mixes an observed numeric value with B2's own unknown coverage (no Relay equivalent) in one projection, sorted by path (\"/a\" before \"/b\") regardless of declaration order -- confirmed byte-for-byte identical between both languages before being pinned."
+}

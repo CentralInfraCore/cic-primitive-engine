@@ -1,0 +1,13 @@
+{
+  "plan": {
+    "scalars": [],
+    "collections": [
+      {
+        "path": "/nics",
+        "topology": "map",
+        "keys": ["zone", "name"],
+        "elements": [{"path": "subnet", "compare": "exact"}]
+      }
+    ]
+  }
+}
