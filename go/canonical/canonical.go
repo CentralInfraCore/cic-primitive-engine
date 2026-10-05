@@ -65,6 +65,59 @@ func Digest(b []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+// IsValue reports whether v is a representable CIC value: nil, bool,
+// string, any of Go's native integer/float kinds, json.Number, or a
+// []interface{}/map[string]interface{} built recursively from the
+// same set -- this package's own value domain, the Go peer of what
+// the Rust side's Value enum can hold by construction (reader.rs).
+//
+// Review-caught on PR #32: unlike Rust, where an interface{}-typed
+// argument has no equivalent (Value is a closed enum), Go's
+// interface{} can hold ANY type -- a struct, a pointer, a []float64,
+// a map[int]string -- none of which the Rust peer's closed value-tree
+// can represent at all. A caller that accepts an interface{} value and
+// treats its fmt.Sprintf("%v", ...) form as a stable identity or a
+// canonical-byte input (go/collection's ElementKey; this package's own
+// ToCanonicalJSON, which already rejects anything outside this domain
+// via its own exhaustive type switch, independently of this function)
+// must reject anything IsValue refuses first, not silently format or
+// digest it -- the same "the type system can't close this off, so the
+// boundary must" principle PR #31 already established for
+// Coverage/CompareType, applied here to the value-tree shape itself,
+// shared as one authority so collection/conformance need not each
+// define their own copy of this domain.
+//
+// Deliberately does NOT reject NaN/Infinity -- shape and finiteness
+// are orthogonal checks. Rust's own Value::Float can structurally hold
+// a NaN too; it is ToCanonicalJSON's/canonical.rs's own finite check
+// (and, in go/collection, its own non-finite pre-check) that rejects
+// it, not the value type itself.
+func IsValue(v interface{}) bool {
+	switch vv := v.(type) {
+	case nil, bool, string,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64, json.Number:
+		return true
+	case []interface{}:
+		for _, item := range vv {
+			if !IsValue(item) {
+				return false
+			}
+		}
+		return true
+	case map[string]interface{}:
+		for _, item := range vv {
+			if !IsValue(item) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
 func writeValue(out *bytes.Buffer, v interface{}, path string) error {
 	switch vv := v.(type) {
 	case nil:

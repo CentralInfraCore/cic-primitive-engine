@@ -34,6 +34,25 @@
 // key already returns the nil interface{} zero value, and
 // fmt.Sprintf("%v", nil) already prints "<nil>" -- both for free, not
 // written here.
+//
+// # ElementKey's input domain is validated, not assumed
+//
+// Review-caught on PR #32: calling fmt.Sprintf("%v", elem) directly,
+// as the first version of this file did, happily formats ANY Go value
+// -- a struct, a pointer, a []float64, a map[int]string -- into a
+// plausible-looking identity with no equivalent in the Rust peer's
+// closed Value-tree (collection.rs's elem is a &Value, which simply
+// cannot be any of those shapes). Worse, the non-finite pre-check only
+// ever recursed into []interface{}/map[string]interface{}, so a
+// []float64{1, NaN} slipped past it entirely and produced the exact
+// "NaN masquerading as a stable identity" result the pre-check exists
+// to prevent, just via a container shape it didn't recognize. Fixed:
+// ElementKey validates elem (and, for map topology, the whole element,
+// not only the key fields it reads) against canonical.IsValue first,
+// and panics on anything outside that domain -- the same
+// "the type system can't close this off, so the boundary must"
+// principle PR #31 already established for Coverage/CompareType,
+// shared from canonical rather than redefined here.
 package collection
 
 import (
@@ -41,6 +60,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/CentralInfraCore/cic-primitive-engine/go/canonical"
 )
 
 // CollectionTopology names how a list field's elements are identified.
@@ -103,6 +124,9 @@ func (c Collection) ElementKey(elem interface{}) string {
 	}
 	switch c.Topology {
 	case TopologyMap:
+		if !canonical.IsValue(elem) {
+			panic(fmt.Sprintf("collection: elem is not a representable CIC value (%T)", elem))
+		}
 		m, ok := elem.(map[string]interface{})
 		if !ok {
 			return "" // map topology, non-map element -> no key
@@ -119,12 +143,19 @@ func (c Collection) ElementKey(elem interface{}) string {
 		}
 		return strings.Join(parts, ",")
 	case TopologySet:
+		if !canonical.IsValue(elem) {
+			panic(fmt.Sprintf("collection: elem is not a representable CIC value (%T)", elem))
+		}
 		display, ok := goDisplay(elem)
 		if !ok {
 			return ""
 		}
 		return display
 	default: // TopologyAtomic (Valid() above already rejected anything else)
+		// elem is never inspected for atomic topology -- there is no
+		// per-element identity to format, so there is nothing to
+		// validate either, matching collection.rs's own element_key,
+		// which never looks at its argument in this branch.
 		return ""
 	}
 }

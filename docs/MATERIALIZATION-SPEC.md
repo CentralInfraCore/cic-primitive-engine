@@ -2668,18 +2668,41 @@ of `engine/src/collection.rs` (F7), same public surface
 `collection.rs`'s own `go_display`/`go_float_display` exist only
 because Rust has no built-in equivalent of Go's `fmt.Sprintf("%v",
 ...)` — this package has one, and calls it directly on the real
-`interface{}` tree. The only hand-written piece is
-`containsNonFinite`, a recursive pre-check rejecting any NaN/Infinity
-reachable in the value (`%v` would happily print `"NaN"`/`"+Inf"` as
-if it were a stable identity); once that check passes,
-`fmt.Sprintf("%v", v)` does the rest — correctly reproducing plain-vs-
-scientific float notation, slice/map rendering and sorted map keys,
-because that behavior already **is** what this package is peering
-against, not an approximation of it. A missing map-topology key field
-needed no special case either: indexing `m[k]` for an absent key
-already returns the nil `interface{}` zero value, and
-`fmt.Sprintf("%v", nil)` already prints `"<nil>"` — both automatic,
-where `collection.rs` had to hand-replicate them.
+`interface{}` tree, correctly reproducing plain-vs-scientific float
+notation, slice/map rendering and sorted map keys for free, because
+that behavior already **is** what this package is peering against,
+not an approximation of it. A missing map-topology key field needed no
+special case either: indexing `m[k]` for an absent key already returns
+the nil `interface{}` zero value, and `fmt.Sprintf("%v", nil)` already
+prints `"<nil>"` — both automatic, where `collection.rs` had to
+hand-replicate them.
+
+**Review-caught blocker on PR #32, fixed before merge: `elem`'s input
+domain was assumed, not validated.** Calling `fmt.Sprintf("%v", elem)`
+directly, as the first version of this file did, happily formats
+**any** Go value — a struct, a pointer, a `[]float64`, a
+`map[int]string` — into a plausible-looking identity with no
+equivalent in the Rust peer's closed `Value`-tree (`collection.rs`'s
+`elem` is a `&Value`, which simply cannot be any of those shapes).
+Worse, the non-finite pre-check (`containsNonFinite`) only ever
+recursed into `[]interface{}`/`map[string]interface{}`, so a
+`[]float64{1, NaN}` slipped past it entirely and produced `"[1 NaN]"`
+— the exact "NaN masquerading as a stable identity" result that check
+exists to prevent, just via a container shape it didn't recognize.
+Reproduced directly before fixing: `ElementKey(struct{ X int }{1})`
+→ `"{1}"`, `ElementKey([]float64{1, 2})` → `"[1 2]"`. **Fix: a new,
+shared `canonical.IsValue(v)` (exported from `go/canonical`, not
+redefined per-package) validates `elem` is nil/bool/string/a numeric
+kind/`json.Number`, or a `[]interface{}`/`map[string]interface{}`
+built recursively from the same set — this package's own value domain,
+the Go peer of what Rust's `Value` enum can hold by construction.**
+`ElementKey` panics on anything `IsValue` refuses, for the whole
+element (not only the key fields a map-topology lookup actually
+reads — a struct value nested in an unrelated field must be rejected
+too). The same "the type system can't close this off, so the boundary
+must" principle PR #31 already established for `Coverage`/
+`CompareType`, now shared as one authority rather than redefined a
+third time.
 
 **Found a real, previously-uncaught cross-language divergence while
 building this:** F7's own negative-zero bug, named in its own

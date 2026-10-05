@@ -168,6 +168,56 @@ func expectPanic(t *testing.T, name string, fn func()) {
 	fn()
 }
 
+type reviewExampleStruct struct{ X int }
+
+// Review-caught on PR #32: calling fmt.Sprintf("%v", elem) directly
+// happily formats ANY Go value, with no equivalent restriction in the
+// Rust peer's closed Value-tree. Each case here was first run against
+// the pre-fix code to confirm it actually produced a plausible-
+// looking identity instead of failing -- the exact examples the review
+// gave, reproduced before being fixed:
+//
+//	ElementKey(struct{ X int }{1})     => "{1}"
+//	ElementKey([]float64{1, 2})        => "[1 2]"
+//	ElementKey(map[int]string{1:"x"})  => "map[1:x]"
+//	ElementKey([]float64{1, math.NaN()}) => "[1 NaN]" -- the specific
+//	    failure mode the non-finite pre-check exists to prevent, which
+//	    slipped through because containsNonFinite only recursed into
+//	    []interface{}/map[string]interface{}, not []float64.
+func TestOutOfDomainValuesFailClosed(t *testing.T) {
+	set := Collection{Topology: TopologySet}
+	expectPanic(t, "struct", func() {
+		set.ElementKey(reviewExampleStruct{1})
+	})
+	expectPanic(t, "[]float64", func() {
+		set.ElementKey([]float64{1, 2})
+	})
+	expectPanic(t, "map[int]string", func() {
+		set.ElementKey(map[int]string{1: "x"})
+	})
+	expectPanic(t, "[]float64 with NaN", func() {
+		set.ElementKey([]float64{1, math.NaN()})
+	})
+	expectPanic(t, "pointer", func() {
+		x := 1
+		set.ElementKey(&x)
+	})
+
+	mapColl := Collection{Topology: TopologyMap, Keys: []string{"id"}}
+	expectPanic(t, "map topology, struct element", func() {
+		mapColl.ElementKey(reviewExampleStruct{1})
+	})
+	// A struct value nested INSIDE an otherwise-valid map must also be
+	// rejected -- validating only the key fields actually read, rather
+	// than the whole element, would miss this.
+	expectPanic(t, "map topology, out-of-domain nested value", func() {
+		mapColl.ElementKey(map[string]interface{}{
+			"id":    "ok",
+			"other": reviewExampleStruct{1},
+		})
+	})
+}
+
 // Applying PR #31's review lesson proactively here: CollectionTopology
 // is a string-backed Go type, so CollectionTopology("garbage") compiles
 // and type-checks even though the equivalent would not build on the

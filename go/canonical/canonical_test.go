@@ -262,3 +262,45 @@ func TestBigIntegersNormalize(t *testing.T) {
 		}
 	}
 }
+
+type testStruct struct{ X int }
+
+// IsValue was added on PR #32, for go/collection's ElementKey to
+// validate its input against -- see that package for the bug this
+// closed. Verified directly here too: every shape this package's own
+// ToCanonicalJSON accepts must be IsValue, and the shapes a Go
+// interface{} can hold that have no Rust Value equivalent (a struct, a
+// pointer, a non-string-keyed map, a non-interface{}-element slice)
+// must not be.
+func TestIsValueAcceptsExactlyTheSupportedShapes(t *testing.T) {
+	valid := []interface{}{
+		nil, true, "s", 1, int64(1), float64(1.5), json.Number("1"),
+		[]interface{}{}, []interface{}{1, "s", nil},
+		map[string]interface{}{}, map[string]interface{}{"a": 1},
+		// Nested, including a non-finite leaf -- IsValue is a shape
+		// check only; finiteness is a separate, orthogonal concern
+		// (see this function's own doc comment).
+		[]interface{}{math.NaN()},
+		map[string]interface{}{"nested": []interface{}{1, 2}},
+	}
+	for _, v := range valid {
+		if !IsValue(v) {
+			t.Errorf("IsValue(%#v) = false, want true", v)
+		}
+	}
+
+	invalid := []interface{}{
+		testStruct{1},
+		&testStruct{1},
+		[]float64{1, 2},
+		map[int]string{1: "x"},
+		[]interface{}{testStruct{1}},                 // invalid nested in a valid slice
+		map[string]interface{}{"a": testStruct{1}},   // invalid nested in a valid map
+		map[string]interface{}{"a": []float64{1, 2}}, // wrong slice element type, nested
+	}
+	for _, v := range invalid {
+		if IsValue(v) {
+			t.Errorf("IsValue(%#v) = true, want false", v)
+		}
+	}
+}
