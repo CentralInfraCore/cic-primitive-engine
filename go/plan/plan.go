@@ -75,6 +75,46 @@ type ConformancePlan struct {
 	Collections []CollectionPlan
 }
 
+// Validate panics unless every FieldPlan's CompareType and every
+// CollectionPlan's CollectionTopology is one of the values that
+// type's own Valid() recognizes.
+//
+// Review-caught on PR #33: calling Compare/ElementKey with an invalid
+// CompareType/CollectionTopology already panics (PR #31/#32), but
+// whether that call actually HAPPENS for a given field depends on
+// execution path, not on the plan being well-formed.
+// ClassifyFieldValue never calls Compare at all unless coverage is
+// Observed, so FieldPlan{Compare: CompareType("garbage")} paired with
+// an Unobserved field silently verdicts UNOBSERVED, never panicking;
+// a CollectionPlan whose Path never resolves to any elements never
+// calls ElementKey at all, so CollectionTopology("garbage") never
+// surfaces either. Both reproduced directly before this fix: a plan
+// built with either garbage value produced an ordinary-looking
+// ObjectVerdict with no panic, no error, nothing -- the exact "the
+// type system can't close this off, so the boundary must" gap PR
+// #31/#32 already closed for Coverage/CompareType/CollectionTopology's
+// own call sites, just one level up: a malformed PLAN, not a single
+// malformed call, needs the identical check at Evaluate's own
+// boundary, not deferred to whichever paths execution happens to
+// take.
+func (cp ConformancePlan) Validate() {
+	for _, fp := range cp.Scalars {
+		if !fp.Compare.Valid() {
+			panic(fmt.Sprintf("plan: invalid CompareType %q in scalar field plan %q", string(fp.Compare), fp.Path))
+		}
+	}
+	for _, coll := range cp.Collections {
+		if !coll.Collection.Topology.Valid() {
+			panic(fmt.Sprintf("plan: invalid CollectionTopology %q in collection plan %q", string(coll.Collection.Topology), coll.Path))
+		}
+		for _, fp := range coll.Elements {
+			if !fp.Compare.Valid() {
+				panic(fmt.Sprintf("plan: invalid CompareType %q in element field plan %q of collection %q", string(fp.Compare), fp.Path, coll.Path))
+			}
+		}
+	}
+}
+
 // ObjectConformance is the aggregate object verdict -- identical
 // string constants to conformance.go's own ObjectConformance.
 //
@@ -107,35 +147,88 @@ const (
 //
 // Go has no closed sum type, so this uses Go's actual closest
 // equivalent instead of the Valid()+panic pattern Coverage/
-// CompareType/CollectionTopology use: unexported fields plus a single
-// constructor (NewConsumedField). Code OUTSIDE this package cannot
-// construct the forbidden pairing (Observed with no value, or any
-// other coverage WITH one) at all -- there is no exported way to
-// build a ConsumedField except through the constructor, which itself
-// enforces it. This is a narrower guarantee than Rust's enum, which
-// closes off even code INSIDE the same module -- recorded honestly,
-// not overstated, since Go code within this very package could still
-// write the struct literal directly if it tried. Every constructor
-// call in this file goes through NewConsumedField anyway, by
-// convention, not necessity.
+// CompareType/CollectionTopology use: unexported fields plus one
+// constructor PER STATE (NewObservedConsumedField/
+// NewAbsentConsumedField/NewUnobservedConsumedField/
+// NewUnknownConsumedField), mirroring the Rust enum's own four
+// variants one-for-one, rather than a single two-argument constructor
+// that accepts a (coverage, value) pair and decides what to do with
+// it.
+//
+// Review-caught on PR #33: an earlier version had exactly that single
+// two-argument constructor (NewConsumedField(coverage, observedValue)),
+// which DID reject an invalid Coverage, but still silently ACCEPTED
+// and discarded observedValue for every non-Observed coverage --
+// NewConsumedField(CoverageAbsent, "I should not exist") built a
+// valid-looking ConsumedField with no error, the exact "forbidden
+// pairing silently accepted" shape PR #29 already named a defect on
+// the Rust side (the value's own origin didn't even reach the type
+// invariant check; it was just dropped on the floor). Splitting into
+// per-state constructors removes the parameter entirely from the
+// three states that must never carry one -- there is no argument
+// position left for a caller to mistakenly believe survives into
+// Absent/Unobserved/Unknown.
+//
+// Code OUTSIDE this package cannot construct the forbidden pairing at
+// all -- there is no exported way to build a ConsumedField except
+// through these constructors. This is a narrower guarantee than
+// Rust's enum, which closes off even code INSIDE the same module --
+// recorded honestly, not overstated, since Go code within this very
+// package could still write the struct literal directly if it tried.
 type ConsumedField struct {
 	coverage conformance.Coverage
 	value    interface{}
 }
 
-// NewConsumedField is the only way to construct a ConsumedField.
+// NewObservedConsumedField is the only way to construct a
+// ConsumedField whose Value() returns a value.
+func NewObservedConsumedField(observedValue interface{}) ConsumedField {
+	return ConsumedField{coverage: conformance.CoverageObserved, value: observedValue}
+}
+
+// NewAbsentConsumedField constructs a ConsumedField for a path the
+// observation authoritatively reported as absent.
+func NewAbsentConsumedField() ConsumedField {
+	return ConsumedField{coverage: conformance.CoverageAbsent}
+}
+
+// NewUnobservedConsumedField constructs a ConsumedField for a path
+// the observation never covered.
+func NewUnobservedConsumedField() ConsumedField {
+	return ConsumedField{coverage: conformance.CoverageUnobserved}
+}
+
+// NewUnknownConsumedField constructs a ConsumedField for a path whose
+// observed value was indeterminate (B2's own addition, no Relay
+// equivalent).
+func NewUnknownConsumedField() ConsumedField {
+	return ConsumedField{coverage: conformance.CoverageUnknown}
+}
+
+// fromCoverage is classifyAt's own internal constructor, mirroring
+// plan.rs's own (also non-exported) ConsumedField::from_coverage: it
+// is the one place a runtime Coverage value -- not a caller who
+// already knows which state they mean -- decides which of the four
+// per-state constructors to call, and it is the only place in this
+// package allowed to do so. Not exported, so nothing outside this
+// file can reintroduce the two-argument shape the review caught.
 // Panics if coverage is not one of Coverage's four defined values --
-// see conformance.Coverage.Valid's doc comment; this is the same
-// boundary check, applied here because this constructor is itself a
-// place external input (a caller-supplied Coverage) enters the type.
-func NewConsumedField(coverage conformance.Coverage, observedValue interface{}) ConsumedField {
-	if !coverage.Valid() {
+// the same boundary check Coverage.Valid's own doc comment describes,
+// applied here because this is where an externally-supplied Coverage
+// (obs.Coverage(path)'s return value) enters this type.
+func fromCoverage(coverage conformance.Coverage, observedValue interface{}) ConsumedField {
+	switch coverage {
+	case conformance.CoverageObserved:
+		return NewObservedConsumedField(observedValue)
+	case conformance.CoverageAbsent:
+		return NewAbsentConsumedField()
+	case conformance.CoverageUnobserved:
+		return NewUnobservedConsumedField()
+	case conformance.CoverageUnknown:
+		return NewUnknownConsumedField()
+	default:
 		panic(fmt.Sprintf("plan: invalid Coverage %q", string(coverage)))
 	}
-	if coverage != conformance.CoverageObserved {
-		return ConsumedField{coverage: coverage}
-	}
-	return ConsumedField{coverage: coverage, value: observedValue}
 }
 
 // Coverage returns the recorded coverage.
@@ -180,7 +273,11 @@ type ObjectVerdict struct {
 // for Coverage/CompareType/CollectionTopology, applied at this
 // package's own entry point so every value resolvePath/
 // collection.ElementKey touch downstream is already known-valid; see
-// go/collection's own package doc for the bug this prevents.
+// go/collection's own package doc for the bug this prevents. Also
+// panics if cp itself is malformed -- see ConformancePlan.Validate's
+// own doc comment for why this must be checked here, unconditionally,
+// rather than left to whichever per-field call paths execution
+// happens to take.
 func Evaluate(
 	intent, observed map[string]interface{},
 	obs *conformance.Observation,
@@ -192,6 +289,7 @@ func Evaluate(
 	if !canonical.IsValue(observed) {
 		panic("plan: observed is not a representable CIC value tree")
 	}
+	cp.Validate()
 
 	fields := make(map[string]conformance.FieldVerdict)
 	consumed := make(map[string]ConsumedField)
@@ -237,8 +335,8 @@ func classifyAt(
 	fields[path] = conformance.ClassifyFieldValue(coverage, iPresent, iv, ov, ct)
 	// F5's own rule, not invented here: a value is part of what the
 	// comparator consumed iff coverage is Observed -- enforced by
-	// construction via NewConsumedField, not by convention.
-	consumed[path] = NewConsumedField(coverage, ov)
+	// construction via fromCoverage, not by convention.
+	consumed[path] = fromCoverage(coverage, ov)
 }
 
 // aggregate reduces per-field verdicts to the object verdict --

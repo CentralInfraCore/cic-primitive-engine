@@ -2762,18 +2762,6 @@ single-split bug makes the multi-key test fail with a false
 equal to itself) — confirming the test actually catches what it
 claims to, not just that it passes.
 
-**`ConsumedField` uses Go's actual closest equivalent to the Rust
-peer's enum guarantee, not the `Valid()`+panic pattern.** Unlike
-`Coverage`/`CompareType`/`CollectionTopology` (open `string` types,
-necessarily guarded at their own call sites), `ConsumedField` is a
-struct with unexported fields and a single constructor
-(`NewConsumedField`) enforcing F5's own rule (a value is present iff
-coverage is `Observed`) — code outside the package has no way to
-construct the forbidden pairing at all, the closest Go equivalent to
-Rust's sum type. Documented honestly as a *narrower* guarantee than
-Rust's enum: code inside the same package could still write the
-struct literal directly, where Rust's enum closes off even that.
-
 **`Evaluate` validates `intent`/`observed` against `canonical.IsValue`
 at its own boundary, extending F12's lesson rather than waiting for a
 review round to ask for it on this package too** — every value
@@ -2785,6 +2773,44 @@ exported in the same PR (a pure visibility fix, no behavior change) so
 copy — mirroring `collection.rs`'s own `pub(crate)` visibility choice,
 which this package's doc comment had already anticipated but the Go
 code hadn't actually implemented until now.
+
+**Review-caught on PR #33, two blockers, same underlying principle
+applied one level up from F11/F12's own call sites.**
+
+*First: a malformed `ConformancePlan` could silently produce an
+ordinary verdict, because whether `Compare`/`ElementKey`'s own
+PR #31/#32 panics actually fire depends on execution path, not on the
+plan being well-formed.* `ClassifyFieldValue` never calls `Compare` at
+all unless coverage is `Observed`, so a `FieldPlan` with
+`CompareType("garbage")` on a field that is `Unobserved` never panics
+— it just verdicts `UNOBSERVED`. A `CollectionPlan` whose `Path` never
+resolves to any elements never calls `ElementKey` at all, so
+`CollectionTopology("garbage")` never surfaces either. Both reproduced
+directly before fixing: a plan built with either garbage value
+produced a normal-looking `ObjectVerdict`, no panic, nothing. Fixed:
+`ConformancePlan.Validate()`, called unconditionally at `Evaluate`'s
+own entry — checking every `FieldPlan.Compare` and every
+`CollectionPlan.Collection.Topology` up front, independent of which
+paths the rest of the walk happens to take for a given intent/observed
+pair.
+
+*Second: `ConsumedField`'s original two-argument constructor
+(`NewConsumedField(coverage, observedValue)`) rejected an invalid
+`Coverage`, but still silently accepted and discarded `observedValue`
+for every non-`Observed` coverage* —
+`NewConsumedField(CoverageAbsent, "I should not exist")` built a
+valid-looking `ConsumedField` with no error, the same "forbidden
+pairing silently accepted" shape PR #29 already named a defect on the
+Rust side, just reached through an unused constructor argument rather
+than a struct literal. **Fix: one constructor per state**
+(`NewObservedConsumedField(value)` / `NewAbsentConsumedField()` /
+`NewUnobservedConsumedField()` / `NewUnknownConsumedField()`),
+mirroring the Rust enum's four variants one-for-one, plus a
+package-private `fromCoverage` (mirroring `plan.rs`'s own non-`pub`
+`from_coverage`) for `classifyAt`'s own internal use. There is no
+longer an argument position for a caller to mistakenly believe
+survives into `Absent`/`Unobserved`/`Unknown` — not "accepted and
+ignored," but "the parameter does not exist."
 
 **What this does not do:** decide `ObjectConformance` needs a
 `Valid()`+panic guard — nothing in this package ever receives one as

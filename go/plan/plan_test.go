@@ -285,30 +285,118 @@ func TestEvaluateFailsClosedOnOutOfDomainTrees(t *testing.T) {
 	})
 }
 
-// NewConsumedField is this package's own closed-construction type
-// (see ConsumedField's doc comment) -- Coverage must still be one of
-// the four defined values, the same boundary check conformance's own
+// Review-caught on PR #33: a malformed ConformancePlan used to surface
+// its invalid CompareType/CollectionTopology only if execution
+// happened to exercise it -- Compare/ElementKey's own PR #31/#32 panics
+// are real, but ClassifyFieldValue never calls Compare at all unless
+// coverage is Observed, and elementKeys never calls ElementKey at all
+// if the collection's Path never resolves to any elements. Both
+// reproduced directly before this fix: a plan built with either
+// garbage value produced an ordinary ObjectVerdict, no panic at all.
+// Fixed: ConformancePlan.Validate, called unconditionally at
+// Evaluate's own entry, independent of which paths the rest of the
+// walk happens to take for this particular intent/observed pair.
+func TestMalformedPlanFailsClosedRegardlessOfExecutionPath(t *testing.T) {
+	// The review's own first example: invalid CompareType on a field
+	// whose coverage is Unobserved, so ClassifyFieldValue would never
+	// reach Compare at all if Evaluate didn't validate the plan itself
+	// up front.
+	expectPanic(t, "invalid CompareType, field never Observed", func() {
+		p := ConformancePlan{
+			Scalars: []FieldPlan{
+				{Path: "/x", Compare: conformance.CompareType("garbage")},
+			},
+		}
+		Evaluate(
+			map[string]interface{}{"x": 1},
+			map[string]interface{}{"x": 1},
+			conformance.NewObservation(), // "/x" defaults to Unobserved
+			p,
+		)
+	})
+
+	// The review's own second example: invalid CollectionTopology on a
+	// collection whose Path never resolves to any elements, so
+	// elementKeys would never call ElementKey at all if Evaluate didn't
+	// validate the plan itself up front.
+	expectPanic(t, "invalid CollectionTopology, collection path resolves to nothing", func() {
+		p := ConformancePlan{
+			Collections: []CollectionPlan{
+				{
+					Path:       "/missing",
+					Collection: collection.Collection{Topology: collection.CollectionTopology("garbage")},
+					Elements:   []FieldPlan{{Path: "y", Compare: conformance.CompareExact}},
+				},
+			},
+		}
+		Evaluate(
+			map[string]interface{}{},
+			map[string]interface{}{},
+			conformance.NewObservation(),
+			p,
+		)
+	})
+}
+
+func TestConformancePlanValidateAcceptsAWellFormedPlan(t *testing.T) {
+	ociPlan().Validate() // must not panic
+}
+
+// fromCoverage is classifyAt's own internal constructor (see
+// ConsumedField's doc comment) -- Coverage must still be one of the
+// four defined values, the same boundary check conformance's own
 // ClassifyField/Compare/Observation.Set already apply.
-func TestNewConsumedFieldFailsClosedOnInvalidCoverage(t *testing.T) {
-	expectPanic(t, "NewConsumedField", func() {
-		NewConsumedField(conformance.Coverage("garbage"), "x")
+func TestFromCoverageFailsClosedOnInvalidCoverage(t *testing.T) {
+	expectPanic(t, "fromCoverage", func() {
+		fromCoverage(conformance.Coverage("garbage"), "x")
 	})
 }
 
 func TestConsumedFieldOnlyCarriesAValueWhenObserved(t *testing.T) {
-	observed := NewConsumedField(conformance.CoverageObserved, "x")
+	observed := NewObservedConsumedField("x")
 	if v, ok := observed.Value(); !ok || v != "x" {
 		t.Errorf("observed: got (%v, %v), want (\"x\", true)", v, ok)
 	}
-	for _, c := range []conformance.Coverage{
-		conformance.CoverageAbsent, conformance.CoverageUnobserved, conformance.CoverageUnknown,
-	} {
-		cf := NewConsumedField(c, "should be discarded")
-		if v, ok := cf.Value(); ok || v != nil {
-			t.Errorf("%v: got (%v, %v), want (nil, false)", c, v, ok)
-		}
-		if cf.Coverage() != c {
-			t.Errorf("Coverage() = %v, want %v", cf.Coverage(), c)
+
+	absent := NewAbsentConsumedField()
+	unobserved := NewUnobservedConsumedField()
+	unknown := NewUnknownConsumedField()
+	for _, c := range []ConsumedField{absent, unobserved, unknown} {
+		if v, ok := c.Value(); ok || v != nil {
+			t.Errorf("%v: got (%v, %v), want (nil, false)", c.Coverage(), v, ok)
 		}
 	}
+	if absent.Coverage() != conformance.CoverageAbsent {
+		t.Errorf("Coverage() = %v, want %v", absent.Coverage(), conformance.CoverageAbsent)
+	}
+	if unobserved.Coverage() != conformance.CoverageUnobserved {
+		t.Errorf("Coverage() = %v, want %v", unobserved.Coverage(), conformance.CoverageUnobserved)
+	}
+	if unknown.Coverage() != conformance.CoverageUnknown {
+		t.Errorf("Coverage() = %v, want %v", unknown.Coverage(), conformance.CoverageUnknown)
+	}
+}
+
+// Review-caught on PR #33: the PREVIOUS two-argument NewConsumedField
+// silently accepted and discarded a value for any non-Observed
+// coverage, rather than rejecting the call shape entirely --
+// NewConsumedField(CoverageAbsent, "I should not exist") built a
+// valid-looking ConsumedField with no error. Splitting into per-state
+// constructors removes the parameter from the three states that must
+// never carry one: there is no longer any way to even ATTEMPT passing
+// a value into NewAbsentConsumedField/NewUnobservedConsumedField/
+// NewUnknownConsumedField -- not "it's accepted and ignored," but
+// "the argument position does not exist." This test exists to pin
+// that shape, not to re-prove runtime behavior a type signature
+// already guarantees at compile time.
+func TestNonObservedConstructorsHaveNoValueParameter(t *testing.T) {
+	// NewAbsentConsumedField() / NewUnobservedConsumedField() /
+	// NewUnknownConsumedField() each take zero arguments -- this is
+	// enforced by the compiler, not by this test; its only job is to
+	// exist as a readable record of that fact. If a future change ever
+	// added a value parameter back to any of these three, it would be
+	// a regression back to the exact shape this PR's review rejected.
+	_ = NewAbsentConsumedField()
+	_ = NewUnobservedConsumedField()
+	_ = NewUnknownConsumedField()
 }
