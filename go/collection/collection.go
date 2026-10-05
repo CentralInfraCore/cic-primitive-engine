@@ -135,7 +135,7 @@ func (c Collection) ElementKey(elem interface{}) string {
 		sort.Strings(keys) // stable regardless of declared order
 		parts := make([]string, 0, len(keys))
 		for _, k := range keys {
-			display, ok := goDisplay(m[k])
+			display, ok := GoDisplay(m[k])
 			if !ok {
 				return "" // only a non-finite float reaches here -- no identity, not guessed
 			}
@@ -146,7 +146,7 @@ func (c Collection) ElementKey(elem interface{}) string {
 		if !canonical.IsValue(elem) {
 			panic(fmt.Sprintf("collection: elem is not a representable CIC value (%T)", elem))
 		}
-		display, ok := goDisplay(elem)
+		display, ok := GoDisplay(elem)
 		if !ok {
 			return ""
 		}
@@ -160,16 +160,15 @@ func (c Collection) ElementKey(elem interface{}) string {
 	}
 }
 
-// goDisplay is fmt.Sprintf("%v", v), refused (ok=false) if v is, or
+// GoDisplay is fmt.Sprintf("%v", v), refused (ok=false) if v is, or
 // contains, a non-finite float -- see the package doc for why the
 // formatting itself needs no hand-written logic, unlike on the Rust
-// side. Exported at package level (not just within ElementKey) for the
-// same reason collection.rs's own go_display is pub(crate): a future
-// object-level walker's resolvePath-equivalent (the Go peer of F8,
-// plan.rs, not yet written) will need the identical formatting for its
-// own "{key=val}" path-segment matching, and must not grow a second,
-// drifting copy of it.
-func goDisplay(v interface{}) (string, bool) {
+// side. Exported across packages (not just used within ElementKey)
+// for the same reason collection.rs's own go_display is pub(crate):
+// the object-level walker's resolvePath (go/plan, the Go peer of F8)
+// needs the identical formatting for its own "{key=val}" path-segment
+// matching, and must not grow a second, drifting copy of it.
+func GoDisplay(v interface{}) (string, bool) {
 	if containsNonFinite(v) {
 		return "", false
 	}
