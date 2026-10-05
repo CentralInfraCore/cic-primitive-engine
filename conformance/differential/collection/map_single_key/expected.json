@@ -1,0 +1,4 @@
+{
+  "identity": "name=nic-0",
+  "why": "single-key map topology -> the one key field's \"k=v\" pair"
+}

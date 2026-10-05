@@ -1,0 +1,4 @@
+{
+  "identity": "map[a:x b:1]",
+  "why": "a TopologySet element can itself be a nested Map, matching Go's %v exactly: \"map[k1:v1 k2:v2]\", keys sorted byte-wise regardless of insertion order"
+}

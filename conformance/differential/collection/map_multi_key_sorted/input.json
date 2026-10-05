@@ -1,0 +1,5 @@
+{
+  "topology": "map",
+  "keys": ["zone", "name"],
+  "elem": {"name": "nic-0", "zone": "eu"}
+}

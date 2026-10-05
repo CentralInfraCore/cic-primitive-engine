@@ -1,0 +1,4 @@
+{
+  "identity": "[a 1 true]",
+  "why": "a TopologySet element can itself be a nested Seq, matching Go's %v exactly: \"[e1 e2 e3]\", space-separated, each element recursively formatted"
+}

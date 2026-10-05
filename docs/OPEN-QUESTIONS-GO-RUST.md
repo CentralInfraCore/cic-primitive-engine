@@ -165,8 +165,8 @@ has to sort `consumed`'s keys itself, where the Rust side gets that
 for free from `BTreeMap`. F15 is the first point any of F6-F9's Go
 peers have actually been cross-checked against Rust, not just each
 independently verified against the decided contract — a new JSON-only
-corpus layer, `conformance/differential/`, `comparator/` (F6) landed
-first.** No Go peer exists yet for F10.
+corpus layer, `conformance/differential/`, `comparator/` (F6) and
+`collection/` (F7) landed so far.** No Go peer exists yet for F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1454,11 +1454,16 @@ proof chain
     corpus reusing `../reader/`'s and `../canonicalize/`'s YAML
     vectors.
 
-    **Landed incrementally: `comparator/` (F6) only, for now** — eight
-    vectors ported from already Go-verified Rust tests, covering every
+    **Landed incrementally: `comparator/` (F6) first** — eight vectors
+    ported from already Go-verified Rust tests, covering every
     `FieldVerdict` value, a harness invariant enforced on both sides.
-    `collection/`/`plan/`/`digest/` (F7-F9) are later, separate
-    additions.
+
+    **`collection/` (F7) landed next, same cycle:** ten vectors ported
+    from `collection.rs`'s own tests, including the exact negative-zero
+    vector F12's cross-language bugfix was found and fixed against —
+    now also checked through this shared fixture, not only each
+    crate's own hand-written unit test. `plan/`/`digest/` (F8/F9) are
+    later, separate additions.
 
     **Found and fixed a real structural conflict in the same pass:**
     the existing `the_corpus_is_not_empty` generic scanner
@@ -1475,9 +1480,9 @@ proof chain
     named in `differential/README.md` for whichever future vector
     author's case might.
 
-    **What this does not do:** add `collection/`/`plan/`/`digest/`
-    groups (F7-F9's own differential vectors, separate later
-    additions); decide `Parse`'s own future differential corpus.
+    **What this does not do:** add `plan/`/`digest/` groups (F8/F9's
+    own differential vectors, separate later additions); decide
+    `Parse`'s own future differential corpus.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's

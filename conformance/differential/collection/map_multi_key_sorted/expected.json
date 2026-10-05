@@ -1,0 +1,4 @@
+{
+  "identity": "name=nic-0,zone=eu",
+  "why": "multi-key identity is stable, sorted by key name regardless of declared order (\"zone\", \"name\")"
+}
