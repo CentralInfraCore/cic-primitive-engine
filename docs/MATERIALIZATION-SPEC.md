@@ -1827,17 +1827,16 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          BTreeMap -- see the F14 subsection, below), and F15 (the
          cross-language differential corpus itself,
          conformance/differential/ -- comparator/ (F6),
-         collection/ (F7) and plan/ (F8) landed, run by both
-         engine/tests/differential.rs and go/*/differential_test.go
-         against the identical JSON fixtures -- the first point in
-         this effort where Rust and Go are actually checked against
-         EACH OTHER, not each independently verified against the
-         decided contract in prose -- see the F15 subsection, below).
-         Every Rust module from F6 through F9 now has a Go peer, and
-         three of the four have actually been cross-checked against
-         it.
-Open:    F15's own digest differential group (F9,
-         not yet landed). Go's analogous
+         collection/ (F7), plan/ (F8) AND digest/ (F9) all landed, run
+         by both engine/tests/differential.rs and
+         go/*/differential_test.go against the identical JSON fixtures
+         -- the first point in this effort where Rust and Go are
+         actually checked against EACH OTHER, not each independently
+         verified against the decided contract in prose -- see the
+         F15 subsection, below). Every Rust module from F6 through F9
+         now has a Go peer, and every one of the four has actually
+         been cross-checked against it -- F15 is closed in full.
+Open:    Go's analogous
          IntentDigest still has no equivalent here --
          it needs a SpecDigest-style expand+normalize step this
          engine's Normalize stage doesn't have yet, so "intent digest"
@@ -2978,7 +2977,21 @@ verdict, without needing a separate "forbidden fields" check. The
 multi-key vector is F8's own inherited-Relay-bug fix (`resolvePath`'s
 single-`"="`-split bug, PR #28), now also checked through the shared
 fixture rather than only each crate's own hand-written unit test.
-`digest/` (F9) is the one remaining addition.
+
+**`digest/` (F9) landed last, closing this layer in full.** Five
+vectors — two for `conformance_plan_digest`, three for
+`observation_digest` — the only group in this layer whose expected
+value is a hash, not a human-readable literal. Each expected digest
+was computed once from the real digest functions in **both**
+languages and confirmed byte-for-byte identical before being pinned —
+not generated from one language and trusted to match the other.
+`plan_digest_with_collection` exercises F5's "keys sorted byte-wise"
+rule end-to-end; `observation_digest_absent_no_value` pins the digest
+a *missing* `value` field produces, distinct from a `null` placeholder
+for it. **Every Rust module from F6 through F9 now has a Go peer, and
+every one of the four has been cross-checked against it through this
+corpus — not just independently verified against the decided contract
+in prose.**
 
 **A real structural conflict, found and fixed in the same pass:**
 `engine/tests/conformance.rs`'s own `the_corpus_is_not_empty` walks
@@ -3004,9 +3017,7 @@ being numeric at all), so none of the eight vectors here depend on it
 — named in `differential/README.md` for whichever future vector
 author's case might.
 
-**What this does not do:** add a `digest/` group (F9's own
-differential vectors — a separate, later addition, same incremental
-pattern F6-F9 themselves followed); decide anything about `Parse`'s
+**What this does not do:** decide anything about `Parse`'s
 own future differential corpus, which this layer explicitly defers
 rather than pre-empts.
 

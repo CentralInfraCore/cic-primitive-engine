@@ -1,0 +1,6 @@
+{
+  "plan": {
+    "scalars": [{"path": "/a", "compare": "exact"}],
+    "collections": []
+  }
+}

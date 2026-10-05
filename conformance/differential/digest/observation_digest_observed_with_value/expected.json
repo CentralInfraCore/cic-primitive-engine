@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:f1f3d362798ea67e6f2713c637d80105a242e12550f99c93a6850c709d8a34dd",
+  "why": "observation_digest(consumed) -- value is present iff coverage == observed (F5's own rule). Computed once from the real observation_digest/ObservationDigest functions in both languages and confirmed byte-for-byte identical before being pinned here."
+}

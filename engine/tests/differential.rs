@@ -9,8 +9,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cic_primitive_engine::{
-    classify_field_value, evaluate, reader, Collection, CollectionPlan, CollectionTopology,
-    CompareType, ConformancePlan, Coverage, FieldPlan, Observation, Stage,
+    classify_field_value, conformance_plan_digest, evaluate, observation_digest, reader,
+    Collection, CollectionPlan, CollectionTopology, CompareType, ConformancePlan, ConsumedField,
+    Coverage, FieldPlan, Observation, Stage,
 };
 use reader::Value;
 use std::collections::BTreeMap;
@@ -322,6 +323,74 @@ fn plan_vectors() {
     assert!(
         failures.is_empty(),
         "{} of {} plan vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+fn build_consumed(v: &Value) -> BTreeMap<String, ConsumedField> {
+    let mut out = BTreeMap::new();
+    let Some(Value::Seq(items)) = map_get(v, "consumed") else {
+        panic!("expected sequence field \"consumed\"");
+    };
+    for item in items {
+        let path = str_field(item, "path").to_string();
+        let coverage = parse_coverage(str_field(item, "coverage"));
+        let cf = match coverage {
+            Coverage::Observed => {
+                let value = map_get(item, "value").unwrap_or(&Value::Null);
+                ConsumedField::Observed(value.clone())
+            }
+            Coverage::Absent => ConsumedField::Absent,
+            Coverage::Unobserved => ConsumedField::Unobserved,
+            Coverage::Unknown => ConsumedField::Unknown,
+        };
+        out.insert(path, cf);
+    }
+    out
+}
+
+/// `conformance/differential/digest/` -- F9's `conformance_plan_digest`/
+/// `observation_digest`. Every expected digest here was computed once from
+/// the real functions in BOTH languages and confirmed byte-for-byte
+/// identical before being pinned -- not invented or hand-computed -- so a
+/// failure here means one language's output actually changed, not that
+/// the pinned value was ever a guess.
+#[test]
+fn digest_vectors() {
+    let vectors = load_vectors("digest");
+    assert!(
+        !vectors.is_empty(),
+        "differential/digest has no vectors -- an empty corpus trivially passes"
+    );
+
+    let mut failures = Vec::new();
+    for v in &vectors {
+        let want_digest = str_field(&v.expected, "digest");
+        let got_digest = if map_get(&v.input, "plan").is_some() {
+            let plan = build_plan(&v.input);
+            conformance_plan_digest(&plan)
+                .unwrap_or_else(|e| panic!("{}: conformance_plan_digest failed: {e}", v.name))
+        } else if map_get(&v.input, "consumed").is_some() {
+            let consumed = build_consumed(&v.input);
+            observation_digest(&consumed)
+                .unwrap_or_else(|e| panic!("{}: observation_digest failed: {e}", v.name))
+        } else {
+            panic!(
+                "{}: input.json has neither \"plan\" nor \"consumed\"",
+                v.name
+            );
+        };
+
+        if got_digest != want_digest {
+            failures.push(format!("{}: got {got_digest}, want {want_digest}", v.name));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} digest vectors failed:\n  {}",
         failures.len(),
         vectors.len(),
         failures.join("\n  ")

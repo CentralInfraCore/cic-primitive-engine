@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:bdd3820321f99651c61a533949175fd55c184ebbd75ef538bbdf6c54bb9fea99",
+  "why": "conformance_plan_digest(plan) -- digest(to_canonical_json(PlanDigestProjection(plan))), F5 verbatim. Computed once from the real conformance_plan_digest/ConformancePlanDigest functions in both languages and confirmed byte-for-byte identical before being pinned here, not invented or hand-computed."
+}

@@ -40,11 +40,14 @@ differential/
   comparator/    -- F6: conformance.Compare / ClassifyField / ClassifyFieldValue
   collection/    -- F7: collection.ElementKey
   plan/          -- F8: plan.Evaluate
-  digest/        -- F9: digestprojection.*                     (not yet landed)
+  digest/        -- F9: digestprojection.*
 ```
 
 One group per F-primitive, landed incrementally — matching how F6
-through F9 themselves were ported one at a time, not all at once.
+through F9 themselves were ported one at a time, not all at once. All
+four now landed: every Rust F-module from F6 through F9 has been
+cross-checked against its Go peer through this layer, not merely each
+independently verified against the decided contract in prose.
 
 ## Vector format
 
@@ -124,6 +127,33 @@ tests. The multi-key vector is F8's own inherited-Relay-bug fix
 deliberately differ, so a silently-failed path resolution (both sides
 falling back to the same missing-path default) would produce a false
 `CONFORMANT` instead of the `DRIFT` this vector actually requires.
+
+`digest/`'s own fields:
+
+```text
+input.json, one of two shapes:
+  plan      object   {scalars: [...], collections: [...]} -- same shape as plan/'s own "plan" field;
+                      asserts conformance_plan_digest/ConformancePlanDigest
+  consumed  [object] [{path: string, coverage: string, value: any?}, ...] -- value present
+                      iff coverage == "observed"; asserts observation_digest/ObservationDigest
+
+expected.json:
+  digest  string   the one sha256:... value both languages must produce
+  why     string   human-readable context, not compared
+```
+
+Every expected digest here was computed once from the real
+`conformance_plan_digest`/`ConformancePlanDigest` and
+`observation_digest`/`ObservationDigest` functions in **both**
+languages and confirmed byte-for-byte identical before being pinned —
+not invented, not hand-computed, and not generated from only one
+language and trusted to match the other. `plan_digest_with_collection`
+exercises F5's "each collection's keys sorted byte-wise" rule
+end-to-end (declared `["zone", "name"]`, digested as if sorted to
+`["name", "zone"]`); `observation_digest_absent_no_value` exercises
+F5's "value present iff coverage == observed" rule by pinning the
+digest a *missing* `value` field actually produces, not a `null`
+placeholder for it.
 
 ## A named limitation: JSON numeric literals don't parse identically on both sides
 

@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:deb83850cc0f689d6f0c643694567125bae9b2268bdaa6cf5ac20dddf1094683",
+  "why": "exercises F5's own \"each collection's keys sorted byte-wise\" rule: declared as [\"zone\", \"name\"], the projection must sort them to [\"name\", \"zone\"] before digesting -- confirmed byte-for-byte identical between both languages before being pinned."
+}

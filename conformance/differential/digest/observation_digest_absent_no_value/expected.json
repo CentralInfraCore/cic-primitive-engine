@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:fdb30519b474bf988d6c6c75db14e53a19633743fb36e79bfd3d3629e1435a66",
+  "why": "a non-observed coverage carries no value field at all in the projection, not a null placeholder -- ConsumedField's own closed construction (F13) makes the forbidden pairing unrepresentable on the Go side, and the Rust enum makes it unrepresentable at the type level; this pins the actual digest that absence of the field (not a null value) produces, confirmed identical in both languages."
+}

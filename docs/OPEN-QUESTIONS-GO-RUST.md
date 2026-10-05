@@ -165,9 +165,9 @@ has to sort `consumed`'s keys itself, where the Rust side gets that
 for free from `BTreeMap`. F15 is the first point any of F6-F9's Go
 peers have actually been cross-checked against Rust, not just each
 independently verified against the decided contract — a new JSON-only
-corpus layer, `conformance/differential/`, `comparator/` (F6),
-`collection/` (F7) and `plan/` (F8) landed so far.** No Go peer exists
-yet for F10.
+corpus layer, `conformance/differential/`, with all four groups now
+landed (`comparator`/F6, `collection`/F7, `plan`/F8, `digest`/F9) —
+F15 is closed in full.** No Go peer exists yet for F10.
 
 **G is now PARTIALLY DECIDED too, and closes the first pass through
 A–G.** The comparison harness structure is fixed: extend the existing
@@ -1472,8 +1472,17 @@ proof chain
     proof that state-only fields never leak into the verdict, without
     a separate check. Includes the exact multi-key-identity vector
     F8's own inherited-Relay-bug fix (`resolvePath`'s single-`"="`-
-    split bug, PR #28) was found and fixed against. `digest/` (F9) is
-    the one remaining addition.
+    split bug, PR #28) was found and fixed against.
+
+    **`digest/` (F9) landed last, closing this layer in full:** five
+    vectors — two for `conformance_plan_digest`, three for
+    `observation_digest` — whose expected value is a hash, not a
+    human-readable literal. Each digest was computed once from the
+    real functions in **both** languages and confirmed byte-for-byte
+    identical before being pinned, not generated from one language and
+    trusted to match the other. Every Rust module from F6 through F9
+    now has a Go peer, and every one of the four has been
+    cross-checked against it through this corpus.
 
     **Found and fixed a real structural conflict in the same pass:**
     the existing `the_corpus_is_not_empty` generic scanner
@@ -1490,9 +1499,8 @@ proof chain
     named in `differential/README.md` for whichever future vector
     author's case might.
 
-    **What this does not do:** add a `digest/` group (F9's own
-    differential vectors, a separate later addition); decide `Parse`'s
-    own future differential corpus.
+    **What this does not do:** decide `Parse`'s own future
+    differential corpus, which this layer explicitly defers.
 
 **Also established: three distinct proof-adjacent artifacts, not one.**
 Building on E1's ProofTrace-vs-receipt distinction: (1) ProofTrace's
