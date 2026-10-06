@@ -28,18 +28,21 @@ carries exactly the schema's keys (`PRIMITIVE-IR.md`'s own **Complete**
 property): per key, a value wrapped in the Access atom's own structure
 (`value`/`access`/`modify`/`inherit`/`default_injection`/`conformance`),
 plus the three independent B3 facts (capability, coverage, provenance).
-This crate does not validate, resolve, or decide whether an object is
-correct -- those are facts the object's ENVIRONMENT establishes and
-writes onto it, before the object ever reaches this crate:
+This crate does not perform domain/schema-semantic validation -- Shape/
+Role algebra, reference resolution, or default/derivation decisions --
+those are facts the object's ENVIRONMENT establishes and writes onto
+it, before the object ever reaches this crate:
 
 ```text
 environment                          this crate
 ───────────                          ──────────
 Parse       (typed composition)  ─┐
-Normalize   (short/long form,     │  hands this crate an
-             defaults applied)    │  already-complete object
+Normalize   (short/long form,     │  hands this crate a
+             defaults applied)    │  candidate object
 Resolve     (references, cycles)  │
 Validate    (Shape/Role algebra) ─┘
+                                     boundary check (candidate really
+                                       is a MaterializedObject?)
                                      Canonicalize (section A -- one byte
                                        form, for digests)
                                      conformance/collection/plan/
@@ -48,6 +51,25 @@ Validate    (Shape/Role algebra) ─┘
                                        states, does one conform to the
                                        other, and proves it)
 ```
+
+Scoping OUT domain-semantic validation does not scope out a narrower,
+load-bearing obligation this crate still owns: whether the candidate
+object it receives actually satisfies the structural/semantic-state
+invariants -- the Complete property, long-form fields, valid
+capability/coverage/provenance values -- that canonicalization and
+section F's proof machinery assume. B7, above, already commits
+capability/coverage/provenance into the `output_digest`-protected
+semantic claim; without a boundary check, that digest would only prove
+"these bytes were canonicalized," not "a valid `MaterializedObject`
+produced these bytes." F13/F14 already established this crate's own
+precedent for exactly this shape of problem: a module validates
+untrusted input at its OWN boundary rather than trusting an upstream
+stage (`ConformancePlan::validate`, `PlanDigestProjection`'s own
+check) -- the same principle applies one level up, at the
+`MaterializedObject` boundary itself. That check does not exist yet,
+because the type it protects does not exist yet (see below); it is
+named here as an obligation this crate owes, not disclaimed as out of
+scope.
 
 So, reading the sections below: section A and section F describe work
 that genuinely belongs to this crate (`Canonicalize`, and the
@@ -64,8 +86,10 @@ The actual `MaterializedObject` type this correction describes --
 Access-wrapped value + B3 metadata per key -- does not exist yet in
 this crate. `conformance`/`collection`/`plan` currently operate on a
 generic value tree ([`reader::Value`](../engine/src/reader.rs) /
-Go's `interface{}`) directly; building the real object type, and wiring
-them to read from it, is the next real step.
+Go's `interface{}`) directly; building the real object type --
+including the boundary check named above that rejects a structurally
+invalid candidate before canonicalization or proof ever runs -- and
+wiring them to read from it, is the next real step.
 
 ## A — Canonical representation (closes section A)
 

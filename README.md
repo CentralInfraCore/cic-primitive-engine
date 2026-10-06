@@ -37,10 +37,12 @@ correction to the pipeline framing this file used to carry.
 > key, exactly the schema's keys — does not exist yet.** Everything
 > listed above operates on a generic value tree
 > (`reader::Value`/`interface{}`) directly; building the real object
-> type, and wiring `conformance`/`collection`/`plan` to read from it,
-> is the next real step. `role` (Role short/long form, P0.2) predates
-> the scope correction below and is not wired to anything. Nothing here
-> is a stable API.
+> type — including the boundary check that rejects a structurally
+> invalid candidate before canonicalization or proof ever runs — and
+> wiring `conformance`/`collection`/`plan` to read from it, is the next
+> real step. `role` (Role short/long form, P0.2) predates the scope
+> correction below and is not wired to anything. Nothing here is a
+> stable API.
 
 ---
 
@@ -80,8 +82,9 @@ object.
 
 ## Division of labor — scope correction
 
-**This engine does not validate, resolve, or decide whether an object
-is correct.** Those are facts the object's ENVIRONMENT establishes and
+**This engine does not perform domain/schema-semantic validation —
+Shape/Role algebra, reference resolution, or default/derivation
+decisions.** Those are facts the object's ENVIRONMENT establishes and
 writes onto it — whatever upstream component already schema-validated
 and supplemented the data before it reaches this object:
 
@@ -89,10 +92,12 @@ and supplemented the data before it reaches this object:
 environment                          this repo
 ───────────                          ─────────
 Parse       (typed composition)  ─┐
-Normalize   (short/long form,     │  hands this repo an
-             defaults applied)    │  already-complete object
+Normalize   (short/long form,     │  hands this repo a
+             defaults applied)    │  candidate object
 Resolve     (references, cycles)  │
 Validate    (Shape/Role algebra) ─┘
+                                     boundary check (candidate really
+                                       is a MaterializedObject?)
                                      Canonicalize (one byte form, for digests)
                                      conformance/collection/plan/
                                      digest_projection (given two
@@ -100,6 +105,25 @@ Validate    (Shape/Role algebra) ─┘
                                        intent and observed -- does one
                                        conform to the other, and proves it)
 ```
+
+Scoping OUT domain-semantic validation does not scope out a narrower,
+load-bearing obligation this engine still owns: whether the candidate
+object it receives actually satisfies the structural/semantic-state
+invariants — the `Complete` property, long-form fields, valid
+capability/coverage/provenance values — that canonicalization and the
+F6-F9 proof machinery assume. `docs/MATERIALIZATION-SPEC.md`'s B7
+already commits capability/coverage/provenance into the
+`output_digest`-protected semantic claim; without a boundary check,
+that digest would only prove "these bytes were canonicalized," not "a
+valid `MaterializedObject` produced these bytes." F13/F14 (same spec)
+already established this repo's own precedent for exactly this shape
+of problem: a module validates untrusted input at its OWN boundary
+rather than trusting an upstream stage (`ConformancePlan::validate`,
+`PlanDigestProjection`'s own check) — the same principle applies one
+level up, at the `MaterializedObject` boundary itself. That check does
+not exist yet, because the type it protects does not exist yet; it is
+named here as an obligation this engine owes, not disclaimed as out of
+scope.
 
 This corrects, rather than extends, the pipeline framing this file used
 to carry (`YAML bytes → Read → Parse → Normalize → Resolve → Validate →
@@ -124,10 +148,13 @@ Discovery must never depend on the member whose absence is the defect
 
 Vault access · counter-signature policy · git and release workflow · domain
 adapters · Kubernetes/OCI/network runtime logic · authorization decisions.
-**Also out of scope under the correction above:** schema validation,
-reference resolution, default/derivation application, and short-form
-expansion — the environment's job, before data ever reaches this
-object. `role`'s `expand_role` (Role short/long form, P0.2) was built
+**Also out of scope under the correction above:** domain/schema-semantic
+validation, reference resolution, default/derivation application, and
+short-form expansion — the environment's job, before data ever reaches
+this object. This does NOT include the structural boundary check named
+above under "Division of labor" — that stays this engine's own
+obligation, just not yet built. `role`'s `expand_role` (Role short/long
+form, P0.2) was built
 before this correction and is exactly this kind of work; it stays in
 the tree for now, named here rather than silently kept as if it still
 belonged.

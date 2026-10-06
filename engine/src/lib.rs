@@ -25,8 +25,9 @@
 //!
 //! # Division of labor — scope correction
 //!
-//! **This crate does not validate, resolve, or decide whether an object is
-//! correct.** Those are facts the object's ENVIRONMENT establishes and
+//! **This crate does not perform domain/schema-semantic validation —
+//! Shape/Role algebra, reference resolution, or default/derivation
+//! decisions.** Those are facts the object's ENVIRONMENT establishes and
 //! writes onto it — whatever upstream component already schema-validated
 //! and supplemented the data before it reaches this object:
 //!
@@ -34,10 +35,12 @@
 //! environment                          this crate
 //! ───────────                          ──────────
 //! Parse       (typed composition)  ─┐
-//! Normalize   (short/long form,     │  hands this crate an
-//!              defaults applied)    │  already-complete object
+//! Normalize   (short/long form,     │  hands this crate a
+//!              defaults applied)    │  candidate object
 //! Resolve     (references, cycles)  │
 //! Validate    (Shape/Role algebra) ─┘
+//!                                      boundary check (candidate really
+//!                                        is a MaterializedObject?)
 //!                                      Canonicalize (one byte form, for digests)
 //!                                      conformance/collection/plan/
 //!                                      digest_projection (given two
@@ -45,6 +48,25 @@
 //!                                        intent and observed -- does one
 //!                                        conform to the other, and proves it)
 //! ```
+//!
+//! Scoping OUT domain-semantic validation does not scope out a narrower,
+//! load-bearing obligation this crate still owns: whether the candidate
+//! object it receives actually satisfies the structural/semantic-state
+//! invariants — the `Complete` property, long-form fields, valid
+//! capability/coverage/provenance values — that canonicalization and the
+//! F6-F9 proof machinery assume. `docs/MATERIALIZATION-SPEC.md`'s B7 already
+//! commits capability/coverage/provenance into the `output_digest`-protected
+//! semantic claim; without a boundary check, that digest would only prove
+//! "these bytes were canonicalized," not "a valid `MaterializedObject`
+//! produced these bytes." F13/F14 (same spec) already established this
+//! crate's own precedent for exactly this shape of problem: a module
+//! validates untrusted input at its OWN boundary rather than trusting an
+//! upstream stage (`ConformancePlan::validate`, `PlanDigestProjection`'s own
+//! check) — the same principle applies one level up, at the
+//! `MaterializedObject` boundary itself. That check does not exist yet,
+//! because the type it protects does not exist yet (see "Status", below);
+//! it is named here as an obligation this crate owes, not disclaimed as out
+//! of scope.
 //!
 //! This corrects, rather than extends, the pipeline framing this crate's own
 //! docs used to carry. `docs/MATERIALIZATION-SPEC.md` still describes
@@ -72,10 +94,13 @@
 //!
 //! Vault access, counter-signature policy, git and release workflow, domain
 //! adapters, Kubernetes/OCI/network runtime logic, and authorization
-//! decisions. **Also out of scope under the correction above:** schema
-//! validation, reference resolution, default/derivation application, and
-//! short-form expansion -- the environment's job, before data ever reaches
-//! this object. `role`'s `expand_role` (Role short/long form, P0.2) was
+//! decisions. **Also out of scope under the correction above:** domain/
+//! schema-semantic validation, reference resolution, default/derivation
+//! application, and short-form expansion -- the environment's job, before
+//! data ever reaches this object. This does NOT include the structural
+//! boundary check named under "Division of labor," above -- that stays
+//! this crate's own obligation, just not yet built. `role`'s `expand_role`
+//! (Role short/long form, P0.2) was
 //! built before this correction and is exactly this kind of work; it stays
 //! in the tree for now, named here rather than silently kept as if it still
 //! belonged.
@@ -102,11 +127,14 @@
 //!
 //! **The actual object this crate's own contract is about -- the
 //! `MaterializedObject` of "# The object", above -- does not exist yet.**
-//! Building it, and wiring `conformance`/`collection`/`plan` to read from it
-//! instead of a generic value tree, is the next real step; everything
-//! listed above operates on [`reader::Value`] directly today. `role`
-//! predates the scope correction above and is not wired to anything.
-//! Nothing here is a stable API, and no module should depend on it as one.
+//! Building it -- including the boundary check named under "Division of
+//! labor" that rejects a structurally invalid candidate before
+//! canonicalization or proof ever runs -- and wiring `conformance`/
+//! `collection`/`plan` to read from it instead of a generic value tree, is
+//! the next real step; everything listed above operates on
+//! [`reader::Value`] directly today. `role` predates the scope correction
+//! above and is not wired to anything. Nothing here is a stable API, and no
+//! module should depend on it as one.
 
 pub mod canonical;
 pub mod collection;
