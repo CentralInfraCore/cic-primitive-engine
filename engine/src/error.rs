@@ -36,6 +36,15 @@ pub enum Stage {
     Resolve,
     /// Shape algebra, Role algebra, and the contracts that cross primitives.
     Validate,
+    /// Accepting a candidate as a genuine `MaterializedObject` --
+    /// `PRIMITIVE-IR.md`'s Complete property and `FieldEvidence`'s own
+    /// shape invariants. Added past the original five-stage pipeline this
+    /// enum's doc comment once described in full: `lib.rs`'s "Division of
+    /// labor" scope correction named this stage as an obligation this
+    /// crate owes and had not yet built; `materialized.rs` is where it
+    /// lives now. Unlike `Parse`/`Normalize`/`Resolve`/`Validate`, above,
+    /// this one is not the environment's job.
+    Materialize,
     /// The single byte representation an IR digest is taken over.
     Canonicalize,
 }
@@ -49,6 +58,7 @@ impl Stage {
             Stage::Normalize => "normalize",
             Stage::Resolve => "resolve",
             Stage::Validate => "validate",
+            Stage::Materialize => "materialize",
             Stage::Canonicalize => "canonicalize",
         }
     }
@@ -98,6 +108,13 @@ pub mod code {
     /// `cic-primitives`' own `check_grammar.py` rule name for this, so the
     /// two can be cross-checked directly.
     pub const INVALID_ROLE: &str = "E_INVALID_ROLE";
+
+    /// A candidate's key set does not exactly match the key set the
+    /// environment claims the schema declares -- missing a key, carrying
+    /// an extra one, or both. `PRIMITIVE-IR.md`'s Complete property,
+    /// enforced at the one point this crate can enforce it: construction.
+    /// Raised at `Stage::Materialize`.
+    pub const INCOMPLETE_OBJECT: &str = "E_INCOMPLETE_OBJECT";
 }
 
 /// The single error type this crate raises.

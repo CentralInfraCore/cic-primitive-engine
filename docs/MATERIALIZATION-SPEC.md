@@ -744,6 +744,68 @@ output `output_digest` protects. Whether the receipt *additionally*
 carries a redundant coverage projection as an audit convenience is a
 separate, non-custody question, addressed where F1/F4 actually live.
 
+### B8. `FieldEvidence` — closing B3's own sketch-vs-prose tension, found while building the type
+
+Surfaced while actually implementing `MaterializedField` (`engine/src/
+materialized.rs`), not while re-reading the document: B3's ASCII sketch
+shows `capability`/`coverage`/`provenance` as three unconditional fields,
+but B3's own prose says a plain authored-intent field "carries a
+provenance and no coverage" and a plain observation "carries a coverage
+and no provenance" — "only the derived case populates both." Two
+independent `Option<Coverage>`/`Option<Provenance>` fields would satisfy
+the sketch's literal shape but still permit `None`/`None`, a combination
+the prose never describes as legitimate and `BOUNDARY.md`'s own
+anti-placeholder principle ("a missing observation must not be masked by
+an invented one") argues against tolerating.
+
+**Decision: a closed three-variant enum, not two independent `Option`
+fields.**
+
+```text
+FieldEvidence:
+  Intent              { provenance, value: Option<Value> }   -- intent-side
+  Observation          (ConsumedField)                        -- state-side, raw
+  DerivedObservation    (ConsumedField)                        -- state-side, derived
+```
+
+Two refinements past the first draft, both caught before committing, not
+after:
+
+1. **`Observation`/`DerivedObservation` reuse `ConsumedField`
+   (`plan.rs`, F8) rather than re-pairing a bare `Option<Value>` with
+   `Coverage`.** That exact pairing — a value and a coverage as two
+   independently-settable fields — is the "forbidden pairing,
+   constructible anyway" defect PR #29 already found and fixed once.
+   Reusing the type here means there is no second place for the same
+   defect to reappear; the value/coverage invariant for the state-side
+   variants costs zero new validation code.
+2. **`DerivedObservation` carries only a `Coverage`, not a free
+   `Provenance` field.** B3 ties `derived` crossing the intent/state line
+   specifically to the state-side case (`BOUNDARY.md`'s own
+   `$.state.effective_state` example); `authored`/`schema_default` never
+   occur state-side (`schema_default` is forbidden on `authority: state`
+   by B1's own defaultability rule; `authored` presupposes an operator
+   wrote it, which an observation is not). So a state-side derived
+   field's provenance is always exactly `Derived` — a free `Provenance`
+   field here would let `Observation { coverage, provenance: Authored }`
+   type-check, a combination the prose rules out. Naming the fact in the
+   variant instead of a field leaves nothing to get wrong.
+
+**Deliberately not resolved by this addendum:** B2's own still-open
+question — whether an `authored`-provenance field with no value
+("authored-absent") is distinguishable from a legally null-valued
+authored field — stays open. `FieldEvidence::Intent` keeps
+`value: Option<Value>` rather than a non-optional `Value`, so this
+addendum does not silently close B2's question by picking a shape that
+only works if it were already settled.
+
+This does not reopen B6's "Section B is now fully CLOSED" — the three
+axes, their values, and B4/B5's resolutions are untouched. It closes a
+real, previously-unnoticed gap in the EARLIER CHOSEN REPRESENTATION of
+the already-closed decision, the same relationship G3's wire-layout
+separation and C3's version-block correction already had to their own
+closed sections.
+
 ## C — Receipt schema (CLOSED)
 
 ```text
