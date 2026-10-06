@@ -38,18 +38,28 @@
 //! exactly as before: `MaterializedObject` is "exactly the schema's
 //! keys," one [`crate::materialized::FieldEvidence`] per key, not a
 //! recursive structure, so there is nothing deeper for it to replace yet.
-//! [`Observation`] still carries coverage for every path this walker
-//! resolves, including top-level ones — **not** read from the observed
-//! root's own `FieldEvidence`, even though a top-level `Observation`
-//! variant already carries a `Coverage`. Two sources for the same
-//! top-level fact is exactly the kind of duplication this crate has
-//! fought elsewhere (`ConsumedField`, `IntentEvidence`); resolving it
-//! means first deciding whether `MaterializedObject` ever becomes
-//! recursive, which this change does not decide and does not need to.
+//! **Review-caught on PR #41: a scalar path's coverage now has exactly
+//! one authority, not two.** An earlier version of this wiring left
+//! [`Observation`] as the sole coverage source even for top-level scalar
+//! paths, while the observed root's own `FieldEvidence` already carried a
+//! `Coverage` for the same path -- the two could disagree (demonstrated,
+//! not hypothetical: this file's own `oci_unobserved` test exercised
+//! exactly that disagreement), and `classify_at` silently trusted
+//! `Observation` alone, which is exactly the kind of duplication this
+//! crate has fought elsewhere (`ConsumedField`, `IntentEvidence`). Fixed
+//! by [`scalar_coverage`] -- see its own doc comment for the rule and for
+//! why it applies ONLY to scalar paths, not to collection elements or
+//! collection containers: a collection's own top-level path carries no
+//! real coverage of its own in this corpus (only its elements do), so
+//! giving it the same authority rule would let a container's placeholder
+//! evidence override every element's real coverage, a worse version of
+//! the bug just fixed. That caveat is tied to the same recursion question
+//! this module already named as undecided; scoping the fix to scalars
+//! sidesteps it rather than silently deciding it.
 
 use crate::collection::Collection;
 use crate::conformance::{classify_field_value, CompareType, Coverage, FieldVerdict, Observation};
-use crate::materialized::MaterializedObject;
+use crate::materialized::{FieldEvidence, MaterializedObject};
 use crate::reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -195,12 +205,13 @@ pub fn evaluate(
     let mut consumed = BTreeMap::new();
 
     for fp in &plan.scalars {
+        let coverage = scalar_coverage(observed, &fp.path, obs);
         classify_at(
             &mut fields,
             &mut consumed,
             intent,
             observed,
-            obs,
+            coverage,
             &fp.path,
             fp.compare,
         );
@@ -210,12 +221,16 @@ pub fn evaluate(
         for ek in element_keys(intent, observed, cp) {
             for ef in &cp.elements {
                 let path = format!("{}/{{{ek}}}/{}", cp.path, ef.path);
+                // Element-level paths stay Observation-authoritative --
+                // see scalar_coverage's own doc comment for why only
+                // scalar (single-segment) paths get the other rule.
+                let coverage = obs.coverage(&path);
                 classify_at(
                     &mut fields,
                     &mut consumed,
                     intent,
                     observed,
-                    obs,
+                    coverage,
                     &path,
                     ef.compare,
                 );
@@ -230,16 +245,55 @@ pub fn evaluate(
     }
 }
 
+/// Review-caught on PR #41: with two coverage sources for the same
+/// top-level path -- the observed root's own `FieldEvidence` and
+/// `Observation` -- nothing previously stopped them from disagreeing, and
+/// `classify_at` silently trusted `Observation` alone. For a scalar
+/// (single-segment, non-collection) path, the observed root's own
+/// evidence is now authoritative whenever it carries a coverage at all
+/// (`FieldEvidence::Observation`/`DerivedObservation`); `Observation` is
+/// consulted only as a fallback, for a path the root has no opinion on
+/// (an `Intent`-evidence field, or a key `try_new` never saw -- which
+/// `try_new`'s own Complete check already makes impossible for an actual
+/// schema key, but this function does not assume that invariant reaches
+/// it unbroken).
+///
+/// **Deliberately scalar-only, not applied to collection ELEMENT paths
+/// (see `evaluate`'s own two call sites):** a collection's own top-level
+/// path (e.g. `/network_interfaces`) is never an entry `Observation`
+/// tracks at all in this corpus -- only its ELEMENTS are, each at its own
+/// nested path -- so the container's top-level `FieldEvidence` exists
+/// purely to make the list navigable (`element_keys`'s own
+/// `resolve_path` call), not to classify the container itself. Giving a
+/// collection path this same authority rule would make the container's
+/// own placeholder evidence silently override every element's real,
+/// per-element `Observation` coverage -- a worse version of the exact bug
+/// this function fixes. Resolving that cleanly needs `MaterializedObject`
+/// to carry per-element coverage directly, which is the recursion
+/// question this crate has not decided; scoping this fix to scalars sidesteps
+/// it rather than silently deciding it.
+fn scalar_coverage(observed: &MaterializedObject, path: &str, obs: &Observation) -> Coverage {
+    let key = path.trim_matches('/');
+    if key.is_empty() || key.contains('/') || key.contains('{') {
+        return obs.coverage(path);
+    }
+    match observed.get(key).map(|f| &f.evidence) {
+        Some(FieldEvidence::Observation(cf) | FieldEvidence::DerivedObservation(cf)) => {
+            cf.coverage()
+        }
+        _ => obs.coverage(path),
+    }
+}
+
 fn classify_at(
     fields: &mut BTreeMap<String, FieldVerdict>,
     consumed: &mut BTreeMap<String, ConsumedField>,
     intent: &MaterializedObject,
     observed: &MaterializedObject,
-    obs: &Observation,
+    coverage: Coverage,
     path: &str,
     compare: CompareType,
 ) {
-    let coverage = obs.coverage(path);
     let iv = resolve_path(intent, path);
     let ov = resolve_path(observed, path);
     let verdict = classify_field_value(
@@ -430,16 +484,15 @@ mod tests {
         Value::Map(m)
     }
 
-    /// Wraps a test fixture `Value::Map` into a [`MaterializedObject`],
-    /// every key given the same `FieldEvidence` shape -- a test-only
-    /// convenience, not a production conversion (deciding how raw data
-    /// becomes `FieldEvidence` is environment/Normalize work, out of this
-    /// crate's scope; see the module doc comment). The fixture's own key
-    /// set is trivially complete against itself, so `try_new` never fails
-    /// here.
+    /// Wraps a test fixture `Value::Map` into a [`MaterializedObject`] --
+    /// a test-only convenience, not a production conversion (deciding how
+    /// raw data becomes `FieldEvidence` is environment/Normalize work,
+    /// out of this crate's scope; see the module doc comment). The
+    /// fixture's own key set is trivially complete against itself, so
+    /// `try_new` never fails here.
     fn object_from_value(
         v: Value,
-        evidence_of: impl Fn(Value) -> FieldEvidence,
+        evidence_of: impl Fn(&str, Value) -> FieldEvidence,
     ) -> MaterializedObject {
         let Value::Map(m) = v else {
             panic!("test fixture must be a map")
@@ -448,11 +501,12 @@ mod tests {
         let mut keys = BTreeSet::new();
         for (k, val) in m.0 {
             keys.insert(k.clone());
+            let evidence = evidence_of(&k, val);
             fields.insert(
                 k,
                 MaterializedField {
                     capability: Capability::Implemented,
-                    evidence: evidence_of(val),
+                    evidence,
                 },
             );
         }
@@ -461,14 +515,35 @@ mod tests {
     }
 
     fn intent_object(v: Value) -> MaterializedObject {
-        object_from_value(v, |val| {
+        object_from_value(v, |_, val| {
             FieldEvidence::Intent(IntentEvidence::Authored(Some(val)))
         })
     }
 
-    fn observed_object(v: Value) -> MaterializedObject {
-        object_from_value(v, |val| {
-            FieldEvidence::Observation(ConsumedField::Observed(val))
+    /// Derives each scalar field's REAL coverage from `obs`, so the
+    /// object's own claim and `Observation`'s claim can never disagree by
+    /// construction -- mirroring, in the test fixtures, the same
+    /// single-authority rule `scalar_coverage` (review-caught on PR #41)
+    /// now enforces in production code. A `Value::Seq` field is a
+    /// collection container, whose own top-level path `Observation` never
+    /// tracks in this corpus (only its elements do, at a nested path) --
+    /// detected structurally rather than by name, it stays unconditionally
+    /// `Observed` so the walker can still navigate into it; needing this
+    /// case at all is itself the reason `scalar_coverage` is scalar-only,
+    /// not applied to collection paths.
+    fn observed_object(v: Value, obs: &Observation) -> MaterializedObject {
+        object_from_value(v, |k, val| {
+            let cf = if matches!(val, Value::Seq(_)) {
+                ConsumedField::Observed(val)
+            } else {
+                match obs.coverage(&format!("/{k}")) {
+                    Coverage::Observed => ConsumedField::Observed(val),
+                    Coverage::Absent => ConsumedField::Absent,
+                    Coverage::Unobserved => ConsumedField::Unobserved,
+                    Coverage::Unknown => ConsumedField::Unknown,
+                }
+            };
+            FieldEvidence::Observation(cf)
         })
     }
 
@@ -570,10 +645,11 @@ mod tests {
     // Mirrors TestEvaluate_OCI_Conformant.
     #[test]
     fn oci_conformant() {
+        let obs = oci_observation();
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(oci_observed()),
-            &oci_observation(),
+            &observed_object(oci_observed(), &obs),
+            &obs,
             &oci_plan(),
         );
         assert_eq!(verdict.object, ObjectConformance::Conformant);
@@ -594,10 +670,11 @@ mod tests {
     // Mirrors TestEvaluate_OCI_ExtraStateFieldsAreNotDrift.
     #[test]
     fn oci_extra_state_fields_are_not_drift() {
+        let obs = oci_observation();
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(oci_observed()),
-            &oci_observation(),
+            &observed_object(oci_observed(), &obs),
+            &obs,
             &oci_plan(),
         );
         for state_only in [
@@ -629,10 +706,11 @@ mod tests {
         };
         nics[1] = nic("nic-1", "prod-subnet-WRONG", &[]);
 
+        let obs = oci_observation();
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(observed),
-            &oci_observation(),
+            &observed_object(observed, &obs),
+            &obs,
             &oci_plan(),
         );
         assert_eq!(
@@ -654,10 +732,11 @@ mod tests {
         let idx = m.0.iter().position(|(k, _)| k == "memory_gb").unwrap();
         m.0[idx].1 = Value::Str("large".into());
 
+        let obs = oci_observation();
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(observed),
-            &oci_observation(),
+            &observed_object(observed, &obs),
+            &obs,
             &oci_plan(),
         );
         assert_eq!(
@@ -680,7 +759,7 @@ mod tests {
         }
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(oci_observed()),
+            &observed_object(oci_observed(), &obs),
             &obs,
             &oci_plan(),
         );
@@ -704,7 +783,7 @@ mod tests {
 
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(oci_observed()),
+            &observed_object(oci_observed(), &obs),
             &obs,
             &plan,
         );
@@ -725,13 +804,77 @@ mod tests {
         obs.set("/memory_gb", Coverage::Unknown);
         let verdict = evaluate(
             &intent_object(oci_intent()),
-            &observed_object(oci_observed()),
+            &observed_object(oci_observed(), &obs),
             &obs,
             &oci_plan(),
         );
         assert_eq!(
             verdict.fields.get("/memory_gb"),
             Some(&FieldVerdict::Unobserved)
+        );
+    }
+
+    // Review-caught on PR #41: directly proves scalar_coverage's single-
+    // authority rule, not just that the existing OCI tests still pass by
+    // construction. Builds a MaterializedObject whose own FieldEvidence
+    // says /memory_gb is Absent, deliberately paired with an Observation
+    // map that claims the SAME path is Observed, carrying a value --
+    // exactly the two-authorities-disagree state review caught. Without
+    // scalar_coverage's fix, classify_at would trust Observation alone
+    // and call this Conformant/Drift against the (nonexistent) value the
+    // object claims Absent. With it, the object's own claim wins.
+    #[test]
+    fn scalar_coverage_trusts_the_observed_root_over_a_disagreeing_observation_map() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_gb".to_string(),
+            MaterializedField {
+                capability: Capability::Implemented,
+                evidence: FieldEvidence::Observation(ConsumedField::Absent),
+            },
+        );
+        let observed =
+            MaterializedObject::try_new(fields, &["memory_gb".to_string()].into_iter().collect())
+                .expect("single key, trivially complete");
+
+        let mut intent_fields = BTreeMap::new();
+        intent_fields.insert(
+            "memory_gb".to_string(),
+            MaterializedField {
+                capability: Capability::Implemented,
+                evidence: FieldEvidence::Intent(IntentEvidence::Authored(Some(Value::Int(16)))),
+            },
+        );
+        let intent = MaterializedObject::try_new(
+            intent_fields,
+            &["memory_gb".to_string()].into_iter().collect(),
+        )
+        .expect("single key, trivially complete");
+
+        let mut obs = Observation::new();
+        obs.set("/memory_gb", Coverage::Observed); // disagrees with the root's own Absent claim
+
+        let plan = ConformancePlan {
+            scalars: vec![FieldPlan {
+                path: "/memory_gb".into(),
+                compare: CompareType::Numeric,
+            }],
+            collections: vec![],
+        };
+
+        let verdict = evaluate(&intent, &observed, &obs, &plan);
+        assert_eq!(
+            verdict.fields.get("/memory_gb"),
+            Some(&FieldVerdict::Drift),
+            "intent wants a value, the object's own evidence says Absent -- \
+             DRIFT, not a false CONFORMANT/UNOBSERVED taken from the \
+             disagreeing Observation map"
+        );
+        assert_eq!(
+            verdict.consumed.get("/memory_gb"),
+            Some(&ConsumedField::Absent),
+            "the recorded coverage for F5's own digest must also come from \
+             the object, not from the disagreeing Observation map"
         );
     }
 
@@ -785,7 +928,7 @@ mod tests {
 
         let verdict = evaluate(
             &intent_object(intent),
-            &observed_object(observed),
+            &observed_object(observed, &obs),
             &obs,
             &plan,
         );

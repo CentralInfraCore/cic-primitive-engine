@@ -17,17 +17,16 @@ use cic_primitive_engine::{
 use reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject`,
-/// every key the same `FieldEvidence` shape -- same pattern as `plan.rs`'s
-/// and `digest_projection.rs`'s own identical helpers. The Go peer this
-/// corpus cross-checks against has no `MaterializedObject` equivalent
-/// either yet (`materialized.rs` is Rust-only so far), so this corpus
-/// still compares both languages' `evaluate` given the same intent/
-/// observed Values -- the wrapping only satisfies Rust's own, now
-/// custody-checked, entry point.
+/// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject` --
+/// same pattern as `plan.rs`'s and `digest_projection.rs`'s own identical
+/// helpers. The Go peer this corpus cross-checks against has no
+/// `MaterializedObject` equivalent either yet (`materialized.rs` is
+/// Rust-only so far), so this corpus still compares both languages'
+/// `evaluate` given the same intent/observed Values -- the wrapping only
+/// satisfies Rust's own, now custody-checked, entry point.
 fn object_from_value(
     v: &Value,
-    evidence_of: impl Fn(Value) -> FieldEvidence,
+    evidence_of: impl Fn(&str, Value) -> FieldEvidence,
 ) -> MaterializedObject {
     let Value::Map(m) = v else {
         panic!("expected a mapping")
@@ -41,7 +40,7 @@ fn object_from_value(
             k.to_string(),
             MaterializedField {
                 capability: Capability::Implemented,
-                evidence: evidence_of(val.clone()),
+                evidence: evidence_of(k, val.clone()),
             },
         );
     }
@@ -50,14 +49,30 @@ fn object_from_value(
 }
 
 fn intent_object(v: &Value) -> MaterializedObject {
-    object_from_value(v, |val| {
+    object_from_value(v, |_, val| {
         FieldEvidence::Intent(IntentEvidence::Authored(Some(val)))
     })
 }
 
-fn observed_object(v: &Value) -> MaterializedObject {
-    object_from_value(v, |val| {
-        FieldEvidence::Observation(ConsumedField::Observed(val))
+/// Derives each field's REAL coverage from `obs` -- review-caught on PR
+/// #41; see `plan.rs`'s identical helper for why this must match
+/// `Observation` by construction, not be wrapped as unconditionally
+/// `Observed`. A `Value::Seq` field is a collection container, detected
+/// structurally rather than by name, and stays unconditionally `Observed`
+/// for the navigability reason `plan.rs`'s own doc comment gives.
+fn observed_object(v: &Value, obs: &Observation) -> MaterializedObject {
+    object_from_value(v, |k, val| {
+        let cf = if matches!(val, Value::Seq(_)) {
+            ConsumedField::Observed(val)
+        } else {
+            match obs.coverage(&format!("/{k}")) {
+                Coverage::Observed => ConsumedField::Observed(val),
+                Coverage::Absent => ConsumedField::Absent,
+                Coverage::Unobserved => ConsumedField::Unobserved,
+                Coverage::Unknown => ConsumedField::Unknown,
+            }
+        };
+        FieldEvidence::Observation(cf)
     })
 }
 
@@ -342,7 +357,7 @@ fn plan_vectors() {
 
         let verdict = evaluate(
             &intent_object(intent),
-            &observed_object(observed),
+            &observed_object(observed, &obs),
             &obs,
             &plan,
         );

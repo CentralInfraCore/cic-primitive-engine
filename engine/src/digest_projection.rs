@@ -126,7 +126,7 @@ pub fn observation_digest(consumed: &BTreeMap<String, ConsumedField>) -> Result<
 mod tests {
     use super::*;
     use crate::collection::{Collection, CollectionTopology};
-    use crate::conformance::CompareType;
+    use crate::conformance::{CompareType, Coverage, Observation};
     use crate::materialized::{Capability, FieldEvidence, IntentEvidence, MaterializedField};
     use crate::plan::evaluate;
     use crate::reader::Map as RMap;
@@ -140,13 +140,12 @@ mod tests {
         Value::Map(m)
     }
 
-    /// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject`,
-    /// every key the same `FieldEvidence` shape -- see `plan.rs`'s own
-    /// identical helper for why this is test-only, not a production
-    /// conversion.
+    /// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject`
+    /// -- see `plan.rs`'s own identical helper for why this is test-only,
+    /// not a production conversion.
     fn object_from_value(
         v: Value,
-        evidence_of: impl Fn(Value) -> FieldEvidence,
+        evidence_of: impl Fn(&str, Value) -> FieldEvidence,
     ) -> crate::materialized::MaterializedObject {
         let Value::Map(m) = v else {
             panic!("test fixture must be a map")
@@ -155,11 +154,12 @@ mod tests {
         let mut keys = BTreeSet::new();
         for (k, val) in m.0 {
             keys.insert(k.clone());
+            let evidence = evidence_of(&k, val);
             fields.insert(
                 k,
                 MaterializedField {
                     capability: Capability::Implemented,
-                    evidence: evidence_of(val),
+                    evidence,
                 },
             );
         }
@@ -168,14 +168,31 @@ mod tests {
     }
 
     fn intent_object(v: Value) -> crate::materialized::MaterializedObject {
-        object_from_value(v, |val| {
+        object_from_value(v, |_, val| {
             FieldEvidence::Intent(IntentEvidence::Authored(Some(val)))
         })
     }
 
-    fn observed_object(v: Value) -> crate::materialized::MaterializedObject {
-        object_from_value(v, |val| {
-            FieldEvidence::Observation(ConsumedField::Observed(val))
+    /// Derives each field's REAL coverage from `obs` -- see `plan.rs`'s
+    /// identical helper (review-caught on PR #41) for why this must match
+    /// `Observation` by construction, not be wrapped as unconditionally
+    /// `Observed`. A `Value::Seq` field is a collection container (none in
+    /// this file's own fixtures today, but kept consistent with `plan.rs`
+    /// rather than silently dropped) and stays unconditionally `Observed`
+    /// for the same navigability reason `plan.rs`'s own doc comment gives.
+    fn observed_object(v: Value, obs: &Observation) -> crate::materialized::MaterializedObject {
+        object_from_value(v, |k, val| {
+            let cf = if matches!(val, Value::Seq(_)) {
+                ConsumedField::Observed(val)
+            } else {
+                match obs.coverage(&format!("/{k}")) {
+                    Coverage::Observed => ConsumedField::Observed(val),
+                    Coverage::Absent => ConsumedField::Absent,
+                    Coverage::Unobserved => ConsumedField::Unobserved,
+                    Coverage::Unknown => ConsumedField::Unknown,
+                }
+            };
+            FieldEvidence::Observation(cf)
         })
     }
 
@@ -332,8 +349,6 @@ mod tests {
     // the exact gap F5 widened Relay's envelope-only digest to close.
     #[test]
     fn observation_digest_distinguishes_different_observed_values() {
-        use crate::conformance::{Coverage, Observation};
-
         let plan = ConformancePlan {
             scalars: vec![FieldPlan {
                 path: "/shape".into(),
@@ -349,8 +364,8 @@ mod tests {
         let observed_b = map(&[("shape", Value::Str("E3.Flex".into()))]);
 
         let intent = intent_object(intent);
-        let verdict_a = evaluate(&intent, &observed_object(observed_a), &obs, &plan);
-        let verdict_b = evaluate(&intent, &observed_object(observed_b), &obs, &plan);
+        let verdict_a = evaluate(&intent, &observed_object(observed_a, &obs), &obs, &plan);
+        let verdict_b = evaluate(&intent, &observed_object(observed_b, &obs), &obs, &plan);
 
         // Same coverage on both sides -- Relay's own envelope-only digest
         // would have produced identical bytes for these two runs.
