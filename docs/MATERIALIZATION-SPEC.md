@@ -763,13 +763,14 @@ fields.**
 
 ```text
 FieldEvidence:
-  Intent              { provenance, value: Option<Value> }   -- intent-side
-  Observation          (ConsumedField)                        -- state-side, raw
-  DerivedObservation    (ConsumedField)                        -- state-side, derived
+  Intent                (IntentEvidence)   -- intent-side
+  Observation            (ConsumedField)    -- state-side, raw
+  DerivedObservation      (ConsumedField)    -- state-side, derived
 ```
 
-Two refinements past the first draft, both caught before committing, not
-after:
+Three refinements past the first draft — the first two caught before the
+PR #40 that built this ever merged, the third caught IN review of that
+same PR, before merging:
 
 1. **`Observation`/`DerivedObservation` reuse `ConsumedField`
    (`plan.rs`, F8) rather than re-pairing a bare `Option<Value>` with
@@ -777,27 +778,49 @@ after:
    independently-settable fields — is the "forbidden pairing,
    constructible anyway" defect PR #29 already found and fixed once.
    Reusing the type here means there is no second place for the same
-   defect to reappear; the value/coverage invariant for the state-side
-   variants costs zero new validation code.
-2. **`DerivedObservation` carries only a `Coverage`, not a free
-   `Provenance` field.** B3 ties `derived` crossing the intent/state line
-   specifically to the state-side case (`BOUNDARY.md`'s own
-   `$.state.effective_state` example); `authored`/`schema_default` never
-   occur state-side (`schema_default` is forbidden on `authority: state`
-   by B1's own defaultability rule; `authored` presupposes an operator
-   wrote it, which an observation is not). So a state-side derived
-   field's provenance is always exactly `Derived` — a free `Provenance`
-   field here would let `Observation { coverage, provenance: Authored }`
+   defect to reappear; `ConsumedField`'s own invariant (exactly one value
+   when `Observed`, none otherwise) already decides what each variant
+   holds — not "only a `Coverage`," a value travels with it whenever the
+   state has one.
+2. **`DerivedObservation` stores no separate `Provenance` field.** B3
+   ties `derived` crossing the intent/state line specifically to the
+   state-side case (`BOUNDARY.md`'s own `$.state.effective_state`
+   example); `authored`/`schema_default` never occur state-side
+   (`schema_default` is forbidden on `authority: state` by B1's own
+   defaultability rule; `authored` presupposes an operator wrote it,
+   which an observation is not). So a state-side derived field's
+   provenance is always exactly `Derived` — a free `Provenance` field
+   here would let `Observation { coverage, provenance: Authored }`
    type-check, a combination the prose rules out. Naming the fact in the
    variant instead of a field leaves nothing to get wrong.
+3. **Review-caught on PR #40: `IntentEvidence`, not a bare
+   `{ provenance: Provenance, value: Option<Value> }` pair.** The first
+   draft of `FieldEvidence::Intent` paired `provenance` and
+   `value: Option<Value>` directly, which still type-checked
+   `Provenance::SchemaDefault` or `Provenance::Derived` together with
+   `value: None` — a state B1's own wording rules out just as firmly as
+   B3 rules out `None`/`None` above: `schema_default` is a value
+   "substituted from the schema's declared default," `derived` is a
+   value "computed by the engine from other field(s)" — both name an
+   operation that always produces a real value. B2's still-open
+   authored-absent question is scoped to `authored` alone; it gives no
+   license to leave `SchemaDefault`/`Derived` holding the same
+   unconstrained `Option`. Fixed with one variant per provenance value:
+
+   ```text
+   IntentEvidence:
+     Authored(Option<Value>)   -- B2's open question lives exactly here
+     SchemaDefault(Value)       -- always a real, substituted value
+     Derived(Value)             -- always a real, computed value
+   ```
 
 **Deliberately not resolved by this addendum:** B2's own still-open
 question — whether an `authored`-provenance field with no value
 ("authored-absent") is distinguishable from a legally null-valued
-authored field — stays open. `FieldEvidence::Intent` keeps
-`value: Option<Value>` rather than a non-optional `Value`, so this
-addendum does not silently close B2's question by picking a shape that
-only works if it were already settled.
+authored field — stays open. `IntentEvidence::Authored` keeps
+`Option<Value>` rather than a non-optional `Value`, so this addendum
+does not silently close B2's question by picking a shape that only
+works if it were already settled.
 
 This does not reopen B6's "Section B is now fully CLOSED" — the three
 axes, their values, and B4/B5's resolutions are untouched. It closes a

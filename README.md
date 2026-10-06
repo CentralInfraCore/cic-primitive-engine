@@ -75,9 +75,11 @@ more and no less (`PRIMITIVE-IR.md`'s own **Complete** property, enforced
 by `MaterializedObject::try_new`). Per key, `MaterializedField` holds
 `capability` (B1, always present) plus `FieldEvidence` — the closed set
 of legitimate value/coverage/provenance combinations section B3 actually
-describes (`Intent { provenance, value }` | `Observation(ConsumedField)` |
-`DerivedObservation(ConsumedField)`; see B8 for why it's a closed enum
-and not two independent `Option` fields).
+describes (`Intent(IntentEvidence)` | `Observation(ConsumedField)` |
+`DerivedObservation(ConsumedField)`, where `IntentEvidence` is itself one
+variant per provenance value, so only `Authored` can hold no value; see
+B8 for why it's closed enums all the way down, not independent `Option`
+fields).
 
 **Correction, found while building the type:** an earlier version of
 this section described each key as "a value wrapped in the Access

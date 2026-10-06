@@ -164,7 +164,7 @@ pub use digest_projection::{
 };
 pub use error::{code, Error, Result, Stage};
 pub use materialized::{
-    Capability, FieldEvidence, MaterializedField, MaterializedObject, Provenance,
+    Capability, FieldEvidence, IntentEvidence, MaterializedField, MaterializedObject, Provenance,
 };
 pub use plan::{
     evaluate, CollectionPlan, ConformancePlan, ConsumedField, FieldPlan, ObjectConformance,

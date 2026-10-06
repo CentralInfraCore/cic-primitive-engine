@@ -22,27 +22,45 @@
 //! `Option<Value>` with [`Coverage`] a second time -- the exact "forbidden
 //! pairing, constructible anyway" defect PR #29 already found and fixed
 //! once in `plan.rs`. Reusing the type here means there is no second place
-//! for the same defect to reappear.
+//! for the same defect to reappear; [`ConsumedField`]'s own invariant
+//! (exactly one value when `Observed`, none otherwise) already decides
+//! what each variant holds -- not "only a `Coverage`," a value travels
+//! with it whenever the state has one.
 //!
-//! [`FieldEvidence::DerivedObservation`] carries only a [`Coverage`], not a
-//! [`Provenance`]: B3 ties `derived` crossing the intent/state line
-//! specifically to the state-side case (`BOUNDARY.md`'s own
-//! `$.state.effective_state` example), and `authored`/`schema_default`
-//! never occur state-side (`schema_default` is forbidden on `authority:
-//! state` by B1's own defaultability rule; `authored` presupposes an
-//! operator wrote it, which an observation is not) -- so a state-side
-//! derived field's provenance is always exactly `Derived`. Naming that
-//! fact in the variant, rather than storing a free [`Provenance`] field
-//! that could disagree with it, leaves nothing to get wrong.
+//! [`FieldEvidence::DerivedObservation`] stores no separate [`Provenance`]
+//! field: B3 ties `derived` crossing the intent/state line specifically to
+//! the state-side case (`BOUNDARY.md`'s own `$.state.effective_state`
+//! example), and `authored`/`schema_default` never occur state-side
+//! (`schema_default` is forbidden on `authority: state` by B1's own
+//! defaultability rule; `authored` presupposes an operator wrote it, which
+//! an observation is not) -- so a state-side derived field's provenance is
+//! always exactly `Derived`. Naming that fact in the variant, rather than
+//! storing a free `Provenance` field that could disagree with it, leaves
+//! nothing to get wrong.
 //!
-//! **Deliberately not resolved here:** whether an `authored`-provenance
-//! field with no value (`PRIMITIVE-IR.md`'s "authored-absent") is
-//! distinguishable from a legally null-valued authored field is a
-//! representation question B2 explicitly left open ("a representation
-//! decision this section does not make"). [`FieldEvidence::Intent`] keeps
-//! `value: Option<Value>` rather than a non-optional `Value`, so this does
-//! not silently close that question by picking a shape that only works if
-//! it were already settled.
+//! # `IntentEvidence` -- review-caught on PR #40: `schema_default`/`derived` cannot legitimately carry `None`
+//!
+//! **Correction, caught in review before merging, not after:** an earlier
+//! version of this module paired `provenance: Provenance` with a single
+//! `value: Option<Value>` directly on [`FieldEvidence::Intent`]. That
+//! still permitted `Provenance::SchemaDefault` or `Provenance::Derived`
+//! with `value: None` -- a state B1's own text rules out. `schema_default`
+//! is, by B1's own wording, a value "substituted from the schema's
+//! declared default"; `derived` is a value "computed by the engine from
+//! other field(s)" -- both name an operation that always produces a real
+//! value. B2's own still-open question (whether `authored`-provenance with
+//! no value, "authored-absent," is distinguishable from a legally
+//! null-valued authored field) is scoped to `authored` alone; it gives no
+//! license to leave `SchemaDefault`/`Derived` holding the same
+//! unconstrained `Option`. [`IntentEvidence`] closes this with one variant
+//! per provenance value, so only `Authored` can hold `None`:
+//!
+//! ```text
+//! IntentEvidence:
+//!   Authored(Option<Value>)   -- B2's open question lives exactly here
+//!   SchemaDefault(Value)       -- always a real, substituted value
+//!   Derived(Value)             -- always a real, computed value
+//! ```
 //!
 //! # The custody boundary -- [`MaterializedObject::try_new`]
 //!
@@ -103,6 +121,44 @@ impl Provenance {
     }
 }
 
+/// Intent-side evidence, one variant per [`Provenance`] value, so only
+/// `Authored` can legitimately hold no value. See the module doc comment
+/// ("review-caught on PR #40") for why `SchemaDefault`/`Derived` cannot.
+#[derive(Debug, Clone, PartialEq)]
+pub enum IntentEvidence {
+    /// B2's still-open authored-absent question lives exactly here --
+    /// `None` is deliberately representable, not resolved.
+    Authored(Option<Value>),
+    /// Always a real, substituted value -- B1: "substituted from the
+    /// schema's declared default."
+    SchemaDefault(Value),
+    /// Always a real, computed value -- B1: "computed by the engine from
+    /// other field(s)."
+    Derived(Value),
+}
+
+impl IntentEvidence {
+    /// The [`Provenance`] this evidence corresponds to -- derived from the
+    /// variant, not a second, independently settable field, the same
+    /// reasoning [`ConsumedField::coverage`] already applies to coverage.
+    #[must_use]
+    pub fn provenance(&self) -> Provenance {
+        match self {
+            IntentEvidence::Authored(_) => Provenance::Authored,
+            IntentEvidence::SchemaDefault(_) => Provenance::SchemaDefault,
+            IntentEvidence::Derived(_) => Provenance::Derived,
+        }
+    }
+
+    #[must_use]
+    pub fn value(&self) -> Option<&Value> {
+        match self {
+            IntentEvidence::Authored(v) => v.as_ref(),
+            IntentEvidence::SchemaDefault(v) | IntentEvidence::Derived(v) => Some(v),
+        }
+    }
+}
+
 /// B3's three legitimate field shapes, closed so a fourth, illegitimate
 /// one cannot be constructed. See the module doc comment for the
 /// reasoning behind each variant's exact shape.
@@ -112,10 +168,7 @@ pub enum FieldEvidence {
     /// computed from other authored fields. Never carries a `Coverage` --
     /// coverage is an observe-call concept, and an intent field is not
     /// observed.
-    Intent {
-        provenance: Provenance,
-        value: Option<Value>,
-    },
+    Intent(IntentEvidence),
     /// State-side, not derived: a raw provider/device observation.
     Observation(ConsumedField),
     /// State-side, derived (`BOUNDARY.md`'s `$.state.effective_state`
@@ -144,7 +197,7 @@ impl MaterializedField {
     #[must_use]
     pub fn value(&self) -> Option<&Value> {
         match &self.evidence {
-            FieldEvidence::Intent { value, .. } => value.as_ref(),
+            FieldEvidence::Intent(ie) => ie.value(),
             FieldEvidence::Observation(cf) | FieldEvidence::DerivedObservation(cf) => cf.value(),
         }
     }
@@ -215,10 +268,7 @@ mod tests {
     fn authored(v: Value) -> MaterializedField {
         MaterializedField {
             capability: Capability::Implemented,
-            evidence: FieldEvidence::Intent {
-                provenance: Provenance::Authored,
-                value: Some(v),
-            },
+            evidence: FieldEvidence::Intent(IntentEvidence::Authored(Some(v))),
         }
     }
 
@@ -255,12 +305,50 @@ mod tests {
     fn authored_absent_has_no_value_and_does_not_panic() {
         let f = MaterializedField {
             capability: Capability::Implemented,
-            evidence: FieldEvidence::Intent {
-                provenance: Provenance::Authored,
-                value: None,
-            },
+            evidence: FieldEvidence::Intent(IntentEvidence::Authored(None)),
         };
         assert_eq!(f.value(), None);
+        assert_eq!(
+            match &f.evidence {
+                FieldEvidence::Intent(ie) => ie.provenance(),
+                _ => unreachable!(),
+            },
+            Provenance::Authored
+        );
+    }
+
+    // Review-caught on PR #40: SchemaDefault/Derived always carry a real
+    // value (B1: "substituted"/"computed" -- both name an operation that
+    // always produces one), unlike Authored. IntentEvidence makes a
+    // SchemaDefault/Derived + None combination impossible to construct at
+    // all -- nothing to assert a rejection of, which is the point.
+    #[test]
+    fn schema_default_and_derived_always_carry_a_real_value() {
+        let defaulted = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Intent(IntentEvidence::SchemaDefault(Value::Int(0))),
+        };
+        assert_eq!(defaulted.value(), Some(&Value::Int(0)));
+        assert_eq!(
+            match &defaulted.evidence {
+                FieldEvidence::Intent(ie) => ie.provenance(),
+                _ => unreachable!(),
+            },
+            Provenance::SchemaDefault
+        );
+
+        let derived = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Intent(IntentEvidence::Derived(Value::Bool(true))),
+        };
+        assert_eq!(derived.value(), Some(&Value::Bool(true)));
+        assert_eq!(
+            match &derived.evidence {
+                FieldEvidence::Intent(ie) => ie.provenance(),
+                _ => unreachable!(),
+            },
+            Provenance::Derived
+        );
     }
 
     // B3: "a field materialized from a raw, non-derived observation still
