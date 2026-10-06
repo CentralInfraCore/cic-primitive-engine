@@ -3,50 +3,46 @@
 **A module does not interpret CIC schema. This engine interprets it,
 materializes it, and proves it; the module works only on the closed data set.**
 
-A Rust **library and CLI**, with a Go module alongside it (`go/`), that
-turns a CIC composition into validated, materialized `PrimitiveIR`.
-Generators — YANG, RESTCONF, Kubernetes, Go, the Relay — consume the IR,
-never the YAML.
+A Rust **library and CLI**, with a Go module alongside it (`go/`). Its
+actual subject is the **materialized object** a CIC composition becomes
+— not a pipeline that produces one. Generators — YANG, RESTCONF,
+Kubernetes, Go, the Relay — consume that object, never the authored
+YAML. See "The object" and "Division of labor", below, for a scope
+correction to the pipeline framing this file used to carry.
 
 > **Status: early.** `error` and `reader` are extracted and working.
-> `canonical` implements `Stage::Canonicalize`'s byte format, `role`
-> implements one piece of `Stage::Normalize` (Role short/long form, a
-> direct port of `cic-primitives`' own `check_grammar.py`),
-> `conformance` implements section F's per-field comparator primitive
+> `canonical` implements section A's byte format, `conformance`
+> implements section F's per-field comparator primitive
 > (`compare`/`classify_field_value`, ported from `CIC-Relay`'s
 > `compare.go`/`observation.go`), `collection` implements its
 > collection-topology/element-identity primitive (`element_key`, ported
 > from `collection.go`), `plan` drives both over a whole document
-> (`evaluate`, ported from `conformance.go`) — closing section F's
-> object-level-walker gap — and `digest_projection` produces F5's own
-> `conformance_plan_digest`/`observation_digest` from `plan`'s real
-> types. The conformance/drift verdict artifact's own schema text lives
-> in `docs/VERDICT-SCHEMA.md`, not in this crate's own types directly.
-> Go's analogous `IntentDigest` has no equivalent yet, since it needs a
-> `Normalize` stage this engine doesn't have. **`go/` now carries a Go
-> peer for all five Rust modules above** — `go/canonical` (section A),
-> `go/conformance` (section F's comparator primitive), `go/collection`
-> (section F's collection-topology/element-identity primitive),
-> `go/plan` (section F's object-level walker) and
-> `go/digestprojection` (F9's digest wiring), each independently
-> verified against the same decided contract. **A cross-language
-> differential corpus, `conformance/differential/`, has now landed for
-> all four** (`comparator`/F6, `collection`/F7, `plan`/F8, `digest`/F9
-> — JSON-only fixtures, run by both `engine/tests/differential.rs` and
-> `go/*/differential_test.go`) — every Rust F-module from F6 through F9
-> has now been cross-checked against its Go peer, not merely each
-> independently verified against the decided contract in prose.
-> Building
-> `go/collection` caught a real, previously-uncaught negative-zero
-> formatting divergence between `collection.rs` and real Go, fixed on
-> the Rust side in the same pass; `go/plan` peers against `plan.rs`'s
-> already-fixed multi-key path resolution, not `conformance.go`'s
-> original single-split bug. None of this is wired into a pipeline
-> stage, because `Parse` and the rest of `Normalize`/`Resolve`/
-> `Validate` don't
-> exist, in either language. Access's own short/long form is
-> deliberately not here yet — its instance grammar is still undecided
-> upstream (`cic-primitives#17`). Nothing here is a stable API.
+> (`evaluate`, ported from `conformance.go`), and `digest_projection`
+> produces F5's own `conformance_plan_digest`/`observation_digest` from
+> `plan`'s real types. The conformance/drift verdict artifact's own
+> schema text lives in `docs/VERDICT-SCHEMA.md`, not in this crate's own
+> types directly. `go/` carries a Go peer for all five Rust modules
+> above, each independently verified against the same decided contract
+> AND cross-checked against its Go peer through a shared differential
+> corpus (`conformance/differential/`, all four of `comparator`/F6,
+> `collection`/F7, `plan`/F8, `digest`/F9 landed) — not merely each
+> independently verified in prose. Building `go/collection` caught a
+> real, previously-uncaught negative-zero formatting divergence between
+> `collection.rs` and real Go, fixed on the Rust side in the same pass;
+> `go/plan` peers against `plan.rs`'s already-fixed multi-key path
+> resolution, not `conformance.go`'s original single-split bug.
+>
+> **The actual `MaterializedObject` this engine's own contract is
+> about — Access-wrapped value + capability/coverage/provenance per
+> key, exactly the schema's keys — does not exist yet.** Everything
+> listed above operates on a generic value tree
+> (`reader::Value`/`interface{}`) directly; building the real object
+> type — including the boundary check that rejects a structurally
+> invalid candidate before canonicalization or proof ever runs — and
+> wiring `conformance`/`collection`/`plan` to read from it, is the next
+> real step. `role` (Role short/long form, P0.2) predates the scope
+> correction below and is not wired to anything. Nothing here is a
+> stable API.
 
 ---
 
@@ -70,32 +66,98 @@ So the split is deliberate:
 | `cic-primitives` | what the language *is*, and who signed this version of it |
 | `cic-primitive-engine` | what a document *means*, mechanically, and what a module may receive |
 
-## The pipeline
+## The object
+
+**This repo's actual subject is the materialized object a CIC
+composition becomes.** The object carries exactly the schema's keys, no
+more and no less (`PRIMITIVE-IR.md`'s own **Complete** property): per
+key, a value wrapped in the Access atom's own structure (`value`/
+`access`/`modify`/`inherit`/`default_injection`/`conformance`), plus
+three independent facts about it (section B3): capability, coverage,
+provenance. A short-form authored key (`key: value`) and its long form
+(`key: {value: value, access: inherit, ...}`) mean the same thing; the
+object itself only ever holds the long form — the short form is an
+authoring convenience that never survives into the materialized
+object.
+
+## Division of labor — scope correction
+
+**This engine does not perform domain/schema-semantic validation —
+Shape/Role algebra, reference resolution, or default/derivation
+decisions.** Those are facts the object's ENVIRONMENT establishes and
+writes onto it — whatever upstream component already schema-validated
+and supplemented the data before it reaches this object:
 
 ```
-YAML bytes
-  → Read          strict document reading, before a tree exists
-  → Parse         typed composition; structural positions are closed
-  → Normalize     short forms expanded, applicable defaults applied
-  → Resolve       references, inheritance chains, cycle detection
-  → Validate      Shape algebra, Role algebra, cross-primitive rules
-  → Canonicalize  one byte representation, for digests and caches
+environment                          this repo
+───────────                          ─────────
+Parse       (typed composition)  ─┐
+Normalize   (short/long form,     │  hands this repo a
+             defaults applied)    │  candidate object
+Resolve     (references, cycles)  │
+Validate    (Shape/Role algebra) ─┘
+                                     boundary check (candidate really
+                                       is a MaterializedObject?)
+                                     Canonicalize (one byte form, for digests)
+                                     conformance/collection/plan/
+                                     digest_projection (given two
+                                       already-materialized states --
+                                       intent and observed -- does one
+                                       conform to the other, and proves it)
 ```
 
-The stages are total and ordered: every rejection belongs to exactly one, and a
-stage may only reject what the stages before it admitted.
+Scoping OUT domain-semantic validation does not scope out a narrower,
+load-bearing obligation this engine still owns: whether the candidate
+object it receives actually satisfies the structural/semantic-state
+invariants — the `Complete` property, long-form fields, valid
+capability/coverage/provenance values — that canonicalization and the
+F6-F9 proof machinery assume. `docs/MATERIALIZATION-SPEC.md`'s B7
+already commits capability/coverage/provenance into the
+`output_digest`-protected semantic claim; without a boundary check,
+that digest would only prove "these bytes were canonicalized," not "a
+valid `MaterializedObject` produced these bytes." F13/F14 (same spec)
+already established this repo's own precedent for exactly this shape
+of problem: a module validates untrusted input at its OWN boundary
+rather than trusting an upstream stage (`ConformancePlan::validate`,
+`PlanDigestProjection`'s own check) — the same principle applies one
+level up, at the `MaterializedObject` boundary itself. That check does
+not exist yet, because the type it protects does not exist yet; it is
+named here as an obligation this engine owes, not disclaimed as out of
+scope.
 
-**A field that is absent cannot be skipped.** The position it would occupy is
-fixed at `Parse` and does not depend on the field being there. This is not a
-theoretical concern: a checker in `cic-primitives` discovered nodes by looking
-for a `shape_type` member, so a field that omitted `shape_type` was not reported
-as invalid — it was invisible. Zero nodes examined, zero findings, green.
-Discovery must never depend on the member whose absence is the defect.
+This corrects, rather than extends, the pipeline framing this file used
+to carry (`YAML bytes → Read → Parse → Normalize → Resolve → Validate →
+Canonicalize`, all as this repo's own stages). `docs/MATERIALIZATION-SPEC.md`
+still describes sections A through G at length as the historical
+record of how the primitives' own semantics were decided — that
+content stays correct about what a capability/coverage/provenance
+fact, a comparator verdict, or a canonical byte means. What changes
+here is narrower but load-bearing: *who performs* Parse/Normalize/
+Resolve/Validate. It is the environment, not this repo.
+
+One lesson from that environment-side work is still worth carrying
+here, since it shaped how this repo's own `Complete` property got
+decided: **a field that is absent cannot be skipped.** A checker in
+`cic-primitives` once discovered nodes by looking for a `shape_type`
+member, so a field that omitted `shape_type` was not reported as
+invalid — it was invisible. Zero nodes examined, zero findings, green.
+Discovery must never depend on the member whose absence is the defect
+— wherever Parse actually runs.
 
 ## What does not belong here
 
 Vault access · counter-signature policy · git and release workflow · domain
 adapters · Kubernetes/OCI/network runtime logic · authorization decisions.
+**Also out of scope under the correction above:** domain/schema-semantic
+validation, reference resolution, default/derivation application, and
+short-form expansion — the environment's job, before data ever reaches
+this object. This does NOT include the structural boundary check named
+above under "Division of labor" — that stays this engine's own
+obligation, just not yet built. `role`'s `expand_role` (Role short/long
+form, P0.2) was built
+before this correction and is exactly this kind of work; it stays in
+the tree for now, named here rather than silently kept as if it still
+belonged.
 
 A release verifier may call this engine to check the specs a bundle carries, but
 the trust chain stays outside. *Is this primitive semantically valid* and *did it
