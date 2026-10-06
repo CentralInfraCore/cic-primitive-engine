@@ -32,17 +32,18 @@ correction to the pipeline framing this file used to carry.
 > `go/plan` peers against `plan.rs`'s already-fixed multi-key path
 > resolution, not `conformance.go`'s original single-split bug.
 >
-> **The actual `MaterializedObject` this engine's own contract is
-> about — Access-wrapped value + capability/coverage/provenance per
-> key, exactly the schema's keys — does not exist yet.** Everything
-> listed above operates on a generic value tree
-> (`reader::Value`/`interface{}`) directly; building the real object
-> type — including the boundary check that rejects a structurally
-> invalid candidate before canonicalization or proof ever runs — and
-> wiring `conformance`/`collection`/`plan` to read from it, is the next
-> real step. `role` (Role short/long form, P0.2) predates the scope
-> correction below and is not wired to anything. Nothing here is a
-> stable API.
+> **`materialized` now exists — a first cut, not yet wired to anything.**
+> `MaterializedObject`/`MaterializedField`/`FieldEvidence`
+> (`engine/src/materialized.rs`) implement section B3's closed shape —
+> refined past its own ASCII sketch; see "The object" and
+> `docs/MATERIALIZATION-SPEC.md`'s B8 — plus the `try_new`
+> custody-boundary check (`PRIMITIVE-IR.md`'s Complete property,
+> enforced by construction). `conformance`/`collection`/`plan` still
+> operate on a generic value tree (`reader::Value`/`interface{}`)
+> directly, not on `materialized`'s types; wiring them to actually read
+> from a `MaterializedObject` is the next real step. `role` (Role
+> short/long form, P0.2) predates the scope correction below and is not
+> wired to anything either. Nothing here is a stable API.
 
 ---
 
@@ -70,15 +71,25 @@ So the split is deliberate:
 
 **This repo's actual subject is the materialized object a CIC
 composition becomes.** The object carries exactly the schema's keys, no
-more and no less (`PRIMITIVE-IR.md`'s own **Complete** property): per
-key, a value wrapped in the Access atom's own structure (`value`/
-`access`/`modify`/`inherit`/`default_injection`/`conformance`), plus
-three independent facts about it (section B3): capability, coverage,
-provenance. A short-form authored key (`key: value`) and its long form
-(`key: {value: value, access: inherit, ...}`) mean the same thing; the
-object itself only ever holds the long form — the short form is an
-authoring convenience that never survives into the materialized
-object.
+more and no less (`PRIMITIVE-IR.md`'s own **Complete** property, enforced
+by `MaterializedObject::try_new`). Per key, `MaterializedField` holds
+`capability` (B1, always present) plus `FieldEvidence` — the closed set
+of legitimate value/coverage/provenance combinations section B3 actually
+describes (`Intent(IntentEvidence)` | `Observation(ConsumedField)` |
+`DerivedObservation(ConsumedField)`, where `IntentEvidence` is itself one
+variant per provenance value, so only `Authored` can hold no value; see
+B8 for why it's closed enums all the way down, not independent `Option`
+fields).
+
+**Correction, found while building the type:** an earlier version of
+this section described each key as "a value wrapped in the Access
+atom's own structure (`value`/`access`/`modify`/`inherit`/
+`default_injection`/`conformance`)" — broader than what B3/B5 actually
+decide. `access`/`modify`/`inherit`/`default_injection` are explicitly
+**not** part of `MaterializedField` (B5: `default_injection` "is not a
+second value held inside `MaterializedField`... it is computed at
+response-construction time from the field's long-form descriptor," an
+ACL/response-time concern the Relay/host owns, not this repo).
 
 ## Division of labor — scope correction
 

@@ -14,14 +14,21 @@
 //!
 //! **This crate's actual subject is the materialized object a CIC
 //! composition becomes.** The object carries exactly the schema's keys, no
-//! more and no less (`PRIMITIVE-IR.md`'s own **Complete** property): per
-//! key, a value wrapped in the Access atom's own structure (`value`/
-//! `access`/`modify`/`inherit`/`default_injection`/`conformance`), plus
-//! three independent facts about it (B3): capability, coverage, provenance.
-//! A short-form authored key (`key: value`) and its long form (`key:
-//! {value: value, access: inherit, ...}`) mean the same thing; the object
-//! itself only ever holds the long form — the short form is an authoring
-//! convenience that never survives into the materialized object.
+//! more and no less (`PRIMITIVE-IR.md`'s own **Complete** property, enforced
+//! by [`materialized::MaterializedObject::try_new`]). Per key,
+//! [`materialized::MaterializedField`] holds `capability` (B1, always
+//! present) plus [`materialized::FieldEvidence`] -- the closed set of
+//! legitimate value/coverage/provenance combinations B3 actually describes.
+//! **Correction, found while building the type:** an earlier version of
+//! this doc comment described each key as "a value wrapped in the Access
+//! atom's own structure (`value`/`access`/`modify`/`inherit`/
+//! `default_injection`/`conformance`)" -- broader than what B3/B5 actually
+//! decide. `access`/`modify`/`inherit`/`default_injection` are explicitly
+//! **not** part of `MaterializedField` (B5: `default_injection` "is not a
+//! second value held inside `MaterializedField`... it is computed at
+//! response-construction time from the field's long-form descriptor," an
+//! ACL/response-time concern the Relay/host owns, not this crate). See
+//! `materialized`'s own module doc comment for the full reasoning.
 //!
 //! # Division of labor — scope correction
 //!
@@ -125,22 +132,23 @@
 //! four cross-checked against an independent Go peer (`go/`) through a
 //! shared differential corpus (`conformance/differential/`).
 //!
-//! **The actual object this crate's own contract is about -- the
-//! `MaterializedObject` of "# The object", above -- does not exist yet.**
-//! Building it -- including the boundary check named under "Division of
-//! labor" that rejects a structurally invalid candidate before
-//! canonicalization or proof ever runs -- and wiring `conformance`/
-//! `collection`/`plan` to read from it instead of a generic value tree, is
-//! the next real step; everything listed above operates on
-//! [`reader::Value`] directly today. `role` predates the scope correction
-//! above and is not wired to anything. Nothing here is a stable API, and no
-//! module should depend on it as one.
+//! **`materialized` now exists -- a first cut, not yet wired to anything.**
+//! [`materialized::MaterializedObject`]/[`materialized::MaterializedField`]/
+//! [`materialized::FieldEvidence`] implement B3's closed shape and the
+//! `try_new` custody-boundary check named under "Division of labor," above.
+//! `conformance`/`collection`/`plan` still operate on [`reader::Value`]
+//! directly, not on `materialized`'s types -- wiring them to actually read
+//! from a `MaterializedObject` instead is the next real step, not done
+//! here. `role` predates the scope correction above and is not wired to
+//! anything either. Nothing here is a stable API, and no module should
+//! depend on it as one.
 
 pub mod canonical;
 pub mod collection;
 pub mod conformance;
 pub mod digest_projection;
 pub mod error;
+pub mod materialized;
 pub mod plan;
 pub mod reader;
 pub mod role;
@@ -155,6 +163,9 @@ pub use digest_projection::{
     plan_digest_projection,
 };
 pub use error::{code, Error, Result, Stage};
+pub use materialized::{
+    Capability, FieldEvidence, IntentEvidence, MaterializedField, MaterializedObject, Provenance,
+};
 pub use plan::{
     evaluate, CollectionPlan, ConformancePlan, ConsumedField, FieldPlan, ObjectConformance,
     ObjectVerdict,
