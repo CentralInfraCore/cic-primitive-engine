@@ -12,6 +12,61 @@ going forward -- the disagreement becomes a tracked migration, not a
 silently accepted difference.
 ```
 
+## Scope correction (read this before anything below)
+
+**Everything below this note is still correct about what the primitives
+MEAN -- section A's canonical byte format, B3's capability/coverage/
+provenance axes, section F's comparator/verdict contract, and every
+other decision this file records all stay normative.** What this note
+corrects is narrower but load-bearing: *who performs* the pipeline
+stages this file's own sections reference throughout
+(`Parse`/`Normalize`/`Resolve`/`Validate`).
+
+This crate's actual subject is the **materialized object** a CIC
+composition becomes -- not a pipeline that produces one. The object
+carries exactly the schema's keys (`PRIMITIVE-IR.md`'s own **Complete**
+property): per key, a value wrapped in the Access atom's own structure
+(`value`/`access`/`modify`/`inherit`/`default_injection`/`conformance`),
+plus the three independent B3 facts (capability, coverage, provenance).
+This crate does not validate, resolve, or decide whether an object is
+correct -- those are facts the object's ENVIRONMENT establishes and
+writes onto it, before the object ever reaches this crate:
+
+```text
+environment                          this crate
+───────────                          ──────────
+Parse       (typed composition)  ─┐
+Normalize   (short/long form,     │  hands this crate an
+             defaults applied)    │  already-complete object
+Resolve     (references, cycles)  │
+Validate    (Shape/Role algebra) ─┘
+                                     Canonicalize (section A -- one byte
+                                       form, for digests)
+                                     conformance/collection/plan/
+                                     digest_projection (section F --
+                                       given two already-materialized
+                                       states, does one conform to the
+                                       other, and proves it)
+```
+
+So, reading the sections below: section A and section F describe work
+that genuinely belongs to this crate (`Canonicalize`, and the
+comparator/verdict primitive). Sections B through E's own discussion of
+`Parse`/`Normalize`/`Resolve`/`Validate` remains the correct record of
+*what those stages decide and why* -- that reasoning does not change --
+but it is no longer this crate's own implementation obligation to
+discharge. `role.rs`'s `expand_role` (Role short/long form, P0.2) was
+built before this correction, under the old framing; it is environment
+work that ended up in this tree, named here rather than silently kept
+as if it still belonged.
+
+The actual `MaterializedObject` type this correction describes --
+Access-wrapped value + B3 metadata per key -- does not exist yet in
+this crate. `conformance`/`collection`/`plan` currently operate on a
+generic value tree ([`reader::Value`](../engine/src/reader.rs) /
+Go's `interface{}`) directly; building the real object type, and wiring
+them to read from it, is the next real step.
+
 ## A — Canonical representation (closes section A)
 
 **Decision:** the library adopts CIC's existing Canonical Object Encoding
