@@ -127,8 +127,10 @@ mod tests {
     use super::*;
     use crate::collection::{Collection, CollectionTopology};
     use crate::conformance::CompareType;
+    use crate::materialized::{Capability, FieldEvidence, IntentEvidence, MaterializedField};
     use crate::plan::evaluate;
     use crate::reader::Map as RMap;
+    use std::collections::BTreeSet;
 
     fn map(pairs: &[(&str, Value)]) -> Value {
         let mut m = RMap::default();
@@ -136,6 +138,45 @@ mod tests {
             m.push(*k, v.clone());
         }
         Value::Map(m)
+    }
+
+    /// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject`,
+    /// every key the same `FieldEvidence` shape -- see `plan.rs`'s own
+    /// identical helper for why this is test-only, not a production
+    /// conversion.
+    fn object_from_value(
+        v: Value,
+        evidence_of: impl Fn(Value) -> FieldEvidence,
+    ) -> crate::materialized::MaterializedObject {
+        let Value::Map(m) = v else {
+            panic!("test fixture must be a map")
+        };
+        let mut fields = BTreeMap::new();
+        let mut keys = BTreeSet::new();
+        for (k, val) in m.0 {
+            keys.insert(k.clone());
+            fields.insert(
+                k,
+                MaterializedField {
+                    capability: Capability::Implemented,
+                    evidence: evidence_of(val),
+                },
+            );
+        }
+        crate::materialized::MaterializedObject::try_new(fields, &keys)
+            .expect("a fixture's own key set is trivially complete against itself")
+    }
+
+    fn intent_object(v: Value) -> crate::materialized::MaterializedObject {
+        object_from_value(v, |val| {
+            FieldEvidence::Intent(IntentEvidence::Authored(Some(val)))
+        })
+    }
+
+    fn observed_object(v: Value) -> crate::materialized::MaterializedObject {
+        object_from_value(v, |val| {
+            FieldEvidence::Observation(ConsumedField::Observed(val))
+        })
     }
 
     // F5 names an exact shape, not just "scalar field paths and
@@ -307,8 +348,9 @@ mod tests {
         let observed_a = map(&[("shape", Value::Str("E4.Flex".into()))]);
         let observed_b = map(&[("shape", Value::Str("E3.Flex".into()))]);
 
-        let verdict_a = evaluate(&intent, &observed_a, &obs, &plan);
-        let verdict_b = evaluate(&intent, &observed_b, &obs, &plan);
+        let intent = intent_object(intent);
+        let verdict_a = evaluate(&intent, &observed_object(observed_a), &obs, &plan);
+        let verdict_b = evaluate(&intent, &observed_object(observed_b), &obs, &plan);
 
         // Same coverage on both sides -- Relay's own envelope-only digest
         // would have produced identical bytes for these two runs.

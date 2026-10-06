@@ -24,9 +24,32 @@
 //! here it does in Go). [`evaluate`] does, however, now record exactly
 //! what F5's two projections need as [`ObjectVerdict::consumed`] — see
 //! `digest_projection.rs` for where that's turned into the actual digests.
+//!
+//! # Wired to `MaterializedObject` at the root, not deeper
+//!
+//! [`evaluate`]'s `intent`/`observed` roots are [`crate::materialized::
+//! MaterializedObject`], not a bare [`Value`] tree — `lib.rs`'s "next real
+//! step" named after #40. Only the ROOT changed: a candidate must now pass
+//! [`crate::materialized::MaterializedObject::try_new`]'s custody-boundary
+//! check before it can reach this walker at all, closing the gap #39
+//! named (a malformed candidate could previously reach `evaluate`
+//! directly). Everything below the root — a field's own `.value()`,
+//! collection elements, nested paths — is still a plain [`Value`] tree,
+//! exactly as before: `MaterializedObject` is "exactly the schema's
+//! keys," one [`crate::materialized::FieldEvidence`] per key, not a
+//! recursive structure, so there is nothing deeper for it to replace yet.
+//! [`Observation`] still carries coverage for every path this walker
+//! resolves, including top-level ones — **not** read from the observed
+//! root's own `FieldEvidence`, even though a top-level `Observation`
+//! variant already carries a `Coverage`. Two sources for the same
+//! top-level fact is exactly the kind of duplication this crate has
+//! fought elsewhere (`ConsumedField`, `IntentEvidence`); resolving it
+//! means first deciding whether `MaterializedObject` ever becomes
+//! recursive, which this change does not decide and does not need to.
 
 use crate::collection::Collection;
 use crate::conformance::{classify_field_value, CompareType, Coverage, FieldVerdict, Observation};
+use crate::materialized::MaterializedObject;
 use crate::reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -157,10 +180,14 @@ pub struct ObjectVerdict {
 /// verdict for `intent` against `observed`, under `obs`'s coverage and the
 /// compiled `plan`. Only planned fields are compared; unplanned state
 /// fields are intentionally ignored (observed state, not drift).
+///
+/// `intent`/`observed` are [`MaterializedObject`]s, not bare [`Value`]
+/// trees — see the module doc comment ("Wired to `MaterializedObject` at
+/// the root, not deeper") for exactly what that does and does not change.
 #[must_use]
 pub fn evaluate(
-    intent: &Value,
-    observed: &Value,
+    intent: &MaterializedObject,
+    observed: &MaterializedObject,
     obs: &Observation,
     plan: &ConformancePlan,
 ) -> ObjectVerdict {
@@ -206,8 +233,8 @@ pub fn evaluate(
 fn classify_at(
     fields: &mut BTreeMap<String, FieldVerdict>,
     consumed: &mut BTreeMap<String, ConsumedField>,
-    intent: &Value,
-    observed: &Value,
+    intent: &MaterializedObject,
+    observed: &MaterializedObject,
     obs: &Observation,
     path: &str,
     compare: CompareType,
@@ -261,7 +288,11 @@ pub fn aggregate(fields: &BTreeMap<String, FieldVerdict>) -> ObjectConformance {
 /// element identities of a collection across the intent and observed
 /// lists, keyed by the collection's topology. A `BTreeSet` gives the union
 /// and the sort in one step, matching Go's `seen map` + `sort.Strings`.
-fn element_keys(intent: &Value, observed: &Value, cp: &CollectionPlan) -> Vec<String> {
+fn element_keys(
+    intent: &MaterializedObject,
+    observed: &MaterializedObject,
+    cp: &CollectionPlan,
+) -> Vec<String> {
     let mut seen = BTreeSet::new();
     for root in [intent, observed] {
         if let Some(Value::Seq(list)) = resolve_path(root, &cp.path) {
@@ -276,11 +307,33 @@ fn element_keys(intent: &Value, observed: &Value, cp: &CollectionPlan) -> Vec<St
     seen.into_iter().collect()
 }
 
+/// Resolves `path`'s first segment against `root` itself — a
+/// [`MaterializedObject`] key lookup, never a `{...}` collection-identity
+/// segment (that syntax only ever selects an element *within* a field's
+/// own value, never a schema key itself) — then delegates whatever
+/// remains of `path` to [`resolve_in`], which does the actual walking
+/// through the resulting [`Value`]. See the module doc comment ("Wired to
+/// `MaterializedObject` at the root, not deeper") for why only this first
+/// step changed.
+fn resolve_path<'a>(root: &'a MaterializedObject, path: &str) -> Option<&'a Value> {
+    let mut segs = path.trim_matches('/').splitn(2, '/');
+    let first = segs.next()?;
+    if first.is_empty() {
+        return None;
+    }
+    let value = root.get(first)?.value()?;
+    match segs.next() {
+        Some(rest) if !rest.is_empty() => resolve_in(value, rest),
+        _ => Some(value),
+    }
+}
+
 /// Ported from `conformance.go`'s `resolvePath`: walks a canonical path
 /// (`"/a/b"`, or `"/list/{key=val}/field"`, or, for a multi-key
-/// collection, `"/list/{k1=v1,k2=v2}/field"`) into a nested `Value`,
-/// returning the value found, or `None` if any segment along the way
-/// can't be resolved.
+/// collection, `"/list/{k1=v1,k2=v2}/field"`) through an already-resolved
+/// `Value` tree -- everything in `path` past [`resolve_path`]'s own
+/// top-level [`MaterializedObject`] lookup -- returning the value found,
+/// or `None` if any segment along the way can't be resolved.
 ///
 /// **Correction (review-caught on PR #28): Go's own `resolvePath` only
 /// ever splits a `{...}` segment on the *first* `=`, via
@@ -319,7 +372,7 @@ fn element_keys(intent: &Value, observed: &Value, cp: &CollectionPlan) -> Vec<St
 /// exists but isn't a value this path shape could be applied to" (e.g. a
 /// `{...}` segment over a non-`Seq`), matching Go's own `resolvePath`,
 /// which returns the identical `(nil, false)` for both.
-fn resolve_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
+fn resolve_in<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = root;
     for seg in path.trim_matches('/').split('/') {
         if seg.is_empty() {
@@ -366,6 +419,7 @@ mod tests {
     use super::*;
     use crate::collection::CollectionTopology;
     use crate::conformance::{CompareType, Coverage};
+    use crate::materialized::{Capability, FieldEvidence, IntentEvidence, MaterializedField};
     use crate::reader::Map;
 
     fn map(pairs: &[(&str, Value)]) -> Value {
@@ -374,6 +428,48 @@ mod tests {
             m.push(*k, v.clone());
         }
         Value::Map(m)
+    }
+
+    /// Wraps a test fixture `Value::Map` into a [`MaterializedObject`],
+    /// every key given the same `FieldEvidence` shape -- a test-only
+    /// convenience, not a production conversion (deciding how raw data
+    /// becomes `FieldEvidence` is environment/Normalize work, out of this
+    /// crate's scope; see the module doc comment). The fixture's own key
+    /// set is trivially complete against itself, so `try_new` never fails
+    /// here.
+    fn object_from_value(
+        v: Value,
+        evidence_of: impl Fn(Value) -> FieldEvidence,
+    ) -> MaterializedObject {
+        let Value::Map(m) = v else {
+            panic!("test fixture must be a map")
+        };
+        let mut fields = BTreeMap::new();
+        let mut keys = BTreeSet::new();
+        for (k, val) in m.0 {
+            keys.insert(k.clone());
+            fields.insert(
+                k,
+                MaterializedField {
+                    capability: Capability::Implemented,
+                    evidence: evidence_of(val),
+                },
+            );
+        }
+        MaterializedObject::try_new(fields, &keys)
+            .expect("a fixture's own key set is trivially complete against itself")
+    }
+
+    fn intent_object(v: Value) -> MaterializedObject {
+        object_from_value(v, |val| {
+            FieldEvidence::Intent(IntentEvidence::Authored(Some(val)))
+        })
+    }
+
+    fn observed_object(v: Value) -> MaterializedObject {
+        object_from_value(v, |val| {
+            FieldEvidence::Observation(ConsumedField::Observed(val))
+        })
     }
 
     fn nic(name: &str, subnet_ref: &str, extra: &[(&str, Value)]) -> Value {
@@ -475,8 +571,8 @@ mod tests {
     #[test]
     fn oci_conformant() {
         let verdict = evaluate(
-            &oci_intent(),
-            &oci_observed(),
+            &intent_object(oci_intent()),
+            &observed_object(oci_observed()),
             &oci_observation(),
             &oci_plan(),
         );
@@ -499,8 +595,8 @@ mod tests {
     #[test]
     fn oci_extra_state_fields_are_not_drift() {
         let verdict = evaluate(
-            &oci_intent(),
-            &oci_observed(),
+            &intent_object(oci_intent()),
+            &observed_object(oci_observed()),
             &oci_observation(),
             &oci_plan(),
         );
@@ -533,7 +629,12 @@ mod tests {
         };
         nics[1] = nic("nic-1", "prod-subnet-WRONG", &[]);
 
-        let verdict = evaluate(&oci_intent(), &observed, &oci_observation(), &oci_plan());
+        let verdict = evaluate(
+            &intent_object(oci_intent()),
+            &observed_object(observed),
+            &oci_observation(),
+            &oci_plan(),
+        );
         assert_eq!(
             verdict
                 .fields
@@ -553,7 +654,12 @@ mod tests {
         let idx = m.0.iter().position(|(k, _)| k == "memory_gb").unwrap();
         m.0[idx].1 = Value::Str("large".into());
 
-        let verdict = evaluate(&oci_intent(), &observed, &oci_observation(), &oci_plan());
+        let verdict = evaluate(
+            &intent_object(oci_intent()),
+            &observed_object(observed),
+            &oci_observation(),
+            &oci_plan(),
+        );
         assert_eq!(
             verdict.fields.get("/memory_gb"),
             Some(&FieldVerdict::NotComparable)
@@ -572,7 +678,12 @@ mod tests {
         ] {
             obs.set(p, Coverage::Observed);
         }
-        let verdict = evaluate(&oci_intent(), &oci_observed(), &obs, &oci_plan());
+        let verdict = evaluate(
+            &intent_object(oci_intent()),
+            &observed_object(oci_observed()),
+            &obs,
+            &oci_plan(),
+        );
         assert_eq!(
             verdict.fields.get("/memory_gb"),
             Some(&FieldVerdict::Unobserved)
@@ -591,7 +702,12 @@ mod tests {
         let mut obs = oci_observation();
         obs.set("/boot_volume", Coverage::Absent);
 
-        let verdict = evaluate(&oci_intent(), &oci_observed(), &obs, &plan);
+        let verdict = evaluate(
+            &intent_object(oci_intent()),
+            &observed_object(oci_observed()),
+            &obs,
+            &plan,
+        );
         assert_eq!(
             verdict.fields.get("/boot_volume"),
             Some(&FieldVerdict::ObservedAbsent)
@@ -607,7 +723,12 @@ mod tests {
     fn unknown_coverage_flows_through_to_unobserved_verdict() {
         let mut obs = oci_observation();
         obs.set("/memory_gb", Coverage::Unknown);
-        let verdict = evaluate(&oci_intent(), &oci_observed(), &obs, &oci_plan());
+        let verdict = evaluate(
+            &intent_object(oci_intent()),
+            &observed_object(oci_observed()),
+            &obs,
+            &oci_plan(),
+        );
         assert_eq!(
             verdict.fields.get("/memory_gb"),
             Some(&FieldVerdict::Unobserved)
@@ -662,7 +783,12 @@ mod tests {
         let mut obs = Observation::new();
         obs.set("/nics/{name=nic-0,zone=eu}/subnet", Coverage::Observed);
 
-        let verdict = evaluate(&intent, &observed, &obs, &plan);
+        let verdict = evaluate(
+            &intent_object(intent),
+            &observed_object(observed),
+            &obs,
+            &plan,
+        );
         assert_eq!(
             verdict.fields.get("/nics/{name=nic-0,zone=eu}/subnet"),
             Some(&FieldVerdict::Drift),
