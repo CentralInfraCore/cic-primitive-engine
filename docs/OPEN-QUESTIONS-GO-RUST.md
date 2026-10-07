@@ -820,6 +820,11 @@ this session). `dependency.yaml`'s own stated closing condition is now
 satisfied — pinning it is a mechanical follow-up with no remaining
 judgment call, out of scope for this docs-only change.
 
+**Follow-up done, 2026-10-07:** `dependency.yaml` now pins
+`primitives/@v0.2.0`, with `grammar_sha256`/`grammar_schema_sha256`
+recorded alongside the tag per D1.1 — see `MATERIALIZATION-SPEC.md`'s D3
+for the real digests and how they were computed.
+
 ---
 
 ### E. Boundary enforcement
@@ -1668,5 +1673,5 @@ represented stays open.
 - `docs/BOUNDARY.md` — the custody boundary, the five forbidden states, the
   defaultability-by-Role-axis table, and the receipt sketch this file builds
   decision tracking on top of
-- `dependency.yaml` — the still-unpinned `cic-primitives` dependency; closing
-  it is a precondition for section D, not an independent task
+- `dependency.yaml` — pinned 2026-10-07 at `primitives/@v0.2.0`, closing the
+  obligation this file names below; see `MATERIALIZATION-SPEC.md`'s D3

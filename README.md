@@ -214,19 +214,24 @@ model's `canonical.rs` is the one "not carried"; this engine's own, written
 fresh against `docs/MATERIALIZATION-SPEC.md`'s section A, shares none of its
 code or its thirteen model references.
 
-## Open obligation: the dependency is not pinned
+## Dependency pinning — closed 2026-10-07
 
-`dependency.yaml` tracks `cic-primitives` at `main`, not at a tag. The grammar
-this engine implements — the three-axis Role, the reference annotation, the
-closed structural positions — is not in `primitives/@v0.1.5`, the newest tag.
-Pinning there would declare an origin that does not contain what is being
-implemented.
+`dependency.yaml` pins `cic-primitives` at `primitives/@v0.2.0` (commit
+`960ee0f`, 2026-09-06). This was an open obligation since 2026-08-13: the
+grammar this engine implements — the three-axis Role, the reference-as-
+structural-annotation model, the closed authority/structural/lifecycle
+cardinalities — wasn't in `primitives/@v0.1.5`, the tag that existed at the
+time, so pinning there would have declared an origin that didn't contain what
+was actually being implemented. `primitives/@v0.2.0` was confirmed to contain
+that grammar by direct comparison against `schemas/atomic/role.yaml`, not
+assumed from the version number, before pinning. `grammar_sha256`/
+`grammar_schema_sha256` are recorded in `dependency.yaml` alongside the tag,
+computed with `tools/compiler.py`'s own `get_sha256_b64` against the real
+tagged files, per `docs/MATERIALIZATION-SPEC.md`'s D3/D1.1.
 
-**This must be closed** when `cic-primitives` releases the current grammar: the
-tag replaces `main`, `pinned` becomes true, and if anything is ever vendored,
-`imported_paths` makes the provenance gate enforceable. Until then, nothing
-downstream may treat this engine's behaviour as bound to a released grammar
-version.
+If anything is ever vendored from `cic-primitives` into this tree,
+`imported_paths` makes the provenance gate enforceable with `--require
+cic-primitives`.
 
 ## Conformance
 
