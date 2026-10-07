@@ -66,10 +66,11 @@ precedent for exactly this shape of problem: a module validates
 untrusted input at its OWN boundary rather than trusting an upstream
 stage (`ConformancePlan::validate`, `PlanDigestProjection`'s own
 check) -- the same principle applies one level up, at the
-`MaterializedObject` boundary itself. That check does not exist yet,
-because the type it protects does not exist yet (see below); it is
-named here as an obligation this crate owes, not disclaimed as out of
-scope.
+`MaterializedObject` boundary itself. **Built, not merely named:**
+`MaterializedObject::try_new` (the Complete-property check) and
+`FieldEvidence`/`IntentEvidence` (the closed, illegal-states-
+unrepresentable shape invariants, B8 below) -- plus `plan::evaluate`'s
+own wiring through this boundary at the root.
 
 So, reading the sections below: section A and section F describe work
 that genuinely belongs to this crate (`Canonicalize`, and the
@@ -88,14 +89,19 @@ behavior (the `state_surface` default-authority quirk, the upstream
 crate's git history and in `cic-primitives`' own `check_grammar.py`,
 the actual source of truth it was ported from.
 
-The actual `MaterializedObject` type this correction describes --
-Access-wrapped value + B3 metadata per key -- does not exist yet in
-this crate. `conformance`/`collection`/`plan` currently operate on a
-generic value tree ([`reader::Value`](../engine/src/reader.rs) /
-Go's `interface{}`) directly; building the real object type --
-including the boundary check named above that rejects a structurally
-invalid candidate before canonicalization or proof ever runs -- and
-wiring them to read from it, is the next real step.
+**The `MaterializedObject` type this correction describes now exists**
+(`engine/src/materialized.rs`): `capability` (B1) plus `FieldEvidence`
+(B3's closed value/coverage/provenance shape, refined past B3's own
+ASCII sketch -- see B8) per key -- not "Access-wrapped," which
+overstated B3/B5's actual decision (`access`/`modify`/`inherit`/
+`default_injection` are explicitly not part of `MaterializedField`; B5).
+`plan::evaluate`'s `intent`/`observed` roots are wired through it,
+including the `try_new` boundary check named above. `conformance`/
+`collection` still operate on a generic value tree
+([`reader::Value`](../engine/src/reader.rs) / Go's `interface{}`)
+directly -- correctly: they work on already-resolved leaf values and
+collection elements, not the object itself. Still open: `go/` has no
+`MaterializedObject` equivalent of its own yet.
 
 ## A — Canonical representation (closes section A)
 

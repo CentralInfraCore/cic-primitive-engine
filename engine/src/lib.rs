@@ -70,10 +70,12 @@
 //! validates untrusted input at its OWN boundary rather than trusting an
 //! upstream stage (`ConformancePlan::validate`, `PlanDigestProjection`'s own
 //! check) — the same principle applies one level up, at the
-//! `MaterializedObject` boundary itself. That check does not exist yet,
-//! because the type it protects does not exist yet (see "Status", below);
-//! it is named here as an obligation this crate owes, not disclaimed as out
-//! of scope.
+//! `MaterializedObject` boundary itself. **Built, not merely named:** see
+//! [`materialized::MaterializedObject::try_new`] (the Complete-property
+//! check) and [`materialized::FieldEvidence`]/[`materialized::
+//! IntentEvidence`] (the closed, illegal-states-unrepresentable shape
+//! invariants) under "Status," below, plus `plan::evaluate`'s own wiring
+//! through this boundary at the root.
 //!
 //! This corrects, rather than extends, the pipeline framing this crate's own
 //! docs used to carry. `docs/MATERIALIZATION-SPEC.md` still describes
@@ -106,7 +108,9 @@
 //! application, and short-form expansion -- the environment's job, before
 //! data ever reaches this object. This does NOT include the structural
 //! boundary check named under "Division of labor," above -- that stays
-//! this crate's own obligation, just not yet built.
+//! this crate's own obligation, and it is built: [`materialized::
+//! MaterializedObject::try_new`], wired into `plan::evaluate`'s own entry
+//! point (see "Status," below).
 //!
 //! **A `role` module (Role short/long form, P0.2) lived here until
 //! 2026-10-07 and was removed, not just left named as a gap.** It was

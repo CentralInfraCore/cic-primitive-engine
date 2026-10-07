@@ -142,10 +142,12 @@ already established this repo's own precedent for exactly this shape
 of problem: a module validates untrusted input at its OWN boundary
 rather than trusting an upstream stage (`ConformancePlan::validate`,
 `PlanDigestProjection`'s own check) — the same principle applies one
-level up, at the `MaterializedObject` boundary itself. That check does
-not exist yet, because the type it protects does not exist yet; it is
-named here as an obligation this engine owes, not disclaimed as out of
-scope.
+level up, at the `MaterializedObject` boundary itself. **Built, not
+merely named:** `MaterializedObject::try_new` (the Complete-property
+check) and `FieldEvidence`/`IntentEvidence` (the closed,
+illegal-states-unrepresentable shape invariants) — see "`materialized`
+exists," above — plus `plan::evaluate`'s own wiring through this
+boundary at the root.
 
 This corrects, rather than extends, the pipeline framing this file used
 to carry (`YAML bytes → Read → Parse → Normalize → Resolve → Validate →
@@ -175,7 +177,8 @@ validation, reference resolution, default/derivation application, and
 short-form expansion — the environment's job, before data ever reaches
 this object. This does NOT include the structural boundary check named
 above under "Division of labor" — that stays this engine's own
-obligation, just not yet built.
+obligation, and it is built: `MaterializedObject::try_new`, wired into
+`plan::evaluate`'s own entry point.
 
 **A `role` module (Role short/long form, P0.2) lived here until
 2026-10-07 and was removed, not just left named as a gap.** It was built
