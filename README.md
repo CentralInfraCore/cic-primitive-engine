@@ -49,9 +49,12 @@ correction to the pipeline framing this file used to carry.
 > yet and is unaffected — a named asymmetry, not a defect; the
 > differential corpus still feeds both languages' `evaluate` the same
 > JSON fixture, each language converting it on its own side as its own
-> signature requires. `role` (Role short/long form, P0.2) predates the
-> scope correction below and is not wired to anything. Nothing here is a
-> stable API.
+> signature requires. **A `role` module (Role short/long form, P0.2) lived
+> here until 2026-10-07 and was removed** — it predated the scope
+> correction below, had zero internal callers, and keeping it around
+> would have let the tree imply a scope the contract now denies; see
+> "What does not belong here" for why removal, not just naming the gap,
+> was the right close. Nothing here is a stable API.
 
 ---
 
@@ -172,11 +175,21 @@ validation, reference resolution, default/derivation application, and
 short-form expansion — the environment's job, before data ever reaches
 this object. This does NOT include the structural boundary check named
 above under "Division of labor" — that stays this engine's own
-obligation, just not yet built. `role`'s `expand_role` (Role short/long
-form, P0.2) was built
-before this correction and is exactly this kind of work; it stays in
-the tree for now, named here rather than silently kept as if it still
-belonged.
+obligation, just not yet built.
+
+**A `role` module (Role short/long form, P0.2) lived here until
+2026-10-07 and was removed, not just left named as a gap.** It was built
+before this correction, under the old pipeline framing, was exactly this
+kind of out-of-scope work (`Stage::Normalize`'s job), and had zero
+internal callers — nothing in this crate ever used `expand_role`/`Role`
+beyond re-exporting them. Keeping dead, out-of-scope code around to
+avoid discarding the verification work that went into it would have
+repeated the exact mistake this correction exists to fix: letting the
+tree's contents imply a scope the crate's own contract denies. The code
+and its verification notes (the `state_surface` default-authority quirk,
+the upstream `cic-primitives#17`/`#18` cross-references) are not lost —
+they are in this repo's own git history and in `cic-primitives`' own
+`check_grammar.py`, the actual source of truth it was ported from.
 
 A release verifier may call this engine to check the specs a bundle carries, but
 the trust chain stays outside. *Is this primitive semantically valid* and *did it

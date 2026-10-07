@@ -106,11 +106,23 @@
 //! application, and short-form expansion -- the environment's job, before
 //! data ever reaches this object. This does NOT include the structural
 //! boundary check named under "Division of labor," above -- that stays
-//! this crate's own obligation, just not yet built. `role`'s `expand_role`
-//! (Role short/long form, P0.2) was
-//! built before this correction and is exactly this kind of work; it stays
-//! in the tree for now, named here rather than silently kept as if it still
-//! belonged.
+//! this crate's own obligation, just not yet built.
+//!
+//! **A `role` module (Role short/long form, P0.2) lived here until
+//! 2026-10-07 and was removed, not just left named as a gap.** It was
+//! built before this correction, under the old pipeline framing, was
+//! exactly this kind of out-of-scope work (`Stage::Normalize`'s job), and
+//! had zero internal callers -- nothing in this crate ever used
+//! `expand_role`/`Role` beyond re-exporting them. Keeping dead,
+//! out-of-scope code around to avoid discarding the verification work
+//! that went into it would have repeated the exact mistake this
+//! correction exists to fix: letting the tree's contents imply a scope
+//! the crate's own contract denies. The code and its verification notes
+//! (the `state_surface` default-authority quirk, the upstream
+//! `cic-primitives#17`/`#18` cross-references) are not lost -- they are
+//! in this crate's own git history (removed in the same commit as this
+//! note) and in `cic-primitives`' own `check_grammar.py`, the actual
+//! source of truth it was ported from.
 //!
 //! A release verifier may call this engine to check the specs it carries,
 //! but trust chain and provenance stay outside. Whether a primitive is
@@ -145,8 +157,7 @@
 //! what that does and does not mean -- `conformance`/`collection` still
 //! take plain [`reader::Value`]s, correctly, since they operate on
 //! already-resolved leaf values and collection elements, never on the
-//! object itself. `role` predates the scope correction above and is not
-//! wired to anything. Nothing here is a stable API, and no module should
+//! object itself. Nothing here is a stable API, and no module should
 //! depend on it as one.
 
 pub mod canonical;
@@ -157,7 +168,6 @@ pub mod error;
 pub mod materialized;
 pub mod plan;
 pub mod reader;
-pub mod role;
 
 pub use canonical::{digest, to_canonical_json};
 pub use collection::{Collection, CollectionTopology};
@@ -176,4 +186,3 @@ pub use plan::{
     evaluate, CollectionPlan, ConformancePlan, ConsumedField, FieldPlan, ObjectConformance,
     ObjectVerdict,
 };
-pub use role::{expand_role, Role};

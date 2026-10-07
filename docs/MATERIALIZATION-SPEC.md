@@ -78,9 +78,15 @@ comparator/verdict primitive). Sections B through E's own discussion of
 *what those stages decide and why* -- that reasoning does not change --
 but it is no longer this crate's own implementation obligation to
 discharge. `role.rs`'s `expand_role` (Role short/long form, P0.2) was
-built before this correction, under the old framing; it is environment
-work that ended up in this tree, named here rather than silently kept
-as if it still belonged.
+built before this correction, under the old framing -- environment work
+that had ended up in this tree. **Removed 2026-10-07, not just named as
+a gap:** zero internal callers, exactly the out-of-scope work this
+section describes, and keeping it around would have let the tree's
+contents imply a scope the crate's own contract denies. The verified
+behavior (the `state_surface` default-authority quirk, the upstream
+`cic-primitives#17`/`#18` cross-references) is preserved in this
+crate's git history and in `cic-primitives`' own `check_grammar.py`,
+the actual source of truth it was ported from.
 
 The actual `MaterializedObject` type this correction describes --
 Access-wrapped value + B3 metadata per key -- does not exist yet in
