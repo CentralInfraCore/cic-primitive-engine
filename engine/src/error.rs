@@ -85,7 +85,7 @@ pub mod code {
     //! Stable rejection codes.
     //!
     //! The archived `cic-object-model` shipped nineteen constants here, and all
-    //! but the two below named parts of its ontology — `E_ORIGIN_*`,
+    //! but one below named parts of its ontology — `E_ORIGIN_*`,
     //! `E_SEALED_*`, `E_UNKNOWN_PRIMITIVE`. They are deliberately not carried
     //! over: an error code is a promise about what the engine can be asked to
     //! reject, and promising the vocabulary of a rejected model would reinstate
@@ -93,15 +93,20 @@ pub mod code {
     //!
     //! Codes are added as the stage that raises them is implemented, never in
     //! advance. A code with no raiser and no vector is a claim, not a check.
+    //! `E_TYPE_MISMATCH` carried this rule's name over from the archived
+    //! model's own `Stage::Parse` check (`materialize.rs`, a real raiser
+    //! there) without carrying over a raiser here, violating the rule it
+    //! sits next to from the crate's very first commit (`c9b46a5`,
+    //! 2026-08-13) until removed on 2026-10-07 -- `Parse` was always the
+    //! environment's stage, never this crate's, so no raiser was ever
+    //! going to appear for it. Caught while checking `Stage::Normalize`'s
+    //! own raiser status for an unrelated change (#43), named there, and
+    //! closed here rather than left as a second instance of the same gap.
 
     /// The bytes are not a document this engine will read at all: bad encoding,
     /// a duplicate mapping key, an alias, a non-string key, more than one
     /// document. Raised at `Stage::Read`, before any tree exists.
     pub const MALFORMED_DOCUMENT: &str = "E_MALFORMED_DOCUMENT";
-
-    /// A structural position holds something of the wrong arity — a mapping
-    /// where the grammar fixes a list, or the reverse. Raised at `Stage::Parse`.
-    pub const TYPE_MISMATCH: &str = "E_TYPE_MISMATCH";
 
     /// A number is `NaN` or infinite. Canonical JSON (section A) has no
     /// representation for either — RFC 8259 numbers are finite by
