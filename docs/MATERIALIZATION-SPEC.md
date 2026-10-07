@@ -1641,12 +1641,14 @@ annotation) wasn't in any release tag yet. `primitives/@v0.2.0`
 session by direct comparison, not assumed. `dependency.yaml`'s own stated
 closing condition (*"cic-primitives releases the current grammar... `tag:`
 here becomes that release tag, `pinned:` becomes true"*) is now satisfied.
-**This section does not flip that file** — it's a config change, not a
-decision document, and stays out of this PR's scope per this file's own
-convention — but closing D makes it a mechanical, low-risk follow-up
-with no remaining judgment call: pin `tag: primitives/@v0.2.0`,
-`pinned: true`, and record `grammar_sha256`/`grammar_schema_sha256`
-alongside the tag (per D1.1) rather than the tag alone.
+**Follow-up done, 2026-10-07, in `dependency.yaml` directly (not this
+file):** `tag: primitives/@v0.2.0`, `pinned: true`,
+`grammar_sha256`/`grammar_schema_sha256` recorded alongside the tag per
+D1.1 — real base64 `get_sha256_b64` digests of that tag's own
+`check_grammar.py`/`instance-grammar.schema.yaml`, not hex and not
+hand-computed (`get_sha256_b64`'s own source read first: base64, not
+the hex this session's first attempt assumed). `README.md`'s "Open
+obligation" section is now "Dependency pinning — closed 2026-10-07."
 
 ### D4. What this does and doesn't close
 

@@ -2,34 +2,32 @@ schema_version: '1'
 dependencies:
   # The language this engine implements.
   #
-  # TEMPORARILY UNPINNED — tracking `main`, not a tag.
+  # CLOSED 2026-10-07 (MATERIALIZATION-SPEC.md's D3). Pinned at
+  # `primitives/@v0.2.0` (commit `960ee0f048d969a85ad20819bc0f2366ad91fa40`,
+  # 2026-09-06) -- the grammar this engine implements (three-axis Role,
+  # reference-as-structural-annotation, the closed authority/structural/
+  # lifecycle cardinalities) was confirmed present at that tag by direct
+  # comparison against `schemas/atomic/role.yaml`, not assumed from a
+  # version number. Until this, `tag: main` tracked the grammar
+  # unpinned, because none of it was in `primitives/@v0.1.5`, the tag that
+  # existed at the time -- pinning there would have declared an origin
+  # that didn't contain what was actually being implemented, the same
+  # false-provenance defect cic-primitives' own provenance gate exists to
+  # catch. `grammar_sha256`/`grammar_schema_sha256` below are this tag's
+  # own `check_grammar.py`/`instance-grammar.schema.yaml`, hashed with
+  # `tools/compiler.py`'s real `get_sha256_b64` (base64, not hex -- taken
+  # from the function's own source, not assumed) against the actual
+  # tagged file bytes, not computed by hand or guessed.
   #
-  # Why: the grammar this engine is being written against is the current one —
-  # the three-axis Role, the reference annotation, the closed structural
-  # positions. None of that is in `primitives/@v0.1.5`, the newest tag. Pinning
-  # to v0.1.5 would declare an origin that does not contain what is actually
-  # being implemented, which is the same false-provenance defect that
-  # cic-primitives' own provenance gate exists to catch.
-  #
-  # An unpinned dependency is a known, stated weakness, not an oversight. It is
-  # recorded here rather than hidden behind a tag that would look tidier and be
-  # wrong.
-  #
-  # MUST BE CLOSED once cic-primitives is formalized:
-  #   1. cic-primitives releases the current grammar (v0.1.6 or later)
-  #   2. `tag:` here becomes that release tag
-  #   3. `pinned:` becomes true
-  #   4. if any file is ever vendored from cic-primitives into this tree, it
-  #      goes in `imported_paths` and the provenance gate becomes enforceable
-  #      with `--require cic-primitives`
-  #
-  # Until step 2, nothing downstream may treat this engine's behaviour as bound
-  # to a released grammar version.
+  # If any file is ever vendored from cic-primitives into this tree, it
+  # goes in `imported_paths` and the provenance gate becomes enforceable
+  # with `--require cic-primitives`.
   - name: cic-primitives
     source: github.com/CentralInfraCore/cic-primitives
-    tag: main
-    pinned: false
-    pin_when: cic-primitives releases the current grammar
+    tag: primitives/@v0.2.0
+    pinned: true
+    grammar_sha256: i/W6jEVC1JCafwHmWbxO7LrtFdGVxgAS4SA1789JGx0=
+    grammar_schema_sha256: zZP7VNreSvFl+XF7qeSIC5RJp1mcrBznwyQCiKAeTZ4=
     mode: specification-reference
     purpose: primitive-language
     imported_paths: []
