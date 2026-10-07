@@ -32,18 +32,26 @@ correction to the pipeline framing this file used to carry.
 > `go/plan` peers against `plan.rs`'s already-fixed multi-key path
 > resolution, not `conformance.go`'s original single-split bug.
 >
-> **`materialized` now exists — a first cut, not yet wired to anything.**
-> `MaterializedObject`/`MaterializedField`/`FieldEvidence`
-> (`engine/src/materialized.rs`) implement section B3's closed shape —
-> refined past its own ASCII sketch; see "The object" and
+> **`materialized` exists.** `MaterializedObject`/`MaterializedField`/
+> `FieldEvidence` (`engine/src/materialized.rs`) implement section B3's
+> closed shape — refined past its own ASCII sketch; see "The object" and
 > `docs/MATERIALIZATION-SPEC.md`'s B8 — plus the `try_new`
-> custody-boundary check (`PRIMITIVE-IR.md`'s Complete property,
-> enforced by construction). `conformance`/`collection`/`plan` still
-> operate on a generic value tree (`reader::Value`/`interface{}`)
-> directly, not on `materialized`'s types; wiring them to actually read
-> from a `MaterializedObject` is the next real step. `role` (Role
-> short/long form, P0.2) predates the scope correction below and is not
-> wired to anything either. Nothing here is a stable API.
+> custody-boundary check (`PRIMITIVE-IR.md`'s Complete property, enforced
+> by construction). **`plan::evaluate` is wired to it at the root:**
+> `intent`/`observed` are now `MaterializedObject`s, not bare `Value`
+> trees, so a candidate must pass `try_new` before it reaches the
+> comparator at all — closing the actual gap #39 named, not just building
+> the type that could close it. Only the root changed; `conformance`/
+> `collection` still take plain `Value`s, correctly, since they operate on
+> already-resolved leaf values and collection elements, never the object
+> itself (see `plan.rs`'s own doc comment for the exact boundary). Go's
+> own `evaluate` peer (`go/plan`) has no `MaterializedObject` equivalent
+> yet and is unaffected — a named asymmetry, not a defect; the
+> differential corpus still feeds both languages' `evaluate` the same
+> JSON fixture, each language converting it on its own side as its own
+> signature requires. `role` (Role short/long form, P0.2) predates the
+> scope correction below and is not wired to anything. Nothing here is a
+> stable API.
 
 ---
 

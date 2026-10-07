@@ -132,15 +132,21 @@
 //! four cross-checked against an independent Go peer (`go/`) through a
 //! shared differential corpus (`conformance/differential/`).
 //!
-//! **`materialized` now exists -- a first cut, not yet wired to anything.**
-//! [`materialized::MaterializedObject`]/[`materialized::MaterializedField`]/
-//! [`materialized::FieldEvidence`] implement B3's closed shape and the
-//! `try_new` custody-boundary check named under "Division of labor," above.
-//! `conformance`/`collection`/`plan` still operate on [`reader::Value`]
-//! directly, not on `materialized`'s types -- wiring them to actually read
-//! from a `MaterializedObject` instead is the next real step, not done
-//! here. `role` predates the scope correction above and is not wired to
-//! anything either. Nothing here is a stable API, and no module should
+//! **`materialized` exists** ([`materialized::MaterializedObject`]/
+//! [`materialized::MaterializedField`]/[`materialized::FieldEvidence`]),
+//! implementing B3's closed shape and the `try_new` custody-boundary check
+//! named under "Division of labor," above. **`plan::evaluate` is wired to
+//! it at the root:** `intent`/`observed` are now [`materialized::
+//! MaterializedObject`]s, not bare [`reader::Value`] trees, so a candidate
+//! must pass `try_new` before it can reach the comparator at all --
+//! closing the actual gap #39 named, not just building the type that
+//! could close it. Only the root changed; see `plan.rs`'s own doc comment
+//! ("Wired to `MaterializedObject` at the root, not deeper") for exactly
+//! what that does and does not mean -- `conformance`/`collection` still
+//! take plain [`reader::Value`]s, correctly, since they operate on
+//! already-resolved leaf values and collection elements, never on the
+//! object itself. `role` predates the scope correction above and is not
+//! wired to anything. Nothing here is a stable API, and no module should
 //! depend on it as one.
 
 pub mod canonical;
