@@ -44,12 +44,25 @@ correction to the pipeline framing this file used to carry.
 > the type that could close it. Only the root changed; `conformance`/
 > `collection` still take plain `Value`s, correctly, since they operate on
 > already-resolved leaf values and collection elements, never the object
-> itself (see `plan.rs`'s own doc comment for the exact boundary). Go's
-> own `evaluate` peer (`go/plan`) has no `MaterializedObject` equivalent
-> yet and is unaffected — a named asymmetry, not a defect; the
-> differential corpus still feeds both languages' `evaluate` the same
-> JSON fixture, each language converting it on its own side as its own
-> signature requires. **A `role` module (Role short/long form, P0.2) lived
+> itself (see `plan.rs`'s own doc comment for the exact boundary).
+>
+> **`go/materialized` now exists too** (`MaterializedObject`/
+> `MaterializedField`/`FieldEvidence`/`IntentEvidence`, the Go peer of
+> `materialized.rs`) — but Go's own `evaluate` peer (`go/plan`) is NOT
+> wired through it yet, the Go-side equivalent of #41 not done here.
+> `go/materialized` also does not import `go/plan`'s `ConsumedField`
+> the way the Rust side's `FieldEvidence` reuses `plan::ConsumedField`
+> directly (same crate, no cycle to avoid) — Go packages can't do that
+> without an import cycle once `go/plan` eventually depends on
+> `go/materialized` for its own wiring, so `go/materialized`
+> reimplements the identical (coverage, value) state machine inline
+> instead; see `go/materialized`'s own package doc comment. No
+> cross-language differential corpus for `materialized` yet either
+> (same relationship F6-F9 had to their own Go peers before F15
+> cross-checked them) — the differential corpus still feeds both
+> languages' `evaluate` the same JSON fixture, each language converting
+> it on its own side as its own signature requires, unaffected by any
+> of this. **A `role` module (Role short/long form, P0.2) lived
 > here until 2026-10-07 and was removed** — it predated the scope
 > correction below, had zero internal callers, and keeping it around
 > would have let the tree imply a scope the contract now denies; see

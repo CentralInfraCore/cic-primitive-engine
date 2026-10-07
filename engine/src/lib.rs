@@ -161,8 +161,20 @@
 //! what that does and does not mean -- `conformance`/`collection` still
 //! take plain [`reader::Value`]s, correctly, since they operate on
 //! already-resolved leaf values and collection elements, never on the
-//! object itself. Nothing here is a stable API, and no module should
-//! depend on it as one.
+//! object itself.
+//!
+//! **`go/materialized` now exists too** (the Go peer of this module) --
+//! but Go's own `evaluate` peer (`go/plan`) is NOT wired through it yet,
+//! the Go-side equivalent of #41 not done here. `go/materialized` also
+//! does not import `go/plan`'s `ConsumedField` the way `FieldEvidence`
+//! here reuses [`plan::ConsumedField`] directly (same crate, no cycle to
+//! avoid) -- Go packages can't do that without an import cycle once
+//! `go/plan` eventually depends on `go/materialized`, so it reimplements
+//! the identical (coverage, value) state machine inline instead; see its
+//! own package doc comment. No cross-language differential corpus for
+//! `materialized` yet either (same relationship F6-F9 had to their own Go
+//! peers before F15 cross-checked them). Nothing here is a stable API,
+//! and no module should depend on it as one.
 
 pub mod canonical;
 pub mod collection;
