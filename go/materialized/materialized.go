@@ -47,12 +47,48 @@
 // the environment's job per the scope correction); it only enforces
 // that a candidate matches whatever key set it was handed, exactly
 // mirroring MaterializedObject::try_new's own stated scope.
+//
+// # Review-caught on PR #45: Rust's type system closes two things Go's own does not
+//
+// The first draft of NewMaterializedObject checked only the key set,
+// leaving two gaps a Rust caller cannot even express: (1) a Go zero
+// value (MaterializedField{}, Capability "" and FieldEvidence{} with
+// kind "") passes straight through unless something actually calls
+// Capability.Valid()/FieldEvidence.Valid() at the boundary -- having
+// those methods is not the same as using them, and the first draft
+// defined them without ever calling them from the one place a
+// candidate's validity is supposed to be settled; (2) Go's
+// interface{}, unlike Rust's closed Value enum, accepts ANY type, so a
+// value needs canonical.IsValue's own boundary check (that package's
+// own doc comment already says this explicitly) before this package
+// can claim the same closed value-tree shape Rust gets from its type
+// system alone. NewMaterializedObject now checks both, for every
+// field, before accepting a candidate.
+//
+// # Review-caught on PR #45: Go has no ownership to transfer, so this package copies instead
+//
+// MaterializedObject::try_new MOVES its BTreeMap argument in Rust --
+// the caller's own map is gone afterward, enforced by the borrow
+// checker at compile time, so a later mutation through the caller's
+// own variable is not a program that compiles at all. Go has no such
+// mechanism: a map and the []interface{}/map[string]interface{}
+// nested arbitrarily inside its interface{} values are all reference
+// types, so merely storing the caller's map (the first draft's own
+// `MaterializedObject{fields: fields}`) left the object's own
+// custody-checked state mutable through the caller's still-held
+// reference, at every level of nesting, not just the top one.
+// NewMaterializedObject now builds its own copy via deepCopyValue,
+// safe to call unconditionally only because it always runs AFTER
+// canonical.IsValue has already confirmed each value's shape is
+// closed -- deepCopyValue is not a general "copy anything" utility,
+// it is exhaustive against that already-validated domain.
 package materialized
 
 import (
 	"fmt"
 	"sort"
 
+	"github.com/CentralInfraCore/cic-primitive-engine/go/canonical"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
 )
 
@@ -164,13 +200,21 @@ func (ie IntentEvidence) Value() (interface{}, bool) {
 // (IntentEvidence{}, provenance "") the same way go/plan's
 // ConsumedField.Valid already catches its own zero value (F13/F14's
 // review-caught lesson, applied here from the start rather than found
-// by a second review round).
+// by a second review round), AND (review-caught on PR #45) that any
+// value actually present is one canonical.IsValue recognizes -- Go's
+// interface{} accepts any type, unlike Rust's closed Value enum, so
+// this is the one place that domain gets closed for this type, the
+// same way canonical.IsValue's own doc comment requires of every
+// boundary that accepts an interface{} value.
 func (ie IntentEvidence) Valid() bool {
 	switch ie.provenance {
 	case ProvenanceAuthored:
-		return true
+		if !ie.hasValue {
+			return true
+		}
+		return canonical.IsValue(ie.value)
 	case ProvenanceSchemaDefault, ProvenanceDerived:
-		return ie.hasValue
+		return ie.hasValue && canonical.IsValue(ie.value)
 	default:
 		return false
 	}
@@ -266,7 +310,9 @@ func (fe FieldEvidence) Value() (interface{}, bool) {
 // Valid reports whether fe is one of the states the exported
 // constructors can actually produce -- catches Go's zero value
 // (FieldEvidence{}, kind "") the same way IntentEvidence.Valid and
-// go/plan's ConsumedField.Valid catch theirs.
+// go/plan's ConsumedField.Valid catch theirs, AND (review-caught on PR
+// #45, same reasoning as IntentEvidence.Valid) that any value actually
+// present is one canonical.IsValue recognizes.
 func (fe FieldEvidence) Valid() bool {
 	switch fe.kind {
 	case evidenceIntent:
@@ -276,11 +322,67 @@ func (fe FieldEvidence) Valid() bool {
 			return false
 		}
 		if fe.coverage == conformance.CoverageObserved {
-			return fe.hasValue
+			return fe.hasValue && canonical.IsValue(fe.value)
 		}
 		return !fe.hasValue
 	default:
 		return false
+	}
+}
+
+// deepCopy returns a structural copy of ie, independent of whatever
+// mutable value the caller goes on to hold -- see deepCopyValue's own
+// doc comment for why this is safe to call unconditionally only after
+// Valid() has already confirmed ie's value (if any) is in
+// canonical.IsValue's closed domain.
+func (ie IntentEvidence) deepCopy() IntentEvidence {
+	ie.value = deepCopyValue(ie.value)
+	return ie
+}
+
+// deepCopy returns a structural copy of fe -- see IntentEvidence's own
+// deepCopy and deepCopyValue's doc comment.
+func (fe FieldEvidence) deepCopy() FieldEvidence {
+	switch fe.kind {
+	case evidenceIntent:
+		fe.intent = fe.intent.deepCopy()
+	case evidenceObservation, evidenceDerivedObservation:
+		fe.value = deepCopyValue(fe.value)
+	}
+	return fe
+}
+
+// deepCopyValue returns a structural copy of v, so a MaterializedObject
+// stays independent of whatever mutable map/slice the caller goes on to
+// hold after construction -- review-caught on PR #45: Go's map and
+// slice are reference types, nested arbitrarily deep inside an
+// interface{} value, so copying only NewMaterializedObject's own
+// top-level fields map is not enough on its own to give this package
+// anything like Rust's ownership-transfer guarantee.
+//
+// Safe to call unconditionally only because every call site here runs
+// AFTER canonical.IsValue has already confirmed v's shape is closed
+// (via Valid()) -- this is not a general "copy anything" utility, it
+// is exhaustive against that already-validated domain, the same
+// closed value-tree IsValue's own doc comment defines.
+func deepCopyValue(v interface{}) interface{} {
+	switch vv := v.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(vv))
+		for k, elem := range vv {
+			out[k] = deepCopyValue(elem)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(vv))
+		for i, elem := range vv {
+			out[i] = deepCopyValue(elem)
+		}
+		return out
+	default:
+		// nil, bool, string, every numeric kind, json.Number -- all
+		// immutable in Go; no copy needed.
+		return v
 	}
 }
 
@@ -310,13 +412,22 @@ type MaterializedObject struct {
 }
 
 // NewMaterializedObject accepts fields as a genuine MaterializedObject
-// only if its key set is EXACTLY expectedKeys -- not a subset, not a
-// superset. expectedKeys is the caller's (the environment's) own claim
-// about what the schema declares; this package does not independently
-// verify that claim against any schema (out of scope, per the scope
-// correction), only that the candidate actually matches whatever claim
-// it was handed. The Go peer of materialized.rs's own
-// MaterializedObject::try_new.
+// only if ALL of the following hold: its key set is EXACTLY
+// expectedKeys (not a subset, not a superset); every field's
+// Capability and FieldEvidence are Valid() (catching both a Go zero
+// value and a value outside canonical.IsValue's closed domain --
+// review-caught on PR #45, see the package doc comment's own two
+// review-caught notes). expectedKeys is the caller's (the
+// environment's) own claim about what the schema declares; this
+// package does not independently verify that claim against any schema
+// (out of scope, per the scope correction), only that the candidate
+// actually matches whatever claim it was handed. The returned object
+// holds its own deep copy of fields, not the caller's own map or any
+// value nested inside it -- a later mutation of the argument is never
+// visible through the returned MaterializedObject. The Go peer of
+// materialized.rs's own MaterializedObject::try_new -- Rust gets this
+// last guarantee from ownership transfer at compile time; this is
+// Go's own, explicit substitute for it.
 func NewMaterializedObject(
 	fields map[string]MaterializedField,
 	expectedKeys map[string]struct{},
@@ -339,10 +450,36 @@ func NewMaterializedObject(
 			"materialized: key set does not match: missing=%v, extra=%v", missing, extra,
 		)
 	}
-	return MaterializedObject{fields: fields}, nil
+
+	copied := make(map[string]MaterializedField, len(fields))
+	for k, f := range fields {
+		if !f.Capability.Valid() {
+			return MaterializedObject{}, fmt.Errorf(
+				"materialized: field %q has an invalid Capability %q", k, string(f.Capability),
+			)
+		}
+		if !f.Evidence.Valid() {
+			return MaterializedObject{}, fmt.Errorf(
+				"materialized: field %q has an invalid FieldEvidence", k,
+			)
+		}
+		copied[k] = MaterializedField{Capability: f.Capability, Evidence: f.Evidence.deepCopy()}
+	}
+	return MaterializedObject{fields: copied}, nil
 }
 
 // Get returns the field at key, if present.
+//
+// Named, not fixed here: the value Get (via MaterializedField.Value)
+// hands back is the object's own internal copy, not a further copy of
+// it -- a caller who mutates a returned map/slice value in place would
+// corrupt o's own state for a later Get of the same key. Rust's
+// `.value()` returns an immutable `&Value` borrow, which the borrow
+// checker already prevents from being mutated through; Go has no
+// equivalent on the read side either. Out of scope for the
+// construction-boundary fix this PR makes (review's own two blockers
+// were both about NewMaterializedObject, not Get), named so it is not
+// mistaken for something this package already closes.
 func (o MaterializedObject) Get(key string) (MaterializedField, bool) {
 	f, ok := o.fields[key]
 	return f, ok

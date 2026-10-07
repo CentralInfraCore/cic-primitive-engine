@@ -209,3 +209,98 @@ func TestNewMaterializedObjectAcceptsTheEmptyObject(t *testing.T) {
 		t.Errorf("got Len() %d, want 0", obj.Len())
 	}
 }
+
+// Review-caught on PR #45: the key set alone is not enough -- a Go
+// zero-value field (Capability "" and FieldEvidence{} with kind "")
+// passed the original key-set-only check, even though neither is a
+// state any exported constructor can actually produce.
+func TestNewMaterializedObjectRejectsAZeroValueField(t *testing.T) {
+	fields := map[string]MaterializedField{
+		"shape": {},
+	}
+	if _, err := NewMaterializedObject(fields, keySet("shape")); err == nil {
+		t.Error("expected a Go zero-value field to be rejected")
+	}
+}
+
+// Review-caught on PR #45: Go's interface{} accepts any type, unlike
+// Rust's closed Value enum -- a value outside canonical.IsValue's own
+// domain must be rejected at this boundary too, not just by whatever
+// later consumer happens to call canonical.ToCanonicalJSON.
+func TestNewMaterializedObjectRejectsANonCICValue(t *testing.T) {
+	type notACICValue struct{}
+	fields := map[string]MaterializedField{
+		"shape": {
+			Capability: CapabilityImplemented,
+			Evidence:   NewIntentFieldEvidence(NewAuthoredIntentEvidence(notACICValue{}, true)),
+		},
+	}
+	if _, err := NewMaterializedObject(fields, keySet("shape")); err == nil {
+		t.Error("expected a value outside canonical.IsValue's domain to be rejected")
+	}
+}
+
+// canonical.IsValue(nil) is true -- nil is CIC's own Value::Null, a
+// legitimate value in its own right, not an absence marker here (that
+// distinction is hasValue's own job). Pinned down directly so the
+// non-CIC-value rejection above is never mistaken for a blanket "no
+// nils allowed" rule.
+func TestNewMaterializedObjectAcceptsALegitimateNilValue(t *testing.T) {
+	fields := map[string]MaterializedField{
+		"shape": {
+			Capability: CapabilityImplemented,
+			Evidence:   NewIntentFieldEvidence(NewAuthoredIntentEvidence(nil, true)),
+		},
+	}
+	obj, err := NewMaterializedObject(fields, keySet("shape"))
+	if err != nil {
+		t.Fatalf("expected a legitimate nil value (hasValue=true) to be accepted, got %v", err)
+	}
+	f, _ := obj.Get("shape")
+	v, ok := f.Value()
+	if !ok || v != nil {
+		t.Errorf("got (%v, %v), want (nil, true)", v, ok)
+	}
+}
+
+// Review-caught on PR #45, the deeper of the two blockers: Go has no
+// ownership transfer, so storing the caller's own map (the first
+// draft's own MaterializedObject{fields: fields}) left the object
+// mutable through the caller's still-held reference, at every level
+// of nesting -- not just the top-level map, but a map/slice value
+// nested arbitrarily deep inside an interface{}. Mutates BOTH the
+// original top-level map AND a nested map after construction, and
+// asserts neither is visible through the returned object -- the exact
+// scenario the review's own example used.
+func TestNewMaterializedObjectSnapshotsAgainstLaterMutation(t *testing.T) {
+	nested := map[string]interface{}{"x": 1}
+	fields := map[string]MaterializedField{
+		"shape": {
+			Capability: CapabilityImplemented,
+			Evidence:   NewObservationFieldEvidence(conformance.CoverageObserved, nested),
+		},
+	}
+	obj, err := NewMaterializedObject(fields, keySet("shape"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fields["shape"] = MaterializedField{}
+	nested["x"] = "mutated"
+
+	f, ok := obj.Get("shape")
+	if !ok {
+		t.Fatal("expected \"shape\" to still be present, unaffected by the mutation of the original top-level map")
+	}
+	v, ok := f.Value()
+	if !ok {
+		t.Fatal("expected a value to still be present")
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		t.Fatalf("got %T, want map[string]interface{}", v)
+	}
+	if m["x"] != 1 {
+		t.Errorf("got %v, want 1 -- the object's own copy must be unaffected by the caller's later mutation of the nested map", m["x"])
+	}
+}
