@@ -24,6 +24,17 @@ use std::fmt;
 /// The order is the processing order, and it is total: every rejection belongs
 /// to exactly one stage, and a stage may only reject what the stages before it
 /// have already admitted.
+///
+/// `Parse`/`Normalize`/`Resolve`/`Validate` currently have no raiser in this
+/// crate at all -- by design, not by omission: `lib.rs`'s "Division of
+/// labor" scope correction names these as the environment's own job, not
+/// this crate's. They stay in this enum as the taxonomy a rejection's
+/// `stage` field is drawn from, the same way `Parse`/`Resolve`/`Validate`
+/// already had no raiser before `Normalize` joined them here: `role.rs`'s
+/// `expand_role` (Role short/long form, P0.2) raised `Normalize` until
+/// 2026-10-07, when it was removed as out-of-scope, dead code (zero
+/// internal callers) rather than kept to preserve a raiser this crate
+/// never actually owned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
     /// Bytes to a raw document: encoding, duplicate keys, aliases, key types.
@@ -100,14 +111,6 @@ pub mod code {
     /// `.nan`/`.inf`/`-.inf` core-schema tags, verified empirically, not
     /// hypothetical.
     pub const NON_FINITE_NUMBER: &str = "E_NON_FINITE_NUMBER";
-
-    /// A `role` member is not a legal short-form string, not a mapping, and
-    /// not absent — or is the string `"reference"`, which has no short form
-    /// at all (a reference's authority cannot be derived). Raised at
-    /// `Stage::Normalize`. Rule `R-SHORT`, kept identical to
-    /// `cic-primitives`' own `check_grammar.py` rule name for this, so the
-    /// two can be cross-checked directly.
-    pub const INVALID_ROLE: &str = "E_INVALID_ROLE";
 
     /// A candidate's key set does not exactly match the key set the
     /// environment claims the schema declares -- missing a key, carrying
