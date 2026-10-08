@@ -109,8 +109,13 @@ validates every field's state and `canonical.IsValue`, and deep-copies
 on both construction and `Get`, since Go has no ownership transfer).
 `go/plan`'s own `Evaluate` is now wired through `go/materialized` too
 (the Go-side #41), including `scalarCoverage` mirroring `plan.rs`'s own
-`scalar_coverage` exactly. Still open: no cross-language differential
-corpus exists for `materialized` itself yet.
+`scalar_coverage` exactly. `conformance/differential/materialized/` now
+cross-checks `try_new`/`NewMaterializedObject` directly -- deliberately
+narrower than F6-F9's own groups, since Rust's closed enums make an
+invalid `FieldEvidence`/`IntentEvidence` unconstructable in the first
+place; the Complete-property key-set comparison is the one thing both
+languages actually share and can diverge on, and is what every vector
+there exercises.
 
 ## A — Canonical representation (closes section A)
 

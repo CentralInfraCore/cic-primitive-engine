@@ -1,0 +1,4 @@
+{
+  "fields": ["a", "b"],
+  "expected_keys": ["c", "d"]
+}

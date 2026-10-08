@@ -1,0 +1,4 @@
+{
+  "fields": ["shape", "undeclared"],
+  "expected_keys": ["shape", "memory_gb"]
+}
