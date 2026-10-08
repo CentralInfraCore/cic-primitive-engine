@@ -1,0 +1,4 @@
+{
+  "accepted": false,
+  "why": "the candidate is simultaneously missing a declared key (memory_gb) and carrying an undeclared one (undeclared)"
+}

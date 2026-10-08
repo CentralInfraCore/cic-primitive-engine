@@ -19,11 +19,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Test-only: wraps a `Value::Map` fixture into a `MaterializedObject` --
 /// same pattern as `plan.rs`'s and `digest_projection.rs`'s own identical
-/// helpers. The Go peer this corpus cross-checks against has no
-/// `MaterializedObject` equivalent either yet (`materialized.rs` is
-/// Rust-only so far), so this corpus still compares both languages'
-/// `evaluate` given the same intent/observed Values -- the wrapping only
-/// satisfies Rust's own, now custody-checked, entry point.
+/// helpers. Used by `plan_vectors` below, which still compares both
+/// languages' `evaluate` given the same intent/observed Values -- the
+/// wrapping only satisfies Rust's own custody-checked entry point; the
+/// Go side's own `go/plan` differential test does the identical wrapping
+/// on its side. `materialized_vectors`, further down, differential-tests
+/// `MaterializedObject`/`go/materialized` directly, rather than only
+/// indirectly through `evaluate`.
 fn object_from_value(
     v: &Value,
     evidence_of: impl Fn(&str, Value) -> FieldEvidence,
@@ -456,6 +458,71 @@ fn digest_vectors() {
     assert!(
         failures.is_empty(),
         "{} of {} digest vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// `conformance/differential/materialized/` -- `MaterializedObject::
+/// try_new`/`go/materialized`'s `NewMaterializedObject`: the
+/// Complete-property custody-boundary check named by #39, built by #40,
+/// and ported to Go by #45. Given a candidate's own key set and the key
+/// set the environment claims the schema declares, both languages must
+/// agree on accept/reject.
+///
+/// Field VALUES don't matter for this check -- `try_new`'s own key-set
+/// comparison never inspects them -- so every field here is wrapped as a
+/// trivial `Intent(Authored(Some(Bool(true))))`; only the key NAMES are
+/// actually exercised. This is deliberately narrower than F6-F9's own
+/// differential groups: Rust's closed enums make an invalid
+/// `FieldEvidence`/`IntentEvidence` unconstructable in the first place
+/// (unlike Go, which needs its own `Valid()`/`canonical.IsValue` checks,
+/// already covered by `go/materialized`'s own unit tests, not eligible
+/// for a cross-language vector since there is no Rust side of that
+/// comparison to run), so the one piece of logic genuinely shared and
+/// genuinely at risk of diverging is the key-set comparison itself.
+#[test]
+fn materialized_vectors() {
+    let vectors = load_vectors("materialized");
+    assert!(
+        !vectors.is_empty(),
+        "differential/materialized has no vectors -- an empty corpus trivially passes"
+    );
+
+    let mut failures = Vec::new();
+    for v in &vectors {
+        let field_keys = str_seq_field(&v.input, "fields");
+        let expected_keys: BTreeSet<String> = str_seq_field(&v.input, "expected_keys")
+            .into_iter()
+            .collect();
+
+        let mut fields = BTreeMap::new();
+        for k in &field_keys {
+            fields.insert(
+                k.clone(),
+                MaterializedField {
+                    capability: Capability::Implemented,
+                    evidence: FieldEvidence::Intent(IntentEvidence::Authored(Some(Value::Bool(
+                        true,
+                    )))),
+                },
+            );
+        }
+
+        let got_accepted = MaterializedObject::try_new(fields, &expected_keys).is_ok();
+        let want_accepted = bool_field(&v.expected, "accepted");
+        if got_accepted != want_accepted {
+            failures.push(format!(
+                "{}: accepted: got {got_accepted}, want {want_accepted}",
+                v.name
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} materialized vectors failed:\n  {}",
         failures.len(),
         vectors.len(),
         failures.join("\n  ")

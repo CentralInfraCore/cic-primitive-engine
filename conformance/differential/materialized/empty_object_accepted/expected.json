@@ -1,0 +1,4 @@
+{
+  "accepted": true,
+  "why": "zero declared keys and zero fields is a legitimate, if trivial, match"
+}

@@ -41,13 +41,17 @@ differential/
   collection/    -- F7: collection.ElementKey
   plan/          -- F8: plan.Evaluate
   digest/        -- F9: digestprojection.*
+  materialized/  -- MaterializedObject::try_new / NewMaterializedObject
 ```
 
-One group per F-primitive, landed incrementally — matching how F6
+One group per primitive, landed incrementally — matching how F6
 through F9 themselves were ported one at a time, not all at once. All
-four now landed: every Rust F-module from F6 through F9 has been
-cross-checked against its Go peer through this layer, not merely each
-independently verified against the decided contract in prose.
+four F6-F9 groups landed together first: every Rust F-module from F6
+through F9 has been cross-checked against its Go peer through this
+layer, not merely each independently verified against the decided
+contract in prose. `materialized/` landed later, once both languages'
+`MaterializedObject` existed (PR #40/#45) and were wired into
+`evaluate`/`Evaluate` (PR #41/#46).
 
 ## Vector format
 
@@ -154,6 +158,33 @@ end-to-end (declared `["zone", "name"]`, digested as if sorted to
 F5's "value present iff coverage == observed" rule by pinning the
 digest a *missing* `value` field actually produces, not a `null`
 placeholder for it.
+
+`materialized/`'s own fields:
+
+```text
+input.json:
+  fields         [string]  the candidate's own key names -- values don't matter for this
+                            check (try_new's/NewMaterializedObject's own key-set comparison
+                            never inspects them), so both harnesses wrap each as a trivial
+                            Intent(Authored) field; only the names are exercised
+  expected_keys  [string]  the key set the environment claims the schema declares
+
+expected.json:
+  accepted  bool    whether a candidate with this key set, against this expected key set,
+                     must be accepted
+  why       string  human-readable context, not compared
+```
+
+Deliberately narrower than F6-F9's own groups above: Rust's closed
+enums make an invalid `FieldEvidence`/`IntentEvidence` unconstructable
+in the first place, so there is no Rust side of a "reject a malformed
+field state" comparison to run -- that class of check only exists on
+the Go side (`go/materialized`'s own `Valid()`/`canonical.IsValue`
+checks), already covered by its own unit tests, and is not eligible
+for a cross-language vector at all. The one piece of logic genuinely
+shared by both languages, and genuinely at risk of diverging, is the
+key-set comparison (the Complete property) itself -- that is what
+every vector here exercises.
 
 ## A named limitation: JSON numeric literals don't parse identically on both sides
 

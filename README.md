@@ -67,9 +67,13 @@ correction to the pipeline framing this file used to carry.
 > mirrors `plan.rs`'s own identically-named function (scalar paths:
 > coverage authority = `FieldEvidence`; collection elements/containers:
 > coverage authority stays `Observation`, for the same reason named
-> there). No cross-language differential corpus for `materialized`
-> itself yet (same relationship F6-F9 had to their own Go peers before
-> F15 cross-checked them) — the existing `plan` differential corpus is
+> there). **`conformance/differential/materialized/` now cross-checks
+> `try_new`/`NewMaterializedObject` directly** — deliberately narrower
+> than F6-F9's own groups: Rust's closed enums make an invalid
+> `FieldEvidence`/`IntentEvidence` unconstructable in the first place,
+> so the one thing both languages actually share and can diverge on is
+> the Complete-property key-set comparison itself, which is what every
+> vector there exercises. The existing `plan` differential corpus is
 > unaffected, since it already fed both languages' `Evaluate` the same
 > JSON fixture and each language already converted it on its own side.
 > **A `role` module (Role short/long form, P0.2) lived

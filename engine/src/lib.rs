@@ -178,12 +178,15 @@
 //! bare `map[string]interface{}`, and `Evaluate` no longer carries its
 //! own `canonical.IsValue` check (redundant once `NewMaterializedObject`
 //! already made that guarantee). `scalarCoverage` mirrors `plan.rs`'s own
-//! `scalar_coverage` exactly, including the scalar-only scope. No
-//! cross-language differential corpus for `materialized` itself yet
-//! (same relationship F6-F9 had to their own Go peers before F15
-//! cross-checked them) -- the existing `plan` differential corpus is
-//! unaffected. Nothing here is a stable API, and no module should depend
-//! on it as one.
+//! `scalar_coverage` exactly, including the scalar-only scope.
+//! **`conformance/differential/materialized/` now cross-checks
+//! `try_new`/`NewMaterializedObject` directly** -- deliberately narrower
+//! than F6-F9's own groups: Rust's closed enums make an invalid
+//! `FieldEvidence`/`IntentEvidence` unconstructable in the first place,
+//! so the one thing both languages actually share and can diverge on is
+//! the Complete-property key-set comparison itself, which is what every
+//! vector there exercises. Nothing here is a stable API, and no module
+//! should depend on it as one.
 
 pub mod canonical;
 pub mod collection;
