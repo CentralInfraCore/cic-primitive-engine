@@ -18,12 +18,19 @@
 //! # What this does not do
 //!
 //! Produce `conformance_plan_digest`/`observation_digest` themselves, or
-//! Go's own `IntentDigest` (this engine's `Normalize` stage, which Go's
-//! analogous `SpecDigest` needs via `ExpandSpec`/`normalizeNumbers`,
-//! doesn't exist yet, so an "intent digest" wouldn't mean the same thing
-//! here it does in Go). [`evaluate`] does, however, now record exactly
-//! what F5's two projections need as [`ObjectVerdict::consumed`] — see
-//! `digest_projection.rs` for where that's turned into the actual digests.
+//! Go's own `IntentDigest`. **Corrected 2026-10-08, after the scope
+//! correction (#39):** an earlier version of this note blamed the gap on
+//! "this engine's `Normalize` stage... doesn't exist yet" -- stale now
+//! that Normalize is permanently the environment's job, never this
+//! engine's own stage, per #39. The actual, current blocker is narrower:
+//! nothing in this crate canonicalizes/digests a [`crate::materialized::
+//! MaterializedObject`] itself yet (only the plan/consumed-observation
+//! projections F5 specifies, below), and that is a self-contained task
+//! with no missing precondition -- not something waiting on a stage
+//! this engine will never build. [`evaluate`] does, however, now record
+//! exactly what F5's two projections need as [`ObjectVerdict::consumed`]
+//! — see `digest_projection.rs` for where that's turned into the actual
+//! digests.
 //!
 //! # Wired to `MaterializedObject` at the root, not deeper
 //!

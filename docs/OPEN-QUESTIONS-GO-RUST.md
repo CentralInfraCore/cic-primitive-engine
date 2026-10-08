@@ -1207,8 +1207,11 @@ proof chain
    `observation_digest` (item 3/F5) — those commit to the *executed
    plan* and the *full observation claim*, not `SpecDigest(intent)`
    (Go's actual `IntentDigest`, also not ported: `SpecDigest` runs
-   `ExpandSpec`/`normalizeNumbers` first, and this engine's
-   `Normalize` stage doesn't exist yet). Nor does this decide how the
+   `ExpandSpec`/`normalizeNumbers` first. **Corrected 2026-10-08,
+   after #39:** this engine's `Normalize` stage was never "not yet
+   built" — #39 named Normalize as permanently the environment's job;
+   the real gap is that no function here canonicalizes/digests a
+   `MaterializedObject` itself yet). Nor does this decide how the
    verdict relates procedurally to the receipt (C) or to ProofTrace
    (E) — three distinct proof artifacts (F3), still not wired
    together.

@@ -2029,14 +2029,25 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          now has a Go peer, and every one of the four has actually
          been cross-checked against it -- F15 is closed in full.
 Open:    Go's analogous
-         IntentDigest still has no equivalent here --
-         it needs a SpecDigest-style expand+normalize step this
-         engine's Normalize stage doesn't have yet, so "intent digest"
-         doesn't yet mean the same thing here it does in Go, and
-         neither F9 nor F10 invents one -- and whether the verdict
-         artifact is itself ever signed (VERDICT-SCHEMA.md's own
-         explicit non-decision, not inherited from the receipt's
-         closed "no signature field").
+         IntentDigest still has no equivalent here. Re-checked
+         2026-10-08, after the scope correction (#39): the ORIGINAL
+         reason given -- "it needs a SpecDigest-style expand+normalize
+         step this engine's Normalize stage doesn't have yet" -- is now
+         stale. Normalize is not a stage this engine will ever build;
+         #39 named it the environment's job, permanently, not a
+         not-yet-reached roadmap step. The actual, current blocker is
+         narrower and no longer depends on anything external:
+         to_canonical_json (canonical.rs) takes a Value, and nothing in
+         this crate canonicalizes/digests a MaterializedObject itself
+         -- only the plan/consumed-observation projections F5 already
+         specifies (conformance_plan_digest/observation_digest,
+         digest_projection.rs). Building that function is now a
+         self-contained task with no missing precondition, not blocked
+         on this engine ever owning Normalize -- named here, not
+         designed or decided. Also open: whether the verdict artifact
+         is itself ever signed (VERDICT-SCHEMA.md's own explicit
+         non-decision, not inherited from the receipt's closed "no
+         signature field").
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -2671,9 +2682,14 @@ either language's test suite exercises it.
 `observation_digest` (F5) — F5 already decided these commit to the
 *executed plan* and the *full observation claim*, not simply
 `SpecDigest(intent)` (Go's actual `IntentDigest`, which this port
-also omits: `SpecDigest` runs `ExpandSpec`/`normalizeNumbers` first,
-and this engine's `Normalize` stage doesn't exist yet, so "intent
-digest" doesn't yet mean the same thing here it does in Go). Wiring
+also omits: `SpecDigest` runs `ExpandSpec`/`normalizeNumbers` first.
+**Corrected 2026-10-08, after #39:** the original reasoning here --
+"this engine's `Normalize` stage doesn't exist yet" -- is stale;
+Normalize is permanently the environment's job now, not a
+not-yet-reached stage of this engine's own. The real gap is that no
+function here canonicalizes/digests a `MaterializedObject` itself yet,
+a self-contained task, not one blocked on this engine ever owning
+Normalize). Wiring
 F5's two projections to the `ConformancePlan`/`Observation` types this
 file introduces is a separate, not-yet-done step — see F9, immediately
 below. Nor does this decide how the conformance/drift verdict this
