@@ -163,18 +163,27 @@
 //! already-resolved leaf values and collection elements, never on the
 //! object itself.
 //!
-//! **`go/materialized` now exists too** (the Go peer of this module) --
-//! but Go's own `evaluate` peer (`go/plan`) is NOT wired through it yet,
-//! the Go-side equivalent of #41 not done here. `go/materialized` also
-//! does not import `go/plan`'s `ConsumedField` the way `FieldEvidence`
-//! here reuses [`plan::ConsumedField`] directly (same crate, no cycle to
-//! avoid) -- Go packages can't do that without an import cycle once
-//! `go/plan` eventually depends on `go/materialized`, so it reimplements
-//! the identical (coverage, value) state machine inline instead; see its
-//! own package doc comment. No cross-language differential corpus for
-//! `materialized` yet either (same relationship F6-F9 had to their own Go
-//! peers before F15 cross-checked them). Nothing here is a stable API,
-//! and no module should depend on it as one.
+//! **`go/materialized` exists** (the Go peer of this module), including
+//! its own custody-boundary fixes (its `NewMaterializedObject` validates
+//! every field's `Capability`/`FieldEvidence` and `canonical.IsValue`,
+//! and deep-copies on both construction and `Get`, since Go has no
+//! ownership transfer to lean on the way Rust does here). It does not
+//! import `go/plan`'s `ConsumedField` the way `FieldEvidence` here reuses
+//! [`plan::ConsumedField`] directly (same crate, no cycle to avoid) -- Go
+//! packages can't do that once `go/plan` depends on `go/materialized`,
+//! so it reimplements the identical (coverage, value) state machine
+//! inline instead; see its own package doc comment.
+//! **`go/plan`'s own `Evaluate` is now wired through it too, the Go-side
+//! #41:** `intent`/`observed` are `materialized.MaterializedObject`s, not
+//! bare `map[string]interface{}`, and `Evaluate` no longer carries its
+//! own `canonical.IsValue` check (redundant once `NewMaterializedObject`
+//! already made that guarantee). `scalarCoverage` mirrors `plan.rs`'s own
+//! `scalar_coverage` exactly, including the scalar-only scope. No
+//! cross-language differential corpus for `materialized` itself yet
+//! (same relationship F6-F9 had to their own Go peers before F15
+//! cross-checked them) -- the existing `plan` differential corpus is
+//! unaffected. Nothing here is a stable API, and no module should depend
+//! on it as one.
 
 pub mod canonical;
 pub mod collection;

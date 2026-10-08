@@ -307,6 +307,25 @@ func (fe FieldEvidence) Value() (interface{}, bool) {
 	}
 }
 
+// Coverage returns the Coverage fe carries and whether it has one at
+// all -- false for Intent evidence, which carries a Provenance
+// instead (IntentEvidence.Provenance), never a Coverage. The Go peer
+// of pattern-matching materialized.rs's own FieldEvidence::Observation/
+// DerivedObservation variants from outside the crate: Rust's public
+// enum variants are matchable directly from any caller; this
+// package's unexported fields need an explicit accessor for the same
+// thing. Added for go/plan's own scalarCoverage (the Go-side #41),
+// which needs to ask "does the observed root have an opinion on this
+// field's coverage" without reaching into fe's private state.
+func (fe FieldEvidence) Coverage() (conformance.Coverage, bool) {
+	switch fe.kind {
+	case evidenceObservation, evidenceDerivedObservation:
+		return fe.coverage, true
+	default:
+		return "", false
+	}
+}
+
 // Valid reports whether fe is one of the states the exported
 // constructors can actually produce -- catches Go's zero value
 // (FieldEvidence{}, kind "") the same way IntentEvidence.Valid and

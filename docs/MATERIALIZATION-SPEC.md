@@ -100,14 +100,17 @@ including the `try_new` boundary check named above. `conformance`/
 `collection` still operate on a generic value tree
 ([`reader::Value`](../engine/src/reader.rs) / Go's `interface{}`)
 directly -- correctly: they work on already-resolved leaf values and
-collection elements, not the object itself. `go/materialized` now
-exists (the Go peer), using `go/conformance`'s `Coverage` directly
-rather than importing `go/plan`'s `ConsumedField` -- an import-cycle
-concern the Rust side never has, since `materialized.rs`/`plan.rs`
-share one crate. Still open: `go/plan`'s own `Evaluate` is not wired
-through `go/materialized` yet (the Go-side #41), and no
-cross-language differential corpus exists for `materialized` yet
-either.
+collection elements, not the object itself. `go/materialized` exists
+(the Go peer), using `go/conformance`'s `Coverage` directly rather than
+importing `go/plan`'s `ConsumedField` -- an import-cycle concern the
+Rust side never has, since `materialized.rs`/`plan.rs` share one crate
+-- and includes its own custody-boundary fixes (`NewMaterializedObject`
+validates every field's state and `canonical.IsValue`, and deep-copies
+on both construction and `Get`, since Go has no ownership transfer).
+`go/plan`'s own `Evaluate` is now wired through `go/materialized` too
+(the Go-side #41), including `scalarCoverage` mirroring `plan.rs`'s own
+`scalar_coverage` exactly. Still open: no cross-language differential
+corpus exists for `materialized` itself yet.
 
 ## A — Canonical representation (closes section A)
 

@@ -6,8 +6,48 @@ import (
 
 	"github.com/CentralInfraCore/cic-primitive-engine/go/collection"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/plan"
 )
+
+// objectFromValue wraps a test fixture map into a
+// materialized.MaterializedObject -- see go/plan's own identical
+// helper for why this is test-only, not a production conversion.
+func objectFromValue(
+	t *testing.T,
+	v map[string]interface{},
+	evidenceOf func(key string, val interface{}) materialized.FieldEvidence,
+) materialized.MaterializedObject {
+	t.Helper()
+	fields := make(map[string]materialized.MaterializedField, len(v))
+	keys := make(map[string]struct{}, len(v))
+	for k, val := range v {
+		keys[k] = struct{}{}
+		fields[k] = materialized.MaterializedField{
+			Capability: materialized.CapabilityImplemented,
+			Evidence:   evidenceOf(k, val),
+		}
+	}
+	obj, err := materialized.NewMaterializedObject(fields, keys)
+	if err != nil {
+		t.Fatalf("a fixture's own key set must be trivially complete against itself: %v", err)
+	}
+	return obj
+}
+
+func intentObject(t *testing.T, v map[string]interface{}) materialized.MaterializedObject {
+	t.Helper()
+	return objectFromValue(t, v, func(_ string, val interface{}) materialized.FieldEvidence {
+		return materialized.NewIntentFieldEvidence(materialized.NewAuthoredIntentEvidence(val, true))
+	})
+}
+
+func observedObject(t *testing.T, v map[string]interface{}, obs *conformance.Observation) materialized.MaterializedObject {
+	t.Helper()
+	return objectFromValue(t, v, func(k string, val interface{}) materialized.FieldEvidence {
+		return materialized.NewObservationFieldEvidence(obs.Coverage("/"+k), val)
+	})
+}
 
 // Mirrors engine/src/digest_projection.rs's
 // plan_projection_has_f5s_exact_shape -- F5 names an exact shape, not
@@ -128,8 +168,9 @@ func TestObservationDigestDistinguishesDifferentObservedValues(t *testing.T) {
 	observedA := map[string]interface{}{"shape": "E4.Flex"}
 	observedB := map[string]interface{}{"shape": "E3.Flex"}
 
-	verdictA := plan.Evaluate(intent, observedA, obs, cp)
-	verdictB := plan.Evaluate(intent, observedB, obs, cp)
+	intentObj := intentObject(t, intent)
+	verdictA := plan.Evaluate(intentObj, observedObject(t, observedA, obs), obs, cp)
+	verdictB := plan.Evaluate(intentObj, observedObject(t, observedB, obs), obs, cp)
 
 	digestA, err := ObservationDigest(verdictA.Consumed)
 	if err != nil {

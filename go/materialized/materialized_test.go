@@ -132,6 +132,26 @@ func TestDerivedObservationValueComesFromCoverageToo(t *testing.T) {
 	}
 }
 
+// FieldEvidence.Coverage -- added for go/plan's own scalarCoverage
+// (the Go-side #41) -- returns a Coverage only for the two
+// observation-like variants, never for Intent.
+func TestFieldEvidenceCoverageOnlyAppliesToObservationLikeVariants(t *testing.T) {
+	obs := NewObservationFieldEvidence(conformance.CoverageObserved, 16)
+	if c, ok := obs.Coverage(); !ok || c != conformance.CoverageObserved {
+		t.Errorf("got (%v, %v), want (%v, true)", c, ok, conformance.CoverageObserved)
+	}
+
+	derived := NewDerivedObservationFieldEvidence(conformance.CoverageAbsent, nil)
+	if c, ok := derived.Coverage(); !ok || c != conformance.CoverageAbsent {
+		t.Errorf("got (%v, %v), want (%v, true)", c, ok, conformance.CoverageAbsent)
+	}
+
+	intent := NewIntentFieldEvidence(NewAuthoredIntentEvidence("x", true))
+	if _, ok := intent.Coverage(); ok {
+		t.Error("expected Intent evidence to have no Coverage")
+	}
+}
+
 func TestObservationFieldEvidencePanicsOnInvalidCoverage(t *testing.T) {
 	defer func() {
 		if recover() == nil {

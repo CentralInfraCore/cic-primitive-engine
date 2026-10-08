@@ -46,23 +46,33 @@ correction to the pipeline framing this file used to carry.
 > already-resolved leaf values and collection elements, never the object
 > itself (see `plan.rs`'s own doc comment for the exact boundary).
 >
-> **`go/materialized` now exists too** (`MaterializedObject`/
-> `MaterializedField`/`FieldEvidence`/`IntentEvidence`, the Go peer of
-> `materialized.rs`) — but Go's own `evaluate` peer (`go/plan`) is NOT
-> wired through it yet, the Go-side equivalent of #41 not done here.
-> `go/materialized` also does not import `go/plan`'s `ConsumedField`
-> the way the Rust side's `FieldEvidence` reuses `plan::ConsumedField`
-> directly (same crate, no cycle to avoid) — Go packages can't do that
-> without an import cycle once `go/plan` eventually depends on
-> `go/materialized` for its own wiring, so `go/materialized`
+> **`go/materialized` exists** (`MaterializedObject`/`MaterializedField`/
+> `FieldEvidence`/`IntentEvidence`, the Go peer of `materialized.rs`),
+> including its own custody-boundary fixes (`NewMaterializedObject`
+> validates every field's `Capability`/`FieldEvidence` and
+> `canonical.IsValue`, and deep-copies on both construction and `Get`,
+> since Go has no ownership transfer to lean on the way Rust does).
+> `go/materialized` does not import `go/plan`'s `ConsumedField` the way
+> the Rust side's `FieldEvidence` reuses `plan::ConsumedField` directly
+> (same crate, no cycle to avoid) — Go packages can't do that once
+> `go/plan` depends on `go/materialized`, so `go/materialized`
 > reimplements the identical (coverage, value) state machine inline
-> instead; see `go/materialized`'s own package doc comment. No
-> cross-language differential corpus for `materialized` yet either
-> (same relationship F6-F9 had to their own Go peers before F15
-> cross-checked them) — the differential corpus still feeds both
-> languages' `evaluate` the same JSON fixture, each language converting
-> it on its own side as its own signature requires, unaffected by any
-> of this. **A `role` module (Role short/long form, P0.2) lived
+> instead; see `go/materialized`'s own package doc comment.
+> **`go/plan`'s own `Evaluate` is now wired through it too, the Go-side
+> #41:** `intent`/`observed` are `materialized.MaterializedObject`s, not
+> bare `map[string]interface{}`, so a candidate must already be
+> custody-checked before `Evaluate` can run at all, and `Evaluate` no
+> longer carries its own `canonical.IsValue` check (redundant once
+> `NewMaterializedObject` already made that guarantee). `scalarCoverage`
+> mirrors `plan.rs`'s own identically-named function (scalar paths:
+> coverage authority = `FieldEvidence`; collection elements/containers:
+> coverage authority stays `Observation`, for the same reason named
+> there). No cross-language differential corpus for `materialized`
+> itself yet (same relationship F6-F9 had to their own Go peers before
+> F15 cross-checked them) — the existing `plan` differential corpus is
+> unaffected, since it already fed both languages' `Evaluate` the same
+> JSON fixture and each language already converted it on its own side.
+> **A `role` module (Role short/long form, P0.2) lived
 > here until 2026-10-07 and was removed** — it predated the scope
 > correction below, had zero internal callers, and keeping it around
 > would have let the tree imply a scope the contract now denies; see

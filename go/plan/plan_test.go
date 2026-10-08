@@ -5,7 +5,67 @@ import (
 
 	"github.com/CentralInfraCore/cic-primitive-engine/go/collection"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 )
+
+// objectFromValue wraps a test fixture map into a materialized.MaterializedObject
+// -- a test-only convenience, not a production conversion (deciding how
+// raw data becomes FieldEvidence is environment/Normalize work, out of
+// scope; see plan.go's own package doc comment). Mirrors
+// plan.rs's own identical helper. The fixture's own key set is
+// trivially complete against itself, so NewMaterializedObject never
+// fails here.
+func objectFromValue(
+	t *testing.T,
+	v map[string]interface{},
+	evidenceOf func(key string, val interface{}) materialized.FieldEvidence,
+) materialized.MaterializedObject {
+	t.Helper()
+	fields := make(map[string]materialized.MaterializedField, len(v))
+	keys := make(map[string]struct{}, len(v))
+	for k, val := range v {
+		keys[k] = struct{}{}
+		fields[k] = materialized.MaterializedField{
+			Capability: materialized.CapabilityImplemented,
+			Evidence:   evidenceOf(k, val),
+		}
+	}
+	obj, err := materialized.NewMaterializedObject(fields, keys)
+	if err != nil {
+		t.Fatalf("a fixture's own key set must be trivially complete against itself: %v", err)
+	}
+	return obj
+}
+
+func intentObject(t *testing.T, v map[string]interface{}) materialized.MaterializedObject {
+	t.Helper()
+	return objectFromValue(t, v, func(_ string, val interface{}) materialized.FieldEvidence {
+		return materialized.NewIntentFieldEvidence(materialized.NewAuthoredIntentEvidence(val, true))
+	})
+}
+
+// observedObject derives each scalar field's REAL coverage from obs,
+// so the object's own claim and Observation's claim can never disagree
+// by construction -- mirroring plan.rs's own identical helper
+// (review-caught on PR #41) and this package's own scalarCoverage,
+// which now relies on exactly this invariant. A []interface{} field
+// is a collection container, detected structurally rather than by
+// name, and stays unconditionally Observed so the walker can still
+// navigate into it -- see plan.rs's own scalar_coverage doc comment
+// for why.
+func observedObject(
+	t *testing.T,
+	v map[string]interface{},
+	obs *conformance.Observation,
+) materialized.MaterializedObject {
+	t.Helper()
+	return objectFromValue(t, v, func(k string, val interface{}) materialized.FieldEvidence {
+		if _, isContainer := val.([]interface{}); isContainer {
+			return materialized.NewObservationFieldEvidence(conformance.CoverageObserved, val)
+		}
+		return materialized.NewObservationFieldEvidence(obs.Coverage("/"+k), val)
+	})
+}
 
 func nic(name, subnetRef string, extra map[string]interface{}) map[string]interface{} {
 	m := map[string]interface{}{
@@ -85,7 +145,8 @@ func ociObservation() *conformance.Observation {
 // Mirrors plan.rs's oci_conformant, which itself mirrors
 // TestEvaluate_OCI_Conformant.
 func TestOCIConformant(t *testing.T) {
-	verdict := Evaluate(ociIntent(), ociObserved(), ociObservation(), ociPlan())
+	obs := ociObservation()
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, ociObserved(), obs), obs, ociPlan())
 	if verdict.Object != ObjectConformant {
 		t.Fatalf("object: got %v, want CONFORMANT", verdict.Object)
 	}
@@ -107,7 +168,8 @@ func TestOCIConformant(t *testing.T) {
 // Mirrors plan.rs's oci_extra_state_fields_are_not_drift, which itself
 // mirrors TestEvaluate_OCI_ExtraStateFieldsAreNotDrift.
 func TestOCIExtraStateFieldsAreNotDrift(t *testing.T) {
-	verdict := Evaluate(ociIntent(), ociObserved(), ociObservation(), ociPlan())
+	obs := ociObservation()
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, ociObserved(), obs), obs, ociPlan())
 	for _, stateOnly := range []string{
 		"/provider_id",
 		"/lifecycle_state",
@@ -128,7 +190,8 @@ func TestOCIDrift(t *testing.T) {
 	nics := observed["network_interfaces"].([]interface{})
 	nics[1] = nic("nic-1", "prod-subnet-WRONG", nil)
 
-	verdict := Evaluate(ociIntent(), observed, ociObservation(), ociPlan())
+	obs := ociObservation()
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, observed, obs), obs, ociPlan())
 	if got := verdict.Fields["/network_interfaces/{name=nic-1}/subnet"]; got != conformance.VerdictDrift {
 		t.Errorf("got %v, want DRIFT", got)
 	}
@@ -143,7 +206,8 @@ func TestOCINotComparable(t *testing.T) {
 	observed := ociObserved()
 	observed["memory_gb"] = "large"
 
-	verdict := Evaluate(ociIntent(), observed, ociObservation(), ociPlan())
+	obs := ociObservation()
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, observed, obs), obs, ociPlan())
 	if got := verdict.Fields["/memory_gb"]; got != conformance.VerdictNotComparable {
 		t.Errorf("got %v, want NOT_COMPARABLE", got)
 	}
@@ -163,7 +227,7 @@ func TestOCIUnobserved(t *testing.T) {
 	} {
 		obs.Set(p, conformance.CoverageObserved)
 	}
-	verdict := Evaluate(ociIntent(), ociObserved(), obs, ociPlan())
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, ociObserved(), obs), obs, ociPlan())
 	if got := verdict.Fields["/memory_gb"]; got != conformance.VerdictUnobserved {
 		t.Errorf("got %v, want UNOBSERVED", got)
 	}
@@ -180,7 +244,7 @@ func TestOCIDesiredAbsentIsConformant(t *testing.T) {
 	obs := ociObservation()
 	obs.Set("/boot_volume", conformance.CoverageAbsent)
 
-	verdict := Evaluate(ociIntent(), ociObserved(), obs, p)
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, ociObserved(), obs), obs, p)
 	if got := verdict.Fields["/boot_volume"]; got != conformance.VerdictObservedAbsent {
 		t.Errorf("got %v, want OBSERVED_ABSENT", got)
 	}
@@ -197,9 +261,60 @@ func TestOCIDesiredAbsentIsConformant(t *testing.T) {
 func TestUnknownCoverageFlowsThroughToUnobservedVerdict(t *testing.T) {
 	obs := ociObservation()
 	obs.Set("/memory_gb", conformance.CoverageUnknown)
-	verdict := Evaluate(ociIntent(), ociObserved(), obs, ociPlan())
+	verdict := Evaluate(intentObject(t, ociIntent()), observedObject(t, ociObserved(), obs), obs, ociPlan())
 	if got := verdict.Fields["/memory_gb"]; got != conformance.VerdictUnobserved {
 		t.Errorf("got %v, want UNOBSERVED", got)
+	}
+}
+
+// Review-caught on PR #46: every other test's own observedObject
+// helper derives FieldEvidence coverage FROM the same Observation it
+// then passes to Evaluate, so the two authorities can never disagree
+// by construction in any of them -- scalarCoverage's single-authority
+// rule (the Go peer of plan.rs's own review-caught PR #41 fix) was
+// never actually exercised by a disagreement. This test builds one
+// directly: the observed root's own FieldEvidence says /memory_gb is
+// Absent, while an external Observation map deliberately claims the
+// SAME path is Observed. Intent does not declare "memory_gb" at all
+// (the same state-only-field shape ociObserved's own "provider_id"/
+// "lifecycle_state" already use), so the correct verdict if the
+// object's own claim wins is OBSERVED_ABSENT, not a false
+// CONFORMANT/DRIFT taken from the disagreeing Observation map.
+func TestScalarCoverageTrustsTheObservedRootOverADisagreeingObservationMap(t *testing.T) {
+	observedFields := map[string]materialized.MaterializedField{
+		"memory_gb": {
+			Capability: materialized.CapabilityImplemented,
+			Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageAbsent, nil),
+		},
+	}
+	observed, err := materialized.NewMaterializedObject(observedFields, map[string]struct{}{"memory_gb": {}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	intent, err := materialized.NewMaterializedObject(map[string]materialized.MaterializedField{}, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	obs := conformance.NewObservation()
+	obs.Set("/memory_gb", conformance.CoverageObserved) // disagrees with the root's own Absent claim
+
+	p := ConformancePlan{
+		Scalars: []FieldPlan{{Path: "/memory_gb", Compare: conformance.CompareNumeric}},
+	}
+
+	verdict := Evaluate(intent, observed, obs, p)
+	if got := verdict.Fields["/memory_gb"]; got != conformance.VerdictObservedAbsent {
+		t.Errorf(
+			"got %v, want OBSERVED_ABSENT -- the observed root's own Absent claim must win over the disagreeing Observation map",
+			got,
+		)
+	}
+	if cf, ok := verdict.Consumed["/memory_gb"]; !ok || cf.Coverage() != conformance.CoverageAbsent {
+		t.Errorf(
+			"Consumed[/memory_gb] coverage = %v, want %v -- F5's own digest must also come from the object, not the disagreeing Observation map",
+			cf.Coverage(), conformance.CoverageAbsent,
+		)
 	}
 }
 
@@ -238,7 +353,7 @@ func TestMultiKeyCollectionIdentityResolvesBackToItsElement(t *testing.T) {
 	obs := conformance.NewObservation()
 	obs.Set("/nics/{name=nic-0,zone=eu}/subnet", conformance.CoverageObserved)
 
-	verdict := Evaluate(intent, observed, obs, p)
+	verdict := Evaluate(intentObject(t, intent), observedObject(t, observed, obs), obs, p)
 	got := verdict.Fields["/nics/{name=nic-0,zone=eu}/subnet"]
 	if got != conformance.VerdictDrift {
 		t.Fatalf(
@@ -261,29 +376,18 @@ func expectPanic(t *testing.T, name string, fn func()) {
 	fn()
 }
 
-// Applying PR #31/#32's review lesson proactively here too: Evaluate
-// validates intent/observed against canonical.IsValue at its own
-// boundary, before resolvePath/ElementKey ever touch them downstream.
-type notAValue struct{ X int }
-
-func TestEvaluateFailsClosedOnOutOfDomainTrees(t *testing.T) {
-	expectPanic(t, "out-of-domain nested in intent", func() {
-		Evaluate(
-			map[string]interface{}{"shape": notAValue{1}},
-			ociObserved(),
-			ociObservation(),
-			ociPlan(),
-		)
-	})
-	expectPanic(t, "out-of-domain nested in observed", func() {
-		Evaluate(
-			ociIntent(),
-			map[string]interface{}{"shape": notAValue{1}},
-			ociObservation(),
-			ociPlan(),
-		)
-	})
-}
+// PR #31/#32's review lesson (fail closed on an out-of-domain value,
+// at the boundary that first receives one, not deferred to whichever
+// consumer happens to touch it) used to be applied here directly, via
+// Evaluate's own canonical.IsValue check on raw
+// map[string]interface{} arguments. Removed when Evaluate was wired
+// to materialized.MaterializedObject (the Go-side #41): the check now
+// happens earlier and once, at materialized.NewMaterializedObject's
+// own construction, so no map[string]interface{} containing an
+// out-of-domain value can become a MaterializedObject at all --
+// Evaluate can no longer be called with one in the first place. See
+// go/materialized's own TestNewMaterializedObjectRejectsANonCICValue
+// for the equivalent test at its new, actual boundary.
 
 // Review-caught on PR #33: a malformed ConformancePlan used to surface
 // its invalid CompareType/CollectionTopology only if execution
@@ -307,12 +411,9 @@ func TestMalformedPlanFailsClosedRegardlessOfExecutionPath(t *testing.T) {
 				{Path: "/x", Compare: conformance.CompareType("garbage")},
 			},
 		}
-		Evaluate(
-			map[string]interface{}{"x": 1},
-			map[string]interface{}{"x": 1},
-			conformance.NewObservation(), // "/x" defaults to Unobserved
-			p,
-		)
+		obs := conformance.NewObservation() // "/x" defaults to Unobserved
+		x := map[string]interface{}{"x": 1}
+		Evaluate(intentObject(t, x), observedObject(t, x, obs), obs, p)
 	})
 
 	// The review's own second example: invalid CollectionTopology on a
@@ -329,12 +430,9 @@ func TestMalformedPlanFailsClosedRegardlessOfExecutionPath(t *testing.T) {
 				},
 			},
 		}
-		Evaluate(
-			map[string]interface{}{},
-			map[string]interface{}{},
-			conformance.NewObservation(),
-			p,
-		)
+		obs := conformance.NewObservation()
+		empty := map[string]interface{}{}
+		Evaluate(intentObject(t, empty), observedObject(t, empty, obs), obs, p)
 	})
 }
 
