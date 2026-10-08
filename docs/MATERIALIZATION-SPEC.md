@@ -2027,27 +2027,22 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          verified against the decided contract in prose -- see the
          F15 subsection, below). Every Rust module from F6 through F9
          now has a Go peer, and every one of the four has actually
-         been cross-checked against it -- F15 is closed in full.
-Open:    Go's analogous
-         IntentDigest still has no equivalent here. Re-checked
-         2026-10-08, after the scope correction (#39): the ORIGINAL
-         reason given -- "it needs a SpecDigest-style expand+normalize
-         step this engine's Normalize stage doesn't have yet" -- is now
-         stale. Normalize is not a stage this engine will ever build;
-         #39 named it the environment's job, permanently, not a
-         not-yet-reached roadmap step. The actual, current blocker is
-         narrower and no longer depends on anything external:
-         to_canonical_json (canonical.rs) takes a Value, and nothing in
-         this crate canonicalizes/digests a MaterializedObject itself
-         -- only the plan/consumed-observation projections F5 already
-         specifies (conformance_plan_digest/observation_digest,
-         digest_projection.rs). Building that function is now a
-         self-contained task with no missing precondition, not blocked
-         on this engine ever owning Normalize -- named here, not
-         designed or decided. Also open: whether the verdict artifact
-         is itself ever signed (VERDICT-SCHEMA.md's own explicit
-         non-decision, not inherited from the receipt's closed "no
-         signature field").
+         been cross-checked against it -- F15 is closed in full. And
+         F16 (MaterializedObject's own canonical projection/digest,
+         materialized_object_projection/materialized_object_digest,
+         digest_projection.rs -- closing the IntentDigest gap this
+         section's own earlier Open note misattributed to a
+         not-yet-built Normalize stage this engine will in fact never
+         build, per #39; see the F16 subsection, below, for the new
+         wire-layout decision this closure also makes, since B7 left
+         the canonical nesting of capability/coverage/provenance open).
+Open:    Whether the verdict artifact is itself ever signed
+         (VERDICT-SCHEMA.md's own explicit non-decision, not inherited
+         from the receipt's closed "no signature field"); and
+         F16's own Go peer (go/materialized has no equivalent of
+         materialized_object_projection/materialized_object_digest yet
+         -- a named asymmetry, not a defect, same relationship F6-F9's
+         own Rust-then-Go sequencing has everywhere else).
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -3228,6 +3223,65 @@ author's case might.
 **What this does not do:** decide anything about `Parse`'s
 own future differential corpus, which this layer explicitly defers
 rather than pre-empts.
+
+### F16. `MaterializedObject`'s own canonical digest — closing the `IntentDigest` gap, with a new wire-layout decision
+
+F's own "Open" note named this gap originally, and misattributed it:
+*"Go's analogous `IntentDigest` still has no equivalent here... it
+needs a SpecDigest-style expand+normalize step this engine's
+`Normalize` stage doesn't have yet."* Corrected 2026-10-08 (same pass
+as this subsection): that reasoning predates the scope correction (#39)
+and is stale -- `Normalize` is permanently the environment's job now,
+not a not-yet-reached stage of this engine's own, so the gap was never
+actually "blocked on" anything this engine would eventually build.
+
+**What "intent digest" actually means under the corrected scope:** not
+"digest of a freshly-normalized value" (Go's own meaning, which
+requires `ExpandSpec`/`normalizeNumbers` first) -- this engine never
+normalizes anything. It means "digest of an object the environment has
+*already* materialized and handed over" -- exactly what a
+`MaterializedObject` already is by the time this engine ever sees one.
+
+**Unlike F9 (wiring F5's already-specified shapes), this closes a real,
+previously-deferred wire-layout question, not just a wiring one.** B7
+committed *that* capability/coverage/provenance are part of the
+materialized semantic output `output_digest` must cover, but explicitly
+left *how* they nest in the canonical byte tree to "C4/E2b's own open
+layout questions" -- never actually closed since B7, closed here:
+
+```text
+Map { "fields": Seq[ Map{ "key", "capability", <axis>, "value"? } ] }
+```
+
+Grounded directly in B1/B3's already-decided axis model, not invented
+freely. `<axis>` is never padded with a placeholder for an axis that
+doesn't apply to a given field's own `FieldEvidence` shape (B8) --
+`BOUNDARY.md`'s own anti-placeholder principle, the same one F5 already
+applies to `value`/coverage above: an `Intent` field carries
+`"provenance"` only; an `Observation` field carries `"coverage"` only;
+a `DerivedObservation` field carries both -- B3's own "a derived state
+field carries both... simultaneously," with `"provenance"` always
+exactly `"derived"` there, since `FieldEvidence::DerivedObservation`
+stores no separate `Provenance` field to begin with (B8). `"key"`, not
+`"path"`: unlike F5's own projections, which walk potentially-nested
+paths, a `MaterializedObject`'s own fields are always exactly one flat
+top-level key, by the Complete property's own definition.
+
+Implemented in `engine/src/digest_projection.rs`
+(`materialized_object_projection`/`materialized_object_digest`), built
+from `MaterializedObject`'s own existing public API
+(`iter`/`MaterializedField::value`/`FieldEvidence`'s public variants)
+rather than reaching into private state. `fields` sorted by `key`,
+byte-wise -- `MaterializedObject::iter`'s own order already *is* that
+sort (its internal `BTreeMap`), the same "don't re-sort what's already
+sorted" reasoning F5's own `observation_digest_projection` already
+applies to `consumed`.
+
+**What this does not do:** port this to Go (`go/materialized` has no
+peer of this function yet -- a named asymmetry, same relationship
+F6-F9's own Rust-then-Go sequencing already has everywhere else), or
+add it to the cross-language differential corpus (same reason --
+nothing to cross-check against yet, not a gap in the corpus itself).
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

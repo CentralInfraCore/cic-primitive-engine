@@ -250,6 +250,14 @@ impl MaterializedObject {
         self.0.keys()
     }
 
+    /// Iterates `(key, field)` pairs in byte-wise key order -- the
+    /// underlying `BTreeMap`'s own iteration order. Added for
+    /// `digest_projection::materialized_object_projection`, so it does
+    /// not need a second key lookup per field via `keys`/`get`.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &MaterializedField)> {
+        self.0.iter()
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
