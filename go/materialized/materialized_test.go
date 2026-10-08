@@ -304,3 +304,45 @@ func TestNewMaterializedObjectSnapshotsAgainstLaterMutation(t *testing.T) {
 		t.Errorf("got %v, want 1 -- the object's own copy must be unaffected by the caller's later mutation of the nested map", m["x"])
 	}
 }
+
+// Review follow-up on PR #45: Get must be just as independent on the
+// way out as NewMaterializedObject is on the way in. Mutates the value
+// from a FIRST Get call, then asserts a SECOND Get of the same key is
+// unaffected -- proving Get returns a fresh copy each time, not an
+// alias into the object's own stored state.
+func TestGetReturnsAnIndependentCopyEachTime(t *testing.T) {
+	fields := map[string]MaterializedField{
+		"shape": {
+			Capability: CapabilityImplemented,
+			Evidence:   NewObservationFieldEvidence(conformance.CoverageObserved, map[string]interface{}{"x": 1}),
+		},
+	}
+	obj, err := NewMaterializedObject(fields, keySet("shape"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f1, ok := obj.Get("shape")
+	if !ok {
+		t.Fatal("expected \"shape\" to be present")
+	}
+	v1, _ := f1.Value()
+	m1, ok := v1.(map[string]interface{})
+	if !ok {
+		t.Fatalf("got %T, want map[string]interface{}", v1)
+	}
+	m1["x"] = "mutated by the caller, through the first Get's own result"
+
+	f2, ok := obj.Get("shape")
+	if !ok {
+		t.Fatal("expected \"shape\" to still be present")
+	}
+	v2, _ := f2.Value()
+	m2, ok := v2.(map[string]interface{})
+	if !ok {
+		t.Fatalf("got %T, want map[string]interface{}", v2)
+	}
+	if m2["x"] != 1 {
+		t.Errorf("got %v, want 1 -- mutating one Get() result must not be visible through another", m2["x"])
+	}
+}

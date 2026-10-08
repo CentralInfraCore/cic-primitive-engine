@@ -468,21 +468,28 @@ func NewMaterializedObject(
 	return MaterializedObject{fields: copied}, nil
 }
 
-// Get returns the field at key, if present.
+// Get returns the field at key, if present. The returned value is an
+// independent deep copy, not the object's own internal state -- a
+// caller mutating a returned map/slice value in place cannot corrupt
+// o, and cannot affect what a later Get of the same key returns
+// either.
 //
-// Named, not fixed here: the value Get (via MaterializedField.Value)
-// hands back is the object's own internal copy, not a further copy of
-// it -- a caller who mutates a returned map/slice value in place would
-// corrupt o's own state for a later Get of the same key. Rust's
-// `.value()` returns an immutable `&Value` borrow, which the borrow
-// checker already prevents from being mutated through; Go has no
-// equivalent on the read side either. Out of scope for the
-// construction-boundary fix this PR makes (review's own two blockers
-// were both about NewMaterializedObject, not Get), named so it is not
-// mistaken for something this package already closes.
+// Review follow-up on PR #45, closing what an earlier commit on this
+// same PR had left as a named, read-side version of the construction-
+// boundary gap: Rust's `.value()` returns an immutable `&Value`
+// borrow, which the borrow checker prevents from being mutated
+// through, so Rust gets this for free on the read side the same way it
+// does on the write side. Go has no borrow checker, so Get must do
+// explicitly on the way out what NewMaterializedObject already does on
+// the way in -- the same deepCopyValue, safe to call unconditionally
+// here for the same reason it is at construction: every value Get can
+// return already passed canonical.IsValue when the object was built.
 func (o MaterializedObject) Get(key string) (MaterializedField, bool) {
 	f, ok := o.fields[key]
-	return f, ok
+	if !ok {
+		return MaterializedField{}, false
+	}
+	return MaterializedField{Capability: f.Capability, Evidence: f.Evidence.deepCopy()}, true
 }
 
 // Len returns the number of fields in o.
