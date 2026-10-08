@@ -267,6 +267,57 @@ func TestUnknownCoverageFlowsThroughToUnobservedVerdict(t *testing.T) {
 	}
 }
 
+// Review-caught on PR #46: every other test's own observedObject
+// helper derives FieldEvidence coverage FROM the same Observation it
+// then passes to Evaluate, so the two authorities can never disagree
+// by construction in any of them -- scalarCoverage's single-authority
+// rule (the Go peer of plan.rs's own review-caught PR #41 fix) was
+// never actually exercised by a disagreement. This test builds one
+// directly: the observed root's own FieldEvidence says /memory_gb is
+// Absent, while an external Observation map deliberately claims the
+// SAME path is Observed. Intent does not declare "memory_gb" at all
+// (the same state-only-field shape ociObserved's own "provider_id"/
+// "lifecycle_state" already use), so the correct verdict if the
+// object's own claim wins is OBSERVED_ABSENT, not a false
+// CONFORMANT/DRIFT taken from the disagreeing Observation map.
+func TestScalarCoverageTrustsTheObservedRootOverADisagreeingObservationMap(t *testing.T) {
+	observedFields := map[string]materialized.MaterializedField{
+		"memory_gb": {
+			Capability: materialized.CapabilityImplemented,
+			Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageAbsent, nil),
+		},
+	}
+	observed, err := materialized.NewMaterializedObject(observedFields, map[string]struct{}{"memory_gb": {}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	intent, err := materialized.NewMaterializedObject(map[string]materialized.MaterializedField{}, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	obs := conformance.NewObservation()
+	obs.Set("/memory_gb", conformance.CoverageObserved) // disagrees with the root's own Absent claim
+
+	p := ConformancePlan{
+		Scalars: []FieldPlan{{Path: "/memory_gb", Compare: conformance.CompareNumeric}},
+	}
+
+	verdict := Evaluate(intent, observed, obs, p)
+	if got := verdict.Fields["/memory_gb"]; got != conformance.VerdictObservedAbsent {
+		t.Errorf(
+			"got %v, want OBSERVED_ABSENT -- the observed root's own Absent claim must win over the disagreeing Observation map",
+			got,
+		)
+	}
+	if cf, ok := verdict.Consumed["/memory_gb"]; !ok || cf.Coverage() != conformance.CoverageAbsent {
+		t.Errorf(
+			"Consumed[/memory_gb] coverage = %v, want %v -- F5's own digest must also come from the object, not the disagreeing Observation map",
+			cf.Coverage(), conformance.CoverageAbsent,
+		)
+	}
+}
+
 // Mirrors plan.rs's multi_key_collection_identity_resolves_back_to_its_element,
 // proving resolvePath's multi-key fix (see the package doc) actually
 // resolves a path Evaluate generated from its own multi-key
