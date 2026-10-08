@@ -125,7 +125,7 @@ func TestDifferentialPlanVectors(t *testing.T) {
 		}
 		cp := ConformancePlan{Scalars: scalars, Collections: collections}
 
-		verdict := Evaluate(in.Intent, in.Observed, obs, cp)
+		verdict := Evaluate(intentObject(t, in.Intent), observedObject(t, in.Observed, obs), obs, cp)
 
 		if string(verdict.Object) != exp.Object {
 			t.Errorf("%s: object: got %s, want %s", name, verdict.Object, exp.Object)

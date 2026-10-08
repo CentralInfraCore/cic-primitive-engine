@@ -38,6 +38,36 @@
 // Go peer of digest_projection.rs, F9, not yet written) -- Evaluate's
 // own ObjectVerdict.Consumed records exactly what that step will need,
 // the same way plan.rs's own ObjectVerdict.consumed does.
+//
+// # Wired to materialized.MaterializedObject at the root -- the Go-side #41
+//
+// Evaluate's intent/observed roots are materialized.MaterializedObject,
+// not bare map[string]interface{}, mirroring plan.rs's own wiring (PR
+// #41) and closing the asymmetry go/materialized's own package doc
+// named (PR #45: "go/plan's own Evaluate is not wired through it yet").
+// Only the root changed: resolvePath resolves a path's first segment
+// against a MaterializedObject key lookup, then delegates whatever
+// remains to resolveIn (the renamed, otherwise-unchanged
+// map[string]interface{}-walking body resolvePath used to be in full).
+//
+// Evaluate no longer validates intent/observed against canonical.IsValue
+// itself -- that check now happens once, earlier, at
+// materialized.NewMaterializedObject's own construction (PR #45's own
+// review-caught fix), so every value Evaluate can ever see through a
+// MaterializedObject has already passed it. Keeping a second copy of
+// the same check here would duplicate, not strengthen, that boundary.
+//
+// scalarCoverage mirrors plan.rs's own identically-named function and
+// its own review-caught fix (PR #41): for a scalar (single-segment,
+// non-collection) path, the observed root's own FieldEvidence is
+// authoritative whenever it carries a Coverage of its own
+// (materialized.FieldEvidence.Coverage); obs is consulted only as a
+// fallback. Deliberately NOT applied to collection element or
+// container paths -- see plan.rs's own doc comment (scalar_coverage)
+// for why: a collection's own top-level path is never an entry
+// Observation tracks in this corpus, only its elements are, so giving
+// it this same rule would let a container's placeholder evidence
+// override every element's real coverage.
 package plan
 
 import (
@@ -45,9 +75,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CentralInfraCore/cic-primitive-engine/go/canonical"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/collection"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 )
 
 // FieldPlan binds one comparable field path to its comparator -- the
@@ -298,42 +328,41 @@ type ObjectVerdict struct {
 // intentionally ignored (observed state, not drift) -- the Go peer of
 // plan.rs's own evaluate, identical to conformance.go's own Evaluate.
 //
-// Panics if intent or observed is not a representable CIC value tree
-// (canonical.IsValue) -- the same "the type system can't close this
-// off, so the boundary must" principle PR #31/#32 already established
-// for Coverage/CompareType/CollectionTopology, applied at this
-// package's own entry point so every value resolvePath/
-// collection.ElementKey touch downstream is already known-valid; see
-// go/collection's own package doc for the bug this prevents. Also
-// panics if cp itself is malformed -- see ConformancePlan.Validate's
-// own doc comment for why this must be checked here, unconditionally,
-// rather than left to whichever per-field call paths execution
-// happens to take.
+// intent/observed are materialized.MaterializedObject, not bare
+// map[string]interface{} -- see the package doc comment ("Wired to
+// materialized.MaterializedObject at the root") for exactly what that
+// does and does not change, and why this no longer needs its own
+// canonical.IsValue check (materialized.NewMaterializedObject already
+// made that guarantee before either object could exist at all).
+//
+// Panics if cp is malformed -- see ConformancePlan.Validate's own doc
+// comment for why this must be checked here, unconditionally, rather
+// than left to whichever per-field call paths execution happens to
+// take.
 func Evaluate(
-	intent, observed map[string]interface{},
+	intent, observed materialized.MaterializedObject,
 	obs *conformance.Observation,
 	cp ConformancePlan,
 ) ObjectVerdict {
-	if !canonical.IsValue(intent) {
-		panic("plan: intent is not a representable CIC value tree")
-	}
-	if !canonical.IsValue(observed) {
-		panic("plan: observed is not a representable CIC value tree")
-	}
 	cp.Validate()
 
 	fields := make(map[string]conformance.FieldVerdict)
 	consumed := make(map[string]ConsumedField)
 
 	for _, fp := range cp.Scalars {
-		classifyAt(fields, consumed, intent, observed, obs, fp.Path, fp.Compare)
+		coverage := scalarCoverage(observed, fp.Path, obs)
+		classifyAt(fields, consumed, intent, observed, coverage, fp.Path, fp.Compare)
 	}
 
 	for _, coll := range cp.Collections {
 		for _, ek := range elementKeys(intent, observed, coll) {
 			for _, ef := range coll.Elements {
 				path := coll.Path + "/{" + ek + "}/" + ef.Path
-				classifyAt(fields, consumed, intent, observed, obs, path, ef.Compare)
+				// Element-level paths stay Observation-authoritative --
+				// see scalarCoverage's own doc comment for why only
+				// scalar (single-segment) paths get the other rule.
+				coverage := obs.Coverage(path)
+				classifyAt(fields, consumed, intent, observed, coverage, path, ef.Compare)
 			}
 		}
 	}
@@ -345,15 +374,39 @@ func Evaluate(
 	}
 }
 
+// scalarCoverage is the Go peer of plan.rs's own scalar_coverage --
+// see the package doc comment and that function's own doc comment for
+// the full reasoning. For a single-segment (non-collection,
+// non-bracket) path, the observed root's own FieldEvidence is
+// authoritative whenever it carries a Coverage of its own; obs is
+// consulted only as a fallback, for a path the root has no opinion on
+// (an Intent-evidence field, or a key NewMaterializedObject's own
+// Complete check already makes impossible for an actual schema key --
+// but this function does not assume that invariant reaches it
+// unbroken).
+func scalarCoverage(observed materialized.MaterializedObject, path string, obs *conformance.Observation) conformance.Coverage {
+	key := strings.Trim(path, "/")
+	if key == "" || strings.Contains(key, "/") || strings.Contains(key, "{") {
+		return obs.Coverage(path)
+	}
+	field, ok := observed.Get(key)
+	if !ok {
+		return obs.Coverage(path)
+	}
+	if coverage, ok := field.Evidence.Coverage(); ok {
+		return coverage
+	}
+	return obs.Coverage(path)
+}
+
 func classifyAt(
 	fields map[string]conformance.FieldVerdict,
 	consumed map[string]ConsumedField,
-	intent, observed map[string]interface{},
-	obs *conformance.Observation,
+	intent, observed materialized.MaterializedObject,
+	coverage conformance.Coverage,
 	path string,
 	ct conformance.CompareType,
 ) {
-	coverage := obs.Coverage(path)
 	iv, iPresent := resolvePath(intent, path)
 	ov, _ := resolvePath(observed, path)
 	// A missing path resolves to nil here (resolvePath's own ok=false
@@ -397,9 +450,9 @@ func aggregate(fields map[string]conformance.FieldVerdict) ObjectConformance {
 // collection across the intent and observed lists, keyed by the
 // collection's topology -- the Go peer of plan.rs's own element_keys,
 // identical to conformance.go's own elementKeys.
-func elementKeys(intent, observed map[string]interface{}, cp CollectionPlan) []string {
+func elementKeys(intent, observed materialized.MaterializedObject, cp CollectionPlan) []string {
 	seen := map[string]struct{}{}
-	for _, root := range []map[string]interface{}{intent, observed} {
+	for _, root := range []materialized.MaterializedObject{intent, observed} {
 		v, ok := resolvePath(root, cp.Path)
 		if !ok {
 			continue
@@ -422,20 +475,50 @@ func elementKeys(intent, observed map[string]interface{}, cp CollectionPlan) []s
 	return keys
 }
 
-// resolvePath walks a canonical path ("/a/b", or "/list/{key=val}/field",
-// or, for a multi-key collection, "/list/{k1=v1,k2=v2}/field") into a
-// nested value, returning the value found and whether it was found at
-// all -- the Go peer of plan.rs's own resolve_path. See the package
+// resolvePath resolves path's first segment against root itself -- a
+// MaterializedObject key lookup, never a "{...}" collection-identity
+// segment (that syntax only ever selects an element WITHIN a field's
+// own value, never a schema key itself) -- then delegates whatever
+// remains of path to resolveIn, which does the actual walking through
+// the resulting value. The Go peer of plan.rs's own resolve_path; see
+// the package doc comment ("Wired to materialized.MaterializedObject
+// at the root") for why only this first step changed.
+func resolvePath(root materialized.MaterializedObject, path string) (interface{}, bool) {
+	trimmed := strings.Trim(path, "/")
+	first, rest, hasRest := strings.Cut(trimmed, "/")
+	if first == "" {
+		return nil, false
+	}
+	field, ok := root.Get(first)
+	if !ok {
+		return nil, false
+	}
+	value, ok := field.Value()
+	if !ok {
+		return nil, false
+	}
+	if !hasRest {
+		return value, true
+	}
+	return resolveIn(value, rest)
+}
+
+// resolveIn walks a canonical path ("a/b", or "list/{key=val}/field",
+// or, for a multi-key collection, "list/{k1=v1,k2=v2}/field") through
+// an already-resolved value -- everything in a path past resolvePath's
+// own top-level MaterializedObject lookup -- returning the value found
+// and whether it was found at all -- the Go peer of plan.rs's own
+// resolve_in (plan.rs's own, renamed resolve_path). See the package
 // doc for why this fixes, rather than ports, conformance.go's own
 // single-split "{...}" bug.
 //
 // A "{...}" segment is only ever matched against map[string]interface{}
-// elements, same as real Go's resolvePath and plan.rs's resolve_path --
+// elements, same as real Go's resolvePath and plan.rs's resolve_in --
 // a TopologySet element (a bracketed segment with no "=") has no
 // working case here either, the same named, inherited limitation
 // plan.rs's own doc comment leaves unfixed because nothing exercises
 // it.
-func resolvePath(root interface{}, path string) (interface{}, bool) {
+func resolveIn(root interface{}, path string) (interface{}, bool) {
 	cur := root
 	for _, seg := range strings.Split(strings.Trim(path, "/"), "/") {
 		if seg == "" {
