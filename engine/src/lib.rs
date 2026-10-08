@@ -147,6 +147,15 @@
 //! own two digests (`conformance_plan_digest`/`observation_digest`) -- all
 //! four cross-checked against an independent Go peer (`go/`) through a
 //! shared differential corpus (`conformance/differential/`).
+//! `digest_projection` also now digests a [`materialized::
+//! MaterializedObject`] itself (`materialized_object_projection`/
+//! `materialized_object_digest`) -- F16, closing the `IntentDigest` gap
+//! F's own status block once misattributed to a `Normalize` stage this
+//! engine will never build; see `digest_projection`'s own module doc
+//! comment for the new wire-layout decision this closure makes (B7 left
+//! open how capability/coverage/provenance nest in the canonical byte
+//! tree). No Go peer or differential vectors for this one yet -- same
+//! Rust-then-Go sequencing as everywhere else.
 //!
 //! **`materialized` exists** ([`materialized::MaterializedObject`]/
 //! [`materialized::MaterializedField`]/[`materialized::FieldEvidence`]),

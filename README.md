@@ -31,6 +31,14 @@ correction to the pipeline framing this file used to carry.
 > `collection.rs` and real Go, fixed on the Rust side in the same pass;
 > `go/plan` peers against `plan.rs`'s already-fixed multi-key path
 > resolution, not `conformance.go`'s original single-split bug.
+> `digest_projection` also now digests a `MaterializedObject` itself
+> (`materialized_object_projection`/`materialized_object_digest`) — F16,
+> closing the `IntentDigest` gap F's own status block once misattributed
+> to a `Normalize` stage this engine will never build; see
+> `digest_projection`'s own module doc comment for the new wire-layout
+> decision this closure makes (B7 left open how
+> capability/coverage/provenance nest in the canonical byte tree). No Go
+> peer or differential vectors for this one yet.
 >
 > **`materialized` exists.** `MaterializedObject`/`MaterializedField`/
 > `FieldEvidence` (`engine/src/materialized.rs`) implement section B3's

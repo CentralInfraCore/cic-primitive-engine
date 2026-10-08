@@ -3,13 +3,57 @@
 //! value data `evaluate` records (`plan.rs`'s `ObjectVerdict::consumed`) —
 //! the step F8's own doc comment named as separate and not yet done.
 //!
-//! This module does not decide anything new: F5 already specified both
+//! This module does not decide anything new for `plan_digest_projection`/
+//! `observation_digest_projection`: F5 already specified both
 //! projections' exact `Value`-tree shape and ordering rule. It only
 //! builds that shape from this engine's own already-existing types,
 //! rather than inventing a fresh one.
+//!
+//! # `materialized_object_projection` -- the corrected-scope `IntentDigest` successor, and a new wire-layout decision
+//!
+//! F's own "Open" note (`MATERIALIZATION-SPEC.md`) named a real gap,
+//! corrected 2026-10-08 after #39: Go's `SpecDigest`/`IntentDigest`
+//! canonicalize an intent *after* running its own `ExpandSpec`/
+//! `normalizeNumbers` (Normalize-stage work) -- this engine never runs
+//! that step on anything, by the scope correction, so an "intent
+//! digest" here cannot mean "digest of a freshly-normalized value" the
+//! way it does in Go. It means something narrower and already
+//! available: digest of an object the environment has *already*
+//! materialized and handed over as a [`crate::materialized::
+//! MaterializedObject`].
+//!
+//! **Unlike `plan_digest_projection`/`observation_digest_projection`,
+//! this makes a new decision, not just a wiring one:** B7 committed
+//! *that* capability/coverage/provenance are part of the materialized
+//! semantic output `output_digest` must cover, but explicitly left
+//! *how* they nest in the canonical byte tree to "C4/E2b's own open
+//! layout questions" -- never actually closed since. The shape below
+//! closes it, grounded directly in B1/B3's already-decided axis model,
+//! not invented freely:
+//!
+//! ```text
+//! Map { "fields": Seq[ Map{ "key", "capability", <axis>, "value"? } ] }
+//! ```
+//!
+//! `<axis>` is never padded with a placeholder for an axis that
+//! doesn't apply (`BOUNDARY.md`'s own anti-placeholder principle,
+//! already applied by F5 to `value`/coverage above): an `Intent` field
+//! carries `"provenance"` only; an `Observation` field carries
+//! `"coverage"` only; a `DerivedObservation` field carries both --
+//! B3's own "a derived state field carries both... simultaneously,"
+//! with `"provenance"` always exactly `"derived"` there (the same fact
+//! `FieldEvidence::DerivedObservation`'s own doc comment names: that
+//! variant stores no separate `Provenance` field because it is always
+//! exactly one value). `"key"`, not `"path"`: unlike F5's own
+//! projections, which walk potentially-nested paths, a
+//! `MaterializedObject`'s own fields are always exactly one flat
+//! top-level key, by the Complete property's own definition -- naming
+//! it `"path"` to match F5's vocabulary would imply a nesting capacity
+//! this object does not have.
 
 use crate::canonical::{digest, to_canonical_json};
 use crate::error::Result;
+use crate::materialized::{FieldEvidence, MaterializedObject, Provenance};
 use crate::plan::{CollectionPlan, ConformancePlan, ConsumedField, FieldPlan};
 use crate::reader::{Map, Value};
 use std::collections::BTreeMap;
@@ -120,6 +164,60 @@ pub fn observation_digest(consumed: &BTreeMap<String, ConsumedField>) -> Result<
     Ok(digest(&to_canonical_json(&observation_digest_projection(
         consumed,
     ))?))
+}
+
+/// `MaterializedObject`'s own canonical projection -- see the module
+/// doc comment ("the corrected-scope `IntentDigest` successor") for the
+/// shape and the reasoning behind it. `fields` sorted by `key`,
+/// byte-wise -- `MaterializedObject::iter`'s own order already *is*
+/// that sort (its internal `BTreeMap`), so this function does not
+/// re-sort what's already sorted, the same reasoning
+/// `observation_digest_projection` already applies to `consumed`.
+#[must_use]
+pub fn materialized_object_projection(obj: &MaterializedObject) -> Value {
+    let mut fields = Vec::with_capacity(obj.len());
+    for (key, field) in obj.iter() {
+        let mut m = Map::default();
+        m.push("key", Value::Str(key.clone()));
+        m.push(
+            "capability",
+            Value::Str(field.capability.as_str().to_string()),
+        );
+        match &field.evidence {
+            FieldEvidence::Intent(ie) => {
+                m.push(
+                    "provenance",
+                    Value::Str(ie.provenance().as_str().to_string()),
+                );
+            }
+            FieldEvidence::Observation(cf) => {
+                m.push("coverage", Value::Str(cf.coverage().as_str().to_string()));
+            }
+            FieldEvidence::DerivedObservation(cf) => {
+                m.push("coverage", Value::Str(cf.coverage().as_str().to_string()));
+                m.push(
+                    "provenance",
+                    Value::Str(Provenance::Derived.as_str().to_string()),
+                );
+            }
+        }
+        if let Some(v) = field.value() {
+            m.push("value", v.clone());
+        }
+        fields.push(Value::Map(m));
+    }
+    let mut m = Map::default();
+    m.push("fields", Value::Seq(fields));
+    Value::Map(m)
+}
+
+/// `materialized_object_digest = digest(to_canonical_json(
+/// materialized_object_projection))` -- the corrected-scope
+/// `IntentDigest` successor itself.
+pub fn materialized_object_digest(obj: &MaterializedObject) -> Result<String> {
+    Ok(digest(&to_canonical_json(
+        &materialized_object_projection(obj),
+    )?))
 }
 
 #[cfg(test)]
@@ -374,6 +472,139 @@ mod tests {
             observation_digest(&verdict_b.consumed).unwrap(),
             "observation_digest must differ when the observed VALUE \
              differs, even though coverage is identical on both sides"
+        );
+    }
+
+    fn one_field_object(field: MaterializedField) -> crate::materialized::MaterializedObject {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".to_string(), field);
+        crate::materialized::MaterializedObject::try_new(fields, &keys(&["x"]))
+            .expect("single key, trivially complete")
+    }
+
+    fn keys(ks: &[&str]) -> BTreeSet<String> {
+        ks.iter().map(|s| s.to_string()).collect()
+    }
+
+    // Pins the exact per-kind shape the module doc comment decides, not
+    // just trusting the doc prose -- the same discipline
+    // plan_projection_has_f5s_exact_shape already applies to F5's own
+    // projections.
+    #[test]
+    fn materialized_object_projection_has_the_decided_shape_per_evidence_kind() {
+        let intent_field = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Intent(IntentEvidence::Authored(Some(Value::Str(
+                "E4.Flex".into(),
+            )))),
+        };
+        assert_eq!(
+            materialized_object_projection(&one_field_object(intent_field)),
+            map(&[(
+                "fields",
+                Value::Seq(vec![map(&[
+                    ("key", Value::Str("x".into())),
+                    ("capability", Value::Str("implemented".into())),
+                    ("provenance", Value::Str("authored".into())),
+                    ("value", Value::Str("E4.Flex".into())),
+                ])]),
+            )])
+        );
+
+        let observation_field = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Observation(ConsumedField::Observed(Value::Int(16))),
+        };
+        assert_eq!(
+            materialized_object_projection(&one_field_object(observation_field)),
+            map(&[(
+                "fields",
+                Value::Seq(vec![map(&[
+                    ("key", Value::Str("x".into())),
+                    ("capability", Value::Str("implemented".into())),
+                    ("coverage", Value::Str("observed".into())),
+                    ("value", Value::Int(16)),
+                ])]),
+            )])
+        );
+
+        // B3: "a derived state field carries both... simultaneously" --
+        // coverage AND provenance, provenance always exactly "derived".
+        let derived_field = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::DerivedObservation(ConsumedField::Observed(Value::Str(
+                "RUNNING".into(),
+            ))),
+        };
+        assert_eq!(
+            materialized_object_projection(&one_field_object(derived_field)),
+            map(&[(
+                "fields",
+                Value::Seq(vec![map(&[
+                    ("key", Value::Str("x".into())),
+                    ("capability", Value::Str("implemented".into())),
+                    ("coverage", Value::Str("observed".into())),
+                    ("provenance", Value::Str("derived".into())),
+                    ("value", Value::Str("RUNNING".into())),
+                ])]),
+            )])
+        );
+    }
+
+    // BOUNDARY.md's own anti-placeholder principle: no value present
+    // means no "value" key at all, never a null placeholder -- checked
+    // for both the Observation/Absent case and B2's still-open
+    // authored-absent case.
+    #[test]
+    fn materialized_object_projection_omits_value_rather_than_padding_with_null() {
+        let absent_field = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Observation(ConsumedField::Absent),
+        };
+        let got = materialized_object_projection(&one_field_object(absent_field));
+        let Value::Map(m) = &got else { panic!() };
+        let Value::Seq(fields) = m.get("fields").unwrap() else {
+            panic!()
+        };
+        let Value::Map(entry) = &fields[0] else {
+            panic!()
+        };
+        assert!(
+            entry.get("value").is_none(),
+            "an Absent field must have no \"value\" key at all, got {entry:?}"
+        );
+
+        let authored_absent_field = MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Intent(IntentEvidence::Authored(None)),
+        };
+        let got = materialized_object_projection(&one_field_object(authored_absent_field));
+        let Value::Map(m) = &got else { panic!() };
+        let Value::Seq(fields) = m.get("fields").unwrap() else {
+            panic!()
+        };
+        let Value::Map(entry) = &fields[0] else {
+            panic!()
+        };
+        assert!(
+            entry.get("value").is_none(),
+            "an authored-absent field must have no \"value\" key at all, got {entry:?}"
+        );
+    }
+
+    #[test]
+    fn materialized_object_digest_distinguishes_different_values() {
+        let a = one_field_object(MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Observation(ConsumedField::Observed(Value::Int(16))),
+        });
+        let b = one_field_object(MaterializedField {
+            capability: Capability::Implemented,
+            evidence: FieldEvidence::Observation(ConsumedField::Observed(Value::Int(32))),
+        });
+        assert_ne!(
+            materialized_object_digest(&a).unwrap(),
+            materialized_object_digest(&b).unwrap(),
         );
     }
 }
