@@ -12,6 +12,18 @@ Sibling artifact to the materialized data (C1), bound to it by digest, never
 embedded in the `PrimitiveIR` tree. Produced on every materialization call
 (C2), not only at release.
 
+> **Status note, added 2026-10-09, after the scope correction
+> (`#39`, `docs/MATERIALIZATION-SPEC.md`):** "produced on every
+> materialization call" (C2) describes an obligation on whichever
+> component performs materialization — `cic-primitive-engine` never does,
+> and is not the component this schema was ever decided to be produced
+> *by*; C1/C4 decided *which repo hosts the contract text*, not which
+> component emits instances of it. No code anywhere in this crate, and —
+> as far as this repository can show — anywhere else in the CIC
+> ecosystem, currently produces a receipt matching this schema. The
+> field-by-field layout below remains the decided contract for when one
+> is; it is not re-decided or withdrawn by this note.
+
 ## Fields
 
 ```text

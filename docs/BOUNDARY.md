@@ -3,6 +3,25 @@
 **Nothing crosses into a module except a fully materialized, normalized and
 validated data set.**
 
+> **Status note, added 2026-10-09, after the scope correction
+> (`#39`, `docs/MATERIALIZATION-SPEC.md`):** this document describes the
+> FULL custody-boundary vision — `Parse` through `Validate` producing the
+> `Validated<Materialized<T>>` value sketched below, plus the receipt that
+> proves it. `cic-primitive-engine` does not build that pipeline and never
+> will; `Parse`/`Normalize`/`Resolve`/`Validate` are permanently the
+> environment's job. What this crate actually builds is narrower: a
+> boundary **check** against a candidate the environment already claims is
+> materialized (`MaterializedObject::try_new`,
+> `docs/MATERIALIZATION-SPEC.md`'s B section), plus canonicalization,
+> conformance and digest evidence over it (section F). The receipt
+> described below (["The receipt"](#the-receipt)) is not produced anywhere
+> in this crate, or — as far as this repository's own code can show —
+> anywhere else in the CIC ecosystem yet; `docs/RECEIPT-SCHEMA.md` carries
+> the same note. The rest of this document's reasoning — why the type
+> cannot survive serialization, why defaults follow Role, why two
+> validations exist — stays correct about the *design*; what changed is
+> who, if anyone yet, builds it.
+
 This is the engine's reason to exist. It is a custody boundary, not a
 convenience: the states below must not be *representable* on the module side.
 

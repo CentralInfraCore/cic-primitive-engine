@@ -158,11 +158,32 @@ give it any.
   (C4) was specific to the receipt; this is a different schema, and
   nothing here extends that closure to it by default. Genuinely open,
   not silently inherited.
-- An intent-digest-equivalent field (Go's own `IntentDigest`) — F8/F9
-  already named why one isn't included: it would need a `SpecDigest`-
-  style expand+normalize step this engine's `Normalize` stage doesn't
-  have yet, so it's deferred, not omitted by oversight.
-- How a Go peer of this artifact would be produced — there is no Go
-  implementation of `plan.rs`/`digest_projection.rs`'s logic; this schema
-  describes what *this engine's* verdict artifact contains, independent
-  of whether or when a second-language implementation exists.
+- An intent-digest-equivalent field (Go's own `IntentDigest`) in *this*
+  schema. **Corrected 2026-10-09:** the original reasoning here —
+  "it would need a `SpecDigest`-style expand+normalize step this
+  engine's `Normalize` stage doesn't have yet" — is the same stale
+  framing `docs/MATERIALIZATION-SPEC.md`/`docs/OPEN-QUESTIONS-GO-RUST.md`/
+  `plan.rs` already corrected on 2026-10-08 (PR #48) and missed here:
+  `Normalize` is permanently the environment's job, not a stage this
+  engine will ever build. F16 (`digest_projection.rs`'s
+  `materialized_object_digest`, PR #49, with its Go peer landed PR #50)
+  has since closed the analogous gap for a `MaterializedObject` itself —
+  but that digests the *object*, not this verdict artifact's own
+  `object`/`fields`/plan/observation fields, so it is a different
+  artifact's digest, not a field this schema was missing. This schema
+  still carries no intent-digest field of its own; that remains true,
+  just not for the reason originally given.
+
+## Status update, 2026-10-09: the Go peer now exists
+
+This section used to list "how a Go peer of this artifact would be
+produced" under "Not decided here" — **that line is now factually out
+of date, not merely open, so it has been removed rather than corrected
+in place.** A Go peer of `plan.rs`/`digest_projection.rs`'s logic exists
+(`go/plan`, `go/digestprojection`), cross-checked against the Rust side
+through `conformance/differential/plan/`+`digest/` since F11-F15,
+including the `MaterializedObjectDigest` function added by PR #50. This
+verdict artifact's own field layout above is produced identically by
+both languages' `evaluate`/`Evaluate` plus
+`conformance_plan_digest`/`observation_digest` —
+`ConformancePlanDigest`/`ObservationDigest` on the Go side.
