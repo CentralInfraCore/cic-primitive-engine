@@ -1,0 +1,9 @@
+{
+  "object": {
+    "fields": [
+      {"key": "a", "capability": "implemented", "coverage": "observed", "value": 16},
+      {"key": "b", "capability": "implemented", "provenance": "authored", "value": "E4.Flex"},
+      {"key": "c", "capability": "not_implemented", "coverage": "observed", "provenance": "derived", "value": "RUNNING"}
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:44ada21826d194f78ad20965344f0601148c3c7089684f0bdb8060726feda1bb",
+  "why": "the exact same three fields as materialized_object_digest_mixed_evidence, declared in a different order -- pinned to the SAME digest as that vector, proving MaterializedObjectProjection's own \"fields sorted by key, byte-wise\" rule actually holds across both languages, the same way plan_digest_is_independent_of_declaration_order already proves it for PlanDigestProjection."
+}

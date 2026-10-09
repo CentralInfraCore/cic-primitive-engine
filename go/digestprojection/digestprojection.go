@@ -22,6 +22,22 @@
 // container everywhere just in case"). This package is exactly that
 // future caller, and that point: ObservationDigestProjection sorts
 // consumed's keys itself, where the Rust side gets the sort for free.
+//
+// # MaterializedObjectProjection -- the Go peer of F16
+//
+// engine/src/digest_projection.rs's own module doc comment
+// ("the corrected-scope IntentDigest successor, and a new wire-layout
+// decision") made that decision on the Rust side (PR #49):
+//
+//	map[string]interface{}{
+//	  "fields": []interface{}{ map{"key", "capability", <axis>, "value"?}, ... },
+//	}
+//
+// That decision is not re-made here -- this package only builds the
+// identical shape from go/materialized's own types, the same relation
+// PlanDigestProjection/ObservationDigestProjection already have to
+// plan.rs's decisions above. See MaterializedObjectProjection's own
+// doc comment for the per-variant field rules.
 package digestprojection
 
 import (
@@ -29,6 +45,7 @@ import (
 	"sort"
 
 	"github.com/CentralInfraCore/cic-primitive-engine/go/canonical"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/plan"
 )
 
@@ -190,6 +207,76 @@ func ObservationDigestProjection(consumed map[string]plan.ConsumedField) map[str
 // verbatim).
 func ObservationDigest(consumed map[string]plan.ConsumedField) (string, error) {
 	b, err := canonical.ToCanonicalJSON(ObservationDigestProjection(consumed))
+	if err != nil {
+		return "", err
+	}
+	return canonical.Digest(b), nil
+}
+
+// MaterializedObjectProjection builds the shape
+// materialized_object_projection decides (engine/src/digest_projection.rs's
+// own module doc comment, "the corrected-scope IntentDigest
+// successor"):
+//
+//	map[string]interface{}{
+//	  "fields": []interface{}{ map{"key", "capability", <axis>, "value"?}, ... },
+//	}
+//
+// <axis> is never padded with a placeholder for an axis that does not
+// apply (BOUNDARY.md's own anti-placeholder principle, already
+// applied by ObservationDigestProjection, above, to "value"): an
+// Intent field carries "provenance" only; an Observation field
+// carries "coverage" only; a DerivedObservation field carries both,
+// "provenance" always exactly "derived" (FieldEvidence.IsDerived --
+// not a second, independently stored Provenance, the same reason
+// materialized.rs's own FieldEvidence::DerivedObservation doc comment
+// gives). "key", not "path": a MaterializedObject's own fields are
+// always exactly one flat top-level key, by the Complete property's
+// own definition.
+//
+// fields sorted by key, byte-wise -- obj.Keys() already returns that
+// order; this package does not re-sort what that call already sorted,
+// the same way PlanDigestProjection/ObservationDigestProjection,
+// above, do not re-sort an already-sorted input twice.
+func MaterializedObjectProjection(obj materialized.MaterializedObject) map[string]interface{} {
+	keys := obj.Keys()
+	fields := make([]interface{}, 0, len(keys))
+	for _, k := range keys {
+		f, ok := obj.Get(k)
+		if !ok {
+			// Keys() and Get() both read obj.fields; a key Keys() just
+			// returned cannot be absent from Get() a moment later --
+			// obj is immutable after NewMaterializedObject (no exported
+			// mutator exists). Reaching this would mean that invariant
+			// broke, not a legitimate input to handle gracefully.
+			panic(fmt.Sprintf("digestprojection: key %q from Keys() missing from Get()", k))
+		}
+		entry := map[string]interface{}{
+			"key":        k,
+			"capability": string(f.Capability),
+		}
+		if cov, hasCov := f.Evidence.Coverage(); hasCov {
+			entry["coverage"] = string(cov)
+			if f.Evidence.IsDerived() {
+				entry["provenance"] = string(materialized.ProvenanceDerived)
+			}
+		} else if prov, hasProv := f.Evidence.Provenance(); hasProv {
+			entry["provenance"] = string(prov)
+		}
+		if v, ok := f.Value(); ok {
+			entry["value"] = v
+		}
+		fields = append(fields, entry)
+	}
+	return map[string]interface{}{"fields": fields}
+}
+
+// MaterializedObjectDigest is
+// digest(to_canonical_json(MaterializedObjectProjection)) -- the Go
+// peer of materialized_object_digest, the corrected-scope IntentDigest
+// successor itself.
+func MaterializedObjectDigest(obj materialized.MaterializedObject) (string, error) {
+	b, err := canonical.ToCanonicalJSON(MaterializedObjectProjection(obj))
 	if err != nil {
 		return "", err
 	}

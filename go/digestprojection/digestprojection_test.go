@@ -234,3 +234,133 @@ func TestObservationProjectionRejectsZeroConsumedField(t *testing.T) {
 		ObservationDigestProjection(map[string]plan.ConsumedField{"/x": zero})
 	})
 }
+
+// oneFieldObject wraps a single field into a MaterializedObject --
+// mirrors digest_projection.rs's own one_field_object test helper.
+func oneFieldObject(t *testing.T, field materialized.MaterializedField) materialized.MaterializedObject {
+	t.Helper()
+	fields := map[string]materialized.MaterializedField{"x": field}
+	obj, err := materialized.NewMaterializedObject(fields, map[string]struct{}{"x": {}})
+	if err != nil {
+		t.Fatalf("single key, trivially complete: %v", err)
+	}
+	return obj
+}
+
+// Mirrors digest_projection.rs's
+// materialized_object_projection_has_the_decided_shape_per_evidence_kind
+// -- pins the exact per-kind shape the package doc comment decides,
+// not just trusting the doc prose, the same discipline
+// TestPlanProjectionHasF5sExactShape already applies to PlanDigestProjection.
+func TestMaterializedObjectProjectionHasTheDecidedShapePerEvidenceKind(t *testing.T) {
+	intentField := materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewIntentFieldEvidence(materialized.NewAuthoredIntentEvidence("E4.Flex", true)),
+	}
+	got := MaterializedObjectProjection(oneFieldObject(t, intentField))
+	want := map[string]interface{}{
+		"fields": []interface{}{
+			map[string]interface{}{
+				"key":        "x",
+				"capability": "implemented",
+				"provenance": "authored",
+				"value":      "E4.Flex",
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("intent field: got %#v, want %#v", got, want)
+	}
+
+	observationField := materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageObserved, 16),
+	}
+	got = MaterializedObjectProjection(oneFieldObject(t, observationField))
+	want = map[string]interface{}{
+		"fields": []interface{}{
+			map[string]interface{}{
+				"key":        "x",
+				"capability": "implemented",
+				"coverage":   "observed",
+				"value":      16,
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("observation field: got %#v, want %#v", got, want)
+	}
+
+	// B3: "a derived state field carries both... simultaneously" --
+	// coverage AND provenance, provenance always exactly "derived".
+	derivedField := materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewDerivedObservationFieldEvidence(conformance.CoverageObserved, "RUNNING"),
+	}
+	got = MaterializedObjectProjection(oneFieldObject(t, derivedField))
+	want = map[string]interface{}{
+		"fields": []interface{}{
+			map[string]interface{}{
+				"key":        "x",
+				"capability": "implemented",
+				"coverage":   "observed",
+				"provenance": "derived",
+				"value":      "RUNNING",
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("derived observation field: got %#v, want %#v", got, want)
+	}
+}
+
+// Mirrors digest_projection.rs's
+// materialized_object_projection_omits_value_rather_than_padding_with_null
+// -- BOUNDARY.md's own anti-placeholder principle: no value present
+// means no "value" key at all, never a null placeholder.
+func TestMaterializedObjectProjectionOmitsValueRatherThanPaddingWithNull(t *testing.T) {
+	absentField := materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageAbsent, nil),
+	}
+	got := MaterializedObjectProjection(oneFieldObject(t, absentField))
+	entry := got["fields"].([]interface{})[0].(map[string]interface{})
+	if _, ok := entry["value"]; ok {
+		t.Errorf("an Absent field must have no \"value\" key at all, got %#v", entry)
+	}
+
+	// B2's still-open authored-absent case.
+	authoredAbsentField := materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewIntentFieldEvidence(materialized.NewAuthoredIntentEvidence(nil, false)),
+	}
+	got = MaterializedObjectProjection(oneFieldObject(t, authoredAbsentField))
+	entry = got["fields"].([]interface{})[0].(map[string]interface{})
+	if _, ok := entry["value"]; ok {
+		t.Errorf("an authored-absent field must have no \"value\" key at all, got %#v", entry)
+	}
+}
+
+// Mirrors digest_projection.rs's
+// materialized_object_digest_distinguishes_different_values.
+func TestMaterializedObjectDigestDistinguishesDifferentValues(t *testing.T) {
+	a := oneFieldObject(t, materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageObserved, 16),
+	})
+	b := oneFieldObject(t, materialized.MaterializedField{
+		Capability: materialized.CapabilityImplemented,
+		Evidence:   materialized.NewObservationFieldEvidence(conformance.CoverageObserved, 32),
+	})
+	da, err := MaterializedObjectDigest(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := MaterializedObjectDigest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if da == db {
+		t.Error("materialized object digest must differ when the value differs")
+	}
+}

@@ -1,0 +1,8 @@
+{
+  "object": {
+    "fields": [
+      {"key": "a", "capability": "implemented", "coverage": "absent"},
+      {"key": "b", "capability": "deprecated", "provenance": "authored"}
+    ]
+  }
+}

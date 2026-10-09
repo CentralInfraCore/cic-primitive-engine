@@ -2036,13 +2036,20 @@ Closed:  F1-model (B's coverage/provenance axes and A's canonical form
          build, per #39; see the F16 subsection, below, for the new
          wire-layout decision this closure also makes, since B7 left
          the canonical nesting of capability/coverage/provenance open).
+         F16's own Go peer now exists too (go/digestprojection's
+         MaterializedObjectProjection/MaterializedObjectDigest), with
+         three small FieldEvidence/MaterializedObject accessors it
+         needed (Provenance, IsDerived, Keys) that Rust's own exhaustive
+         match and BTreeMap iteration get for free, plus a new
+         digest-group differential vector trio cross-checking it
+         (one-field-per-kind, declaration-order independence pinned to
+         the same digest as its reordered twin, and the
+         anti-placeholder value-omission rule) -- every pinned digest
+         confirmed byte-for-byte identical between both languages first,
+         the same discipline F9's own digest vectors already follow.
 Open:    Whether the verdict artifact is itself ever signed
          (VERDICT-SCHEMA.md's own explicit non-decision, not inherited
-         from the receipt's closed "no signature field"); and
-         F16's own Go peer (go/materialized has no equivalent of
-         materialized_object_projection/materialized_object_digest yet
-         -- a named asymmetry, not a defect, same relationship F6-F9's
-         own Rust-then-Go sequencing has everywhere else).
+         from the receipt's closed "no signature field").
 ```
 
 ### F1. The model already covers output; the executable logic doesn't exist yet
@@ -3277,11 +3284,29 @@ sort (its internal `BTreeMap`), the same "don't re-sort what's already
 sorted" reasoning F5's own `observation_digest_projection` already
 applies to `consumed`.
 
-**What this does not do:** port this to Go (`go/materialized` has no
-peer of this function yet -- a named asymmetry, same relationship
-F6-F9's own Rust-then-Go sequencing already has everywhere else), or
-add it to the cross-language differential corpus (same reason --
-nothing to cross-check against yet, not a gap in the corpus itself).
+**Go peer and differential corpus closed 2026-10-09.**
+`go/digestprojection`'s `MaterializedObjectProjection`/
+`MaterializedObjectDigest` build the identical shape from
+`go/materialized`'s own public API. Three accessors `go/materialized`
+needed that it did not have before this closure: `FieldEvidence.
+Provenance`/`FieldEvidence.IsDerived` (the per-variant discrimination
+Rust's own exhaustive `match` on `FieldEvidence::Intent`/
+`DerivedObservation` gets for free, which Go's unexported-field closure
+needs an explicit accessor for -- the same reasoning `Coverage` was
+already added under, for `scalarCoverage`'s own Go-side #41) and
+`MaterializedObject.Keys` (the deterministic byte-wise iteration order
+`iter`'s own `BTreeMap` already gives Rust for free). A new
+`conformance/differential/digest/` vector trio cross-checks it:
+`materialized_object_digest_mixed_evidence`/`_reordered` (one field per
+`FieldEvidence` kind; the reordered twin is pinned to the exact same
+digest as the first, proving the "sorted by key" rule holds across both
+languages the same way `plan_digest_is_independent_of_declaration_order`
+already proves it for `PlanDigestProjection`) and
+`materialized_object_digest_omits_absent_value` (the anti-placeholder
+value-omission rule, cross-language). Every pinned digest was computed
+from the real functions in BOTH languages and confirmed byte-for-byte
+identical before being pinned -- not invented or hand-computed, the
+same discipline every other `digest` vector already follows.
 
 ## G — Differential conformance (PARTIALLY DECIDED, not closed)
 

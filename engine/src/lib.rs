@@ -154,8 +154,29 @@
 //! engine will never build; see `digest_projection`'s own module doc
 //! comment for the new wire-layout decision this closure makes (B7 left
 //! open how capability/coverage/provenance nest in the canonical byte
-//! tree). No Go peer or differential vectors for this one yet -- same
-//! Rust-then-Go sequencing as everywhere else.
+//! tree). **Both re-exported at the crate root now too** (an earlier
+//! gap: F5's own two digest functions already were, F16's two were not,
+//! an asymmetry fixed alongside its Go peer rather than left for a
+//! caller to notice by failing to compile).
+//!
+//! **F16's Go peer now exists** (`go/digestprojection`'s
+//! `MaterializedObjectProjection`/`MaterializedObjectDigest`), plus
+//! three new accessors on [`materialized::FieldEvidence`] it needed
+//! that Rust's own exhaustive `match` gets for free from the compiler
+//! (`Provenance`, `IsDerived`) and a `Keys` method on
+//! [`materialized::MaterializedObject`] (the deterministic iteration
+//! order Rust's `BTreeMap` already gives `iter` for free). **A new
+//! `conformance/differential/digest/` vector group cross-checks it**:
+//! `materialized_object_digest_mixed_evidence`/`_reordered` (one field
+//! per `FieldEvidence` kind, confirming `MaterializedObjectProjection`'s
+//! own "sorted by key" rule holds across both languages, the same
+//! declaration-order-independence `plan_digest_is_independent_of_
+//! declaration_order` already proves for `PlanDigestProjection`) and
+//! `materialized_object_digest_omits_absent_value` (the anti-placeholder
+//! rule, cross-language). Every pinned digest was computed from the
+//! real functions in BOTH languages and confirmed byte-for-byte
+//! identical first, the same discipline every other `digest` vector
+//! already follows.
 //!
 //! **`materialized` exists** ([`materialized::MaterializedObject`]/
 //! [`materialized::MaterializedField`]/[`materialized::FieldEvidence`]),
@@ -212,8 +233,8 @@ pub use conformance::{
     classify_field, classify_field_value, compare, CompareType, Coverage, FieldVerdict, Observation,
 };
 pub use digest_projection::{
-    conformance_plan_digest, observation_digest, observation_digest_projection,
-    plan_digest_projection,
+    conformance_plan_digest, materialized_object_digest, materialized_object_projection,
+    observation_digest, observation_digest_projection, plan_digest_projection,
 };
 pub use error::{code, Error, Result, Stage};
 pub use materialized::{
