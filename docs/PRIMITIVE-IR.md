@@ -7,6 +7,25 @@ The engine's output, and the only thing generators may consume.
 > first is how the previous attempt ended up with a model that could not hold
 > its own version number.
 
+> **Status note, added 2026-10-09, after the scope correction
+> (`#39`, `docs/MATERIALIZATION-SPEC.md`):** "the engine's output" here means
+> the output of the full `Parse`→`Validate` pipeline this crate will never
+> build (permanently the environment's job). This crate's own closest
+> analogue is `MaterializedObject` (`docs/MATERIALIZATION-SPEC.md`'s B
+> section) — a narrower, already-decided shape the *environment* produces
+> and hands to this crate, not an IR this crate itself emits. Read the
+> properties below against that narrower object, not the original vision:
+> **Canonical** holds in full (section A). **Complete** holds only
+> *relative to a caller-declared key set* (`MaterializedObject::try_new`'s
+> own stated scope — this crate does not independently know what a schema
+> declares). **Closed** does not hold in the strong sense described here:
+> domain-semantic interpretation (Role, references, Shape algebra) is the
+> environment's job, not this crate's, per the scope correction. **Traceable**
+> holds per field (`FieldEvidence`'s capability/coverage/provenance axes,
+> B3) but not as a document-level receipt — see `docs/RECEIPT-SCHEMA.md`'s
+> own status note. **Versioned** has no document-level answer yet; nothing
+> in this crate assigns a `MaterializedObject` its own version field.
+
 ## Required properties
 
 **Versioned.** Every IR document declares its version. A consumer that has not
