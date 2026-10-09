@@ -174,7 +174,7 @@ give it any.
   still carries no intent-digest field of its own; that remains true,
   just not for the reason originally given.
 
-## Status update, 2026-10-09: the Go peer now exists
+## Status update, 2026-10-09: the Go peer now exists for the computation, not yet a first-class artifact
 
 This section used to list "how a Go peer of this artifact would be
 produced" under "Not decided here" — **that line is now factually out
@@ -182,8 +182,21 @@ of date, not merely open, so it has been removed rather than corrected
 in place.** A Go peer of `plan.rs`/`digest_projection.rs`'s logic exists
 (`go/plan`, `go/digestprojection`), cross-checked against the Rust side
 through `conformance/differential/plan/`+`digest/` since F11-F15,
-including the `MaterializedObjectDigest` function added by PR #50. This
-verdict artifact's own field layout above is produced identically by
-both languages' `evaluate`/`Evaluate` plus
-`conformance_plan_digest`/`observation_digest` —
-`ConformancePlanDigest`/`ObservationDigest` on the Go side.
+including the `MaterializedObjectDigest` function added by PR #50.
+
+**What exists, precisely, rather than the broader claim an earlier
+draft of this note made:** Rust's `evaluate`/Go's `Evaluate` produce
+equivalent semantic cores (`object`/`fields`, plus the `consumed` map
+each language's own `ObjectVerdict`/`Evaluate` result carries) —
+`plan.rs`'s own `ObjectVerdict` struct has exactly those three fields,
+no more. `conformance_plan_digest`/`observation_digest`
+(`ConformancePlanDigest`/`ObservationDigest` on the Go side) compute
+the two digest fields separately, from a `ConformancePlan` and a
+`consumed` map respectively, not from an `ObjectVerdict` itself.
+**Neither language has a function or type that assembles this
+document's full contract into one artifact** — nothing anywhere in
+`engine/` or `go/` sets a `verdict_schema_version`, or bundles
+`object`/`fields`/`conformance_plan_digest`/`observation_digest`
+together into the single required shape above. Go/Rust computation
+parity and digest parity are real and cross-checked; a first-class
+verdict artifact builder is not built yet, in either language.
