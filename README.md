@@ -37,8 +37,20 @@ correction to the pipeline framing this file used to carry.
 > to a `Normalize` stage this engine will never build; see
 > `digest_projection`'s own module doc comment for the new wire-layout
 > decision this closure makes (B7 left open how
-> capability/coverage/provenance nest in the canonical byte tree). No Go
-> peer or differential vectors for this one yet.
+> capability/coverage/provenance nest in the canonical byte tree), both
+> now re-exported at the crate root alongside F5's own two digest
+> functions (an asymmetry the first cut left behind, fixed here). **Its
+> Go peer now exists too** (`go/digestprojection`'s
+> `MaterializedObjectProjection`/`MaterializedObjectDigest`), plus three
+> small `FieldEvidence`/`MaterializedObject` accessors it needed
+> (`Provenance`, `IsDerived`, `Keys`) that Rust's own exhaustive `match`
+> and `BTreeMap` iteration get for free. A new `digest`-group
+> differential vector trio cross-checks it — one field per
+> `FieldEvidence` kind, declaration-order independence (pinned to the
+> *same* digest as its reordered twin), and the anti-placeholder
+> value-omission rule — every pinned digest confirmed byte-for-byte
+> identical between both languages first, same as every other `digest`
+> vector.
 >
 > **`materialized` exists.** `MaterializedObject`/`MaterializedField`/
 > `FieldEvidence` (`engine/src/materialized.rs`) implement section B3's

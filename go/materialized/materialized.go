@@ -326,6 +326,34 @@ func (fe FieldEvidence) Coverage() (conformance.Coverage, bool) {
 	}
 }
 
+// Provenance returns the Provenance fe carries and whether it has one
+// at all -- true only for Intent evidence. False for
+// Observation/DerivedObservation: a DerivedObservation field's
+// provenance is always exactly Derived (IsDerived, below), never a
+// second, independently stored Provenance value -- the same reason
+// materialized.rs's own FieldEvidence::DerivedObservation doc comment
+// gives for storing no separate Provenance field there either. Added
+// for go/digestprojection's own MaterializedObjectProjection (the
+// Go-side F16), which needs this same per-variant discrimination
+// materialized_object_projection gets for free from Rust's exhaustive
+// match.
+func (fe FieldEvidence) Provenance() (Provenance, bool) {
+	if fe.kind != evidenceIntent {
+		return "", false
+	}
+	return fe.intent.provenance, true
+}
+
+// IsDerived reports whether fe is a DerivedObservation -- the one
+// state that carries both a Coverage and a Provenance (always
+// Derived) simultaneously, B3's own "a derived state field carries
+// both... simultaneously." Added for go/digestprojection's own
+// MaterializedObjectProjection, for the same reason Provenance, above,
+// was.
+func (fe FieldEvidence) IsDerived() bool {
+	return fe.kind == evidenceDerivedObservation
+}
+
 // Valid reports whether fe is one of the states the exported
 // constructors can actually produce -- catches Go's zero value
 // (FieldEvidence{}, kind "") the same way IntentEvidence.Valid and
@@ -514,4 +542,23 @@ func (o MaterializedObject) Get(key string) (MaterializedField, bool) {
 // Len returns the number of fields in o.
 func (o MaterializedObject) Len() int {
 	return len(o.fields)
+}
+
+// Keys returns o's field keys, sorted byte-wise -- the Go peer of
+// materialized.rs's own MaterializedObject::keys. Rust's own BTreeMap
+// gives that order for free on iteration; o.fields is a plain Go map
+// (unordered by construction), so this package does the sorting Rust
+// does not need to, the same division of labor go/digestprojection's
+// own package doc comment already describes for ObservationDigest
+// ("this package is exactly that future caller, and that point").
+// Added for go/digestprojection's own MaterializedObjectProjection
+// (the Go-side F16), which needs a deterministic field order to
+// digest.
+func (o MaterializedObject) Keys() []string {
+	keys := make([]string, 0, len(o.fields))
+	for k := range o.fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

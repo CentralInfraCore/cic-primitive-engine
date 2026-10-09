@@ -9,10 +9,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cic_primitive_engine::{
-    classify_field_value, conformance_plan_digest, evaluate, observation_digest, reader,
-    Capability, Collection, CollectionPlan, CollectionTopology, CompareType, ConformancePlan,
-    ConsumedField, Coverage, FieldEvidence, FieldPlan, IntentEvidence, MaterializedField,
-    MaterializedObject, Observation, Stage,
+    classify_field_value, conformance_plan_digest, evaluate, materialized_object_digest,
+    observation_digest, reader, Capability, Collection, CollectionPlan, CollectionTopology,
+    CompareType, ConformancePlan, ConsumedField, Coverage, FieldEvidence, FieldPlan,
+    IntentEvidence, MaterializedField, MaterializedObject, Observation, Stage,
 };
 use reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -139,6 +139,15 @@ fn map_get<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
     match v {
         Value::Map(m) => m.get(key),
         _ => panic!("expected a mapping"),
+    }
+}
+
+fn parse_capability(s: &str) -> Capability {
+    match s {
+        "implemented" => Capability::Implemented,
+        "not_implemented" => Capability::NotImplemented,
+        "deprecated" => Capability::Deprecated,
+        other => panic!("unknown capability {other:?}"),
     }
 }
 
@@ -418,8 +427,77 @@ fn build_consumed(v: &Value) -> BTreeMap<String, ConsumedField> {
     out
 }
 
+/// Builds a `MaterializedObject` from a `digest`-group `"object"` fixture:
+/// `{"fields": [{"key", "capability", "coverage"?, "provenance"?, "value"?},
+/// ...]}` -- the identical per-field shape `materialized_object_projection`
+/// itself emits, so a fixture can be read directly off that function's own
+/// output. `"provenance": "derived"` alongside `"coverage"` builds
+/// `DerivedObservation` (B3: "a derived state field carries both...
+/// simultaneously"); `"coverage"` alone builds `Observation`;
+/// `"provenance"` alone builds the matching `IntentEvidence` variant.
+/// `try_new`'s own custody check is incidental here, not the thing under
+/// test (`materialized_vectors`, below, exercises that directly) -- every
+/// fixture's own field keys trivially equal its own expected key set.
+fn build_materialized_object_from_fixture(v: &Value) -> MaterializedObject {
+    let Some(Value::Seq(items)) = map_get(v, "fields") else {
+        panic!("expected sequence field \"fields\"");
+    };
+    let mut fields = BTreeMap::new();
+    let mut keys = BTreeSet::new();
+    for item in items {
+        let key = str_field(item, "key").to_string();
+        let capability = parse_capability(str_field(item, "capability"));
+        let coverage = map_get(item, "coverage").map(|v| match v {
+            Value::Str(s) => parse_coverage(s),
+            _ => panic!("expected string field \"coverage\""),
+        });
+        let provenance = map_get(item, "provenance").map(|v| match v {
+            Value::Str(s) => s.as_str(),
+            _ => panic!("expected string field \"provenance\""),
+        });
+        let value = map_get(item, "value").cloned();
+
+        let evidence = match (coverage, provenance) {
+            (Some(cov), Some("derived")) => {
+                FieldEvidence::DerivedObservation(fixture_consumed_field(cov, value))
+            }
+            (Some(cov), None) => FieldEvidence::Observation(fixture_consumed_field(cov, value)),
+            (None, Some("authored")) => FieldEvidence::Intent(IntentEvidence::Authored(value)),
+            (None, Some("schema_default")) => FieldEvidence::Intent(IntentEvidence::SchemaDefault(
+                value.expect("schema_default always carries a value"),
+            )),
+            (None, Some("derived")) => FieldEvidence::Intent(IntentEvidence::Derived(
+                value.expect("derived always carries a value"),
+            )),
+            other => panic!("field {key:?}: unsupported coverage/provenance combination {other:?}"),
+        };
+        keys.insert(key.clone());
+        fields.insert(
+            key,
+            MaterializedField {
+                capability,
+                evidence,
+            },
+        );
+    }
+    MaterializedObject::try_new(fields, &keys)
+        .expect("a fixture's own key set is trivially complete against itself")
+}
+
+fn fixture_consumed_field(coverage: Coverage, value: Option<Value>) -> ConsumedField {
+    match coverage {
+        Coverage::Observed => {
+            ConsumedField::Observed(value.expect("observed coverage must carry a value"))
+        }
+        Coverage::Absent => ConsumedField::Absent,
+        Coverage::Unobserved => ConsumedField::Unobserved,
+        Coverage::Unknown => ConsumedField::Unknown,
+    }
+}
+
 /// `conformance/differential/digest/` -- F9's `conformance_plan_digest`/
-/// `observation_digest`. Every expected digest here was computed once from
+/// `observation_digest`, plus F16's `materialized_object_digest` (the
+/// `"object"` fixtures). Every expected digest here was computed once from
 /// the real functions in BOTH languages and confirmed byte-for-byte
 /// identical before being pinned -- not invented or hand-computed -- so a
 /// failure here means one language's output actually changed, not that
@@ -443,9 +521,13 @@ fn digest_vectors() {
             let consumed = build_consumed(&v.input);
             observation_digest(&consumed)
                 .unwrap_or_else(|e| panic!("{}: observation_digest failed: {e}", v.name))
+        } else if map_get(&v.input, "object").is_some() {
+            let obj = build_materialized_object_from_fixture(map_get(&v.input, "object").unwrap());
+            materialized_object_digest(&obj)
+                .unwrap_or_else(|e| panic!("{}: materialized_object_digest failed: {e}", v.name))
         } else {
             panic!(
-                "{}: input.json has neither \"plan\" nor \"consumed\"",
+                "{}: input.json has neither \"plan\" nor \"consumed\" nor \"object\"",
                 v.name
             );
         };

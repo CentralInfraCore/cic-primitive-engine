@@ -1,0 +1,4 @@
+{
+  "digest": "sha256:a8e67a8b52ef9a748295ae12ffbaf252371ccf1a4fd4af51d0c3fe49086c5ec1",
+  "why": "a raw Observation/Absent field (a) and an authored-absent Intent field (b, B2's still-open question) both carry no value at all -- BOUNDARY.md's own anti-placeholder principle means neither emits a \"value\" key, never a null one. Confirmed byte-for-byte identical between both languages before being pinned, proving the omission itself -- not a placeholder that merely looks the same -- is what both languages actually digest."
+}

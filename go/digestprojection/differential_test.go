@@ -16,6 +16,7 @@ import (
 
 	"github.com/CentralInfraCore/cic-primitive-engine/go/collection"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/plan"
 )
 
@@ -48,6 +49,9 @@ type digestVectorInput struct {
 		Coverage string      `json:"coverage"`
 		Value    interface{} `json:"value"`
 	} `json:"consumed"`
+	Object *struct {
+		Fields []map[string]interface{} `json:"fields"`
+	} `json:"object"`
 }
 
 type digestVectorExpected struct {
@@ -65,11 +69,76 @@ func readJSON(t *testing.T, path string, v interface{}) {
 	}
 }
 
+// buildMaterializedObjectFromFixture builds a materialized.MaterializedObject
+// from a digest-group "object" fixture: {"fields": [{"key", "capability",
+// "coverage"?, "provenance"?, "value"?}, ...]} -- the identical per-field
+// shape MaterializedObjectProjection itself emits, so a fixture can be read
+// directly off that function's own output. Mirrors
+// engine/tests/differential.rs's own identical helper, field for field.
+func buildMaterializedObjectFromFixture(t *testing.T, name string, fields []map[string]interface{}) materialized.MaterializedObject {
+	t.Helper()
+	out := make(map[string]materialized.MaterializedField, len(fields))
+	keys := make(map[string]struct{}, len(fields))
+	for _, f := range fields {
+		key, _ := f["key"].(string)
+		capability, _ := f["capability"].(string)
+		coverageRaw, hasCoverage := f["coverage"]
+		provenanceRaw, hasProvenance := f["provenance"]
+		valueRaw, hasValue := f["value"]
+
+		var evidence materialized.FieldEvidence
+		switch {
+		case hasCoverage && hasProvenance:
+			prov, _ := provenanceRaw.(string)
+			if prov != "derived" {
+				t.Fatalf("%s: field %q: coverage+provenance only valid for provenance \"derived\", got %q", name, key, prov)
+			}
+			cov, _ := coverageRaw.(string)
+			evidence = materialized.NewDerivedObservationFieldEvidence(conformance.Coverage(cov), valueRaw)
+		case hasCoverage:
+			cov, _ := coverageRaw.(string)
+			evidence = materialized.NewObservationFieldEvidence(conformance.Coverage(cov), valueRaw)
+		case hasProvenance:
+			prov, _ := provenanceRaw.(string)
+			switch prov {
+			case "authored":
+				evidence = materialized.NewIntentFieldEvidence(materialized.NewAuthoredIntentEvidence(valueRaw, hasValue))
+			case "schema_default":
+				if !hasValue {
+					t.Fatalf("%s: field %q: schema_default always carries a value", name, key)
+				}
+				evidence = materialized.NewIntentFieldEvidence(materialized.NewSchemaDefaultIntentEvidence(valueRaw))
+			case "derived":
+				if !hasValue {
+					t.Fatalf("%s: field %q: derived always carries a value", name, key)
+				}
+				evidence = materialized.NewIntentFieldEvidence(materialized.NewDerivedIntentEvidence(valueRaw))
+			default:
+				t.Fatalf("%s: field %q: unknown provenance %q", name, key, prov)
+			}
+		default:
+			t.Fatalf("%s: field %q: neither \"coverage\" nor \"provenance\" present", name, key)
+		}
+
+		out[key] = materialized.MaterializedField{
+			Capability: materialized.Capability(capability),
+			Evidence:   evidence,
+		}
+		keys[key] = struct{}{}
+	}
+	obj, err := materialized.NewMaterializedObject(out, keys)
+	if err != nil {
+		t.Fatalf("%s: a fixture's own key set must be trivially complete against itself: %v", name, err)
+	}
+	return obj
+}
+
 // Every expected digest in this corpus was computed once from the real
-// ConformancePlanDigest/ObservationDigest functions in BOTH languages and
-// confirmed byte-for-byte identical before being pinned -- not invented
-// or hand-computed -- so a failure here means one language's output
-// actually changed, not that the pinned value was ever a guess.
+// ConformancePlanDigest/ObservationDigest/MaterializedObjectDigest
+// functions in BOTH languages and confirmed byte-for-byte identical
+// before being pinned -- not invented or hand-computed -- so a failure
+// here means one language's output actually changed, not that the
+// pinned value was ever a guess.
 func TestDifferentialDigestVectors(t *testing.T) {
 	root := differentialCorpusRoot("digest")
 	entries, err := os.ReadDir(root)
@@ -135,8 +204,11 @@ func TestDifferentialDigestVectors(t *testing.T) {
 				}
 			}
 			got, err = ObservationDigest(consumed)
+		case in.Object != nil:
+			obj := buildMaterializedObjectFromFixture(t, name, in.Object.Fields)
+			got, err = MaterializedObjectDigest(obj)
 		default:
-			t.Fatalf("%s: input.json has neither \"plan\" nor \"consumed\"", name)
+			t.Fatalf("%s: input.json has neither \"plan\" nor \"consumed\" nor \"object\"", name)
 		}
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
