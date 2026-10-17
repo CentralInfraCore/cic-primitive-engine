@@ -423,8 +423,11 @@ mod tests {
 
     #[test]
     fn ties_that_already_end_even_and_non_ties_are_unchanged() {
-        // 912968984149762.75 is a tie whose even neighbour is .8 (Go: .8).
-        assert_eq!(canonical_float(912_968_984_149_762.75), "912968984149762.8");
+        // 912968984149762.75 (a tie whose even neighbour is .8; Go: .8).
+        assert_eq!(
+            canonical_float(f64::from_bits(0x4309_f2b9_3fed_f816)),
+            "912968984149762.8"
+        );
         // Not ties: the shortest digits are unambiguous.
         for (f, want) in [
             (0.1, "0.1"),
