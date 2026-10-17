@@ -124,9 +124,11 @@ impl Collection {
 }
 
 /// `fmt.Sprintf("%v", ...)`, ported in full (see this module's own doc
-/// comment for the correction history). `None` only for a non-finite
-/// float -- every other `Value` variant, including nested `Seq`/`Map`, has
-/// a defined, Go-matching display form. `pub(crate)`: the not-yet-built
+/// comment for the correction history). `None` for a non-finite float, and
+/// for the two shapes only a hand-built `Value` can have (a `BigInt` that is
+/// not a signed digit run, a `Map` with a repeated key) -- every other
+/// `Value` variant, including nested `Seq`/`Map`, has a defined,
+/// Go-matching display form. `pub(crate)`: the not-yet-built
 /// object-level walker's `resolvePath`-equivalent needs the exact same
 /// formatting for its own `{key=val}` path-segment matching (`conformance.
 /// go`'s `resolvePath` uses the identical `fmt.Sprintf("%v", em[key])`),
@@ -147,14 +149,17 @@ pub(crate) fn go_display(v: &Value) -> Option<String> {
             Some(format!("[{}]", parts.join(" ")))
         }
         Value::Map(m) => {
-            let mut keys = m.keys();
             // Go's `fmt` package has sorted map keys for deterministic
             // `%v` output since Go 1.12 (verified empirically) -- A2's
-            // byte-wise sort, reused, not a second rule.
-            keys.sort_unstable();
-            let mut parts = Vec::with_capacity(keys.len());
-            for k in keys {
-                let val = m.get(k).expect("key came from this map's own key list");
+            // byte-wise sort, reused, not a second rule. A repeated key
+            // (impossible in a Go map) has no display form.
+            let mut entries: Vec<&(String, Value)> = m.0.iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            if entries.windows(2).any(|w| w[0].0 == w[1].0) {
+                return None;
+            }
+            let mut parts = Vec::with_capacity(entries.len());
+            for (k, val) in entries.into_iter().map(|e| (&e.0, &e.1)) {
                 parts.push(format!("{k}:{}", go_display(val)?));
             }
             Some(format!("map[{}]", parts.join(" ")))
