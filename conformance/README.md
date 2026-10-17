@@ -53,3 +53,23 @@ integer/float forms at both ordinary and extreme magnitudes, A4's escape
 table including the characters RFC 8259 doesn't require escaped, a
 canonicalization-stage rejection) so a future Go peer has the same fixtures
 to agree with, not just this crate's own unit tests.
+
+## Generated input, not only written vectors
+
+The vectors above pin cases someone thought of. Two further checks cover the
+rest (#54):
+
+- `engine/tests/properties.rs` (Rust, `proptest`) checks over generated values
+  and bytes that canonicalization never panics and writes valid JSON with
+  sorted, unique keys, ignores insertion order, that the digest is a pure
+  function of the canonical bytes, that the constructors refuse exactly what
+  they promise to, and that the reader never panics. It runs in the gate at
+  the default case count; `fuzz.yml` raises it on a schedule.
+- The same suite writes a fixed-seed corpus (`export_cross_language_corpus`)
+  that `go/canonical/crosslang_test.go` re-derives: for each generated
+  document the Go peer must produce the same canonical bytes and digest. This
+  is how the float tie divergence (#57) was found; a counterexample from
+  either side becomes a vector in `canonicalize/` or `differential/`.
+- `go/canonical/fuzz_test.go` is a native Go fuzz target (seeds run in
+  `go test`; the long run is in `fuzz.yml`).
+

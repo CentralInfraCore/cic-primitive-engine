@@ -1,0 +1,64 @@
+---
+# Long-running property and fuzz runs. The gate runs the same property tests at
+# the default case count on every push; this is where they get hours-of-CPU
+# depth, on a schedule and on demand, so a pull request never waits for them.
+#
+# A failure leaves the shrunk counterexample in the job log (proptest) or the
+# failing input as an artifact (Go). Add it to the corpus as a vector
+# (conformance/...) and fix the cause; do not just re-run.
+
+name: fuzz
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      proptest_cases:
+        description: "PROPTEST_CASES per property"
+        default: "500000"
+      go_fuzztime:
+        description: "go test -fuzztime"
+        default: "10m"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proptest:
+    name: property tests (many cases)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run the property suite
+        env:
+          PROPTEST_CASES: ${{ inputs.proptest_cases || '500000' }}
+        run: cargo test --release -p cic-primitive-engine --test properties
+
+  go-fuzz:
+    name: go fuzz (FuzzToCanonicalJSON)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Fuzz
+        run: go test -fuzz=FuzzToCanonicalJSON -fuzztime=${{ inputs.go_fuzztime || '10m' }} ./canonical
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-fuzz-failing-input
+          path: go/canonical/testdata/fuzz
+          if-no-files-found: ignore
