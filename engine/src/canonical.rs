@@ -41,6 +41,13 @@ use sha2::{Digest as _, Sha256};
 /// or infinite — canonical JSON has no representation for either, and this
 /// is reachable from authored YAML's own `.nan`/`.inf` tags, not only from
 /// constructing a [`Value`] directly.
+///
+/// Returns `E_MALFORMED_VALUE` for the two shapes only a hand-built
+/// [`Value`] can have (the reader never produces them): a `Value::BigInt`
+/// whose text is not an optional sign followed by ASCII digits
+/// (`R-CANON-BIGINT-DIGITS`), and a `Map` holding the same key more than
+/// once (`R-CANON-UNIQUE-KEYS`). Neither panics and neither is written out
+/// as if it were valid.
 pub fn to_canonical_json(v: &Value) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     write_value(&mut out, v, "$")?;
@@ -76,12 +83,22 @@ fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
         // -- sign fold, leading-zero strip, `-0` -> `0` -- happens here,
         // ported from `cic-canonical`'s own already-proven
         // `canonical_integer`, the same function Go's `number.go` and this
-        // crate's number canonicalization both already trust.
-        Value::BigInt(s) => out.extend_from_slice(
-            canonical_integer(s)
-                .expect("reader.rs only constructs BigInt from a validated digit run")
-                .as_bytes(),
-        ),
+        // crate's number canonicalization both already trust. `Value` is
+        // public, so a caller can hand in a `BigInt` the reader would never
+        // build: that is an error, not a panic (Go's `CanonicalInteger`
+        // checks the same way).
+        Value::BigInt(s) => match canonical_integer(s) {
+            Some(n) => out.extend_from_slice(n.as_bytes()),
+            None => {
+                return Err(Error::new(
+                    code::MALFORMED_VALUE,
+                    "R-CANON-BIGINT-DIGITS",
+                    Stage::Canonicalize,
+                    path,
+                    format!("{path} is a BigInt whose text is not a signed digit run: {s:?}"),
+                ));
+            }
+        },
         Value::Float(f) => {
             if !f.is_finite() {
                 return Err(Error::new(
@@ -158,23 +175,31 @@ fn write_array(out: &mut Vec<u8>, items: &[Value], path: &str) -> Result<()> {
 }
 
 fn write_map(out: &mut Vec<u8>, m: &Map, path: &str) -> Result<()> {
-    out.push(b'{');
     // Raw UTF-8 byte order -- `str`'s `Ord` is already byte-wise comparison,
     // matching Go's `sort.Strings` (A2) with no custom comparator needed.
-    let mut keys = m.keys();
-    keys.sort_unstable();
-    for (i, k) in keys.iter().enumerate() {
+    // Sorting the entries (not just the keys) puts any duplicate next to its
+    // twin, so it is caught here instead of being written twice with the
+    // first value both times, which is what a key-list + `get` walk did.
+    let mut entries: Vec<&(String, Value)> = m.0.iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    if let Some(pair) = entries.windows(2).find(|w| w[0].0 == w[1].0) {
+        let k = &pair[0].0;
+        return Err(Error::new(
+            code::MALFORMED_VALUE,
+            "R-CANON-UNIQUE-KEYS",
+            Stage::Canonicalize,
+            format!("{path}.{k}"),
+            format!("{path} holds the key {k:?} more than once; canonical JSON objects have unique keys"),
+        ));
+    }
+    out.push(b'{');
+    for (i, (k, v)) in entries.into_iter().map(|e| (&e.0, &e.1)).enumerate() {
         if i > 0 {
             out.push(b',');
         }
         write_json_string(out, k);
         out.push(b':');
-        write_value(
-            out,
-            m.get(k)
-                .expect("key came from this same map's own key list"),
-            &format!("{path}.{k}"),
-        )?;
+        write_value(out, v, &format!("{path}.{k}"))?;
     }
     out.push(b'}');
     Ok(())

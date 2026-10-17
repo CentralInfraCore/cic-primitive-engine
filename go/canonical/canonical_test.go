@@ -304,3 +304,18 @@ func TestIsValueAcceptsExactlyTheSupportedShapes(t *testing.T) {
 		}
 	}
 }
+
+// The Go peer of the Rust canonicalizer's R-CANON-BIGINT-DIGITS (#52): Go has
+// no BigInt type to lean on, so a malformed json.Number must come back as an
+// error from the writer itself, never a panic and never a garbage token.
+func TestMalformedNumberIsAnErrorNotAPanic(t *testing.T) {
+	for _, s := range []string{"", "+", "-", "nope", "12 3", "0x10", "--1"} {
+		if b, err := ToCanonicalJSON(json.Number(s)); err == nil {
+			t.Errorf("json.Number(%q) canonicalized to %q, want an error", s, b)
+		}
+	}
+	// Nested, the error still surfaces instead of a half-written object.
+	if _, err := ToCanonicalJSON(map[string]interface{}{"a": []interface{}{json.Number("nope")}}); err == nil {
+		t.Error("nested malformed json.Number was accepted")
+	}
+}
