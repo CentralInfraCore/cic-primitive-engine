@@ -178,7 +178,10 @@ fn assert_valid_sorted_json(bytes: &[u8]) {
     let text = std::str::from_utf8(bytes).expect("canonical output is UTF-8");
     serde_json::from_str::<StrictSorted>(text)
         .unwrap_or_else(|e| panic!("not valid sorted unique-key JSON ({e}): {text}"));
-    assert!(!text.contains('\n'), "a raw newline in canonical output: {text:?}");
+    assert!(
+        !text.contains('\n'),
+        "a raw newline in canonical output: {text:?}"
+    );
 }
 
 // ---------------------------------------------------------------- properties
@@ -317,5 +320,8 @@ fn export_cross_language_corpus() {
         writeln!(out, "{line}").unwrap();
     }
     out.flush().unwrap();
-    assert!(seen.len() > cases / 4, "generator produced too few distinct cases");
+    assert!(
+        seen.len() > cases / 4,
+        "generator produced too few distinct cases"
+    );
 }
