@@ -227,18 +227,19 @@ impl Map {
     pub fn contains(&self, k: &str) -> bool {
         self.get(k).is_some()
     }
-    /// Append without looking for an existing key.
+    /// Append a key the caller knows is new, without the replace-or-append
+    /// search `insert` does.
     ///
-    /// `insert` searches the whole vector on every call, so building an n-key
-    /// mapping with it costs `n(n-1)/2` comparisons — the second quadratic in
-    /// this file, and the one that remained after the duplicate-key scan
-    /// stopped being the first. The reader can append safely because
-    /// `scan_input` has already refused duplicates, so there is nothing to
-    /// overwrite. Crate-private because that argument is the caller's to
-    /// make; debug builds (all tests) check it.
+    /// Crate-private: "known to be new" is the caller's claim, and it is
+    /// checked here in every build profile (`assert!`, not `debug_assert!`),
+    /// so a wrong claim stops at the call instead of leaving a `Map` with a
+    /// repeated key. The check is linear per call, which is why the reader --
+    /// the one caller that can see arbitrarily many untrusted keys -- builds
+    /// through [`Map::from_pairs`] instead. Remaining callers add a handful of
+    /// literal keys.
     pub(crate) fn push(&mut self, k: impl Into<String>, v: Value) {
         let k = k.into();
-        debug_assert!(!self.contains(&k), "Map::push with an existing key {k:?}");
+        assert!(!self.contains(&k), "Map::push with an existing key {k:?}");
         self.0.push((k, v));
     }
 
@@ -522,7 +523,7 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                 .collect::<Result<Vec<_>>>()?,
         )),
         Yaml::Mapping(m) => {
-            let mut out = Map::default();
+            let mut pairs: Vec<(String, Value)> = Vec::with_capacity(m.len());
             for (k, v) in m {
                 // Non-string keys are refused rather than stringified. YAML
                 // allows `1:` and `true:`, and coercing them would let two
@@ -551,9 +552,25 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                         format!("{what} has a non-string mapping key; node names are strings"),
                     ));
                 };
-                out.push(key, convert(v, stage, path, what)?);
+                pairs.push((key, convert(v, stage, path, what)?));
             }
-            Ok(Value::Map(out))
+            // `scan_input` has already refused every spelling of a repeated
+            // key (plain/quoted/escaped/flow/explicit/tagged), and saphyr's own
+            // mapping type cannot hold one, so this check does not fire today.
+            // It is here so the uniqueness of a `Map` the reader hands out
+            // rests on the type's own constructor in every build profile, not
+            // on that scan plus a debug-only assertion. Linear, unlike a
+            // per-key `contains`.
+            let map = Map::from_pairs(pairs).map_err(|e| {
+                Error::new(
+                    code::MALFORMED_DOCUMENT,
+                    "R-READ-DUPLICATE-KEY",
+                    stage,
+                    path,
+                    format!("{what}: {}", e.detail),
+                )
+            })?;
+            Ok(Value::Map(map))
         }
         // Aliases are already refused at the event-scan stage. A tagged
         // mapping/sequence (a custom, non-core-schema tag — `Yaml::Tagged`)
@@ -785,6 +802,14 @@ mod tests {
 
     // The existing conformance/reader/ vectors only check accept/reject,
     // not the resulting tree -- re-verified here that ordinary documents
+    #[test]
+    #[should_panic(expected = "Map::push with an existing key")]
+    fn push_refuses_a_repeated_key_in_every_profile() {
+        let mut m = Map::default();
+        m.push("a", Value::Int(1));
+        m.push("a", Value::Int(2));
+    }
+
     // still parse to the exact same Value shape as before this rewrite.
     #[test]
     fn ordinary_documents_unaffected() {
