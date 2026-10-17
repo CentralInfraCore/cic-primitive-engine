@@ -4,6 +4,12 @@
 # The conformance suite checks itself as well as the engine: an empty corpus
 # fails, and a group with no accepted vector fails. Both were verified by
 # breaking them on purpose.
+#
+# Beyond the fixed corpora: the Rust property tests (engine/tests/properties.rs)
+# run in `cargo test`; the same suite writes a generated corpus that the Go peer
+# re-derives (cross-language check below); Go runs with the race detector; and
+# both languages publish a coverage summary (informational -- no floor yet, see
+# the issue for ratcheting). The long fuzz / high-case-count runs are in fuzz.yml.
 
 name: gate
 
@@ -30,10 +36,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Cross-language check on generated input
+        # Rust generates documents (fixed seed) and records the canonical bytes
+        # and digest its pipeline derives; Go re-derives both. The Go test fails
+        # when the corpus is set but missing or empty, so this cannot pass by
+        # the input silently vanishing.
+        run: |
+          CIC_PROP_CORPUS_OUT="$RUNNER_TEMP/corpus.jsonl" CIC_PROP_CORPUS_CASES=20000 \
+            cargo test -p cic-primitive-engine --test properties export_cross_language_corpus
+          test -s "$RUNNER_TEMP/corpus.jsonl"
+          cd go && CIC_PROP_CORPUS_IN="$RUNNER_TEMP/corpus.jsonl" go test ./canonical -run CrossLanguage -v
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Coverage (Rust, informational)
+        run: |
+          {
+            echo '### Rust coverage (cargo llvm-cov)'
+            echo '```'
+            cargo llvm-cov --workspace --summary-only 2>&1 | grep -E '^(Filename|-|cli/|engine/|TOTAL)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   gate-go:
     name: gate (go)
@@ -49,4 +77,15 @@ jobs:
           go-version: "1.25"
       - run: gofmt -l . | tee /dev/stderr | (! read -r)
       - run: go vet ./...
-      - run: go test ./...
+      # -race: the Go peer is plain code today, but the packages are meant to be
+      # imported by services; the detector is free here and expensive to add
+      # after the first concurrent caller.
+      - run: go test -race -coverprofile=cover.out ./...
+      - name: Coverage (Go, informational)
+        run: |
+          {
+            echo '### Go coverage (statements)'
+            echo '```'
+            go tool cover -func=cover.out | tail -n 1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
