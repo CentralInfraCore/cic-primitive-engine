@@ -34,7 +34,7 @@
 //! verified against real Go output before being encoded — see that
 //! function's own doc comment for what each round found and fixed.
 
-use crate::canonical::{canonical_float, canonical_integer, to_canonical_json};
+use crate::canonical::{canonical_float, to_canonical_json};
 use crate::reader::Value;
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -192,15 +192,10 @@ fn compare_exact(intent: &Value, observed: &Value) -> (bool, bool) {
         if i_num != o_num {
             return (false, false); // number vs non-number -> not comparable
         }
-        // A hand-built `BigInt` that is not a digit run has no canonical
-        // form: not comparable, rather than a panic or a guess.
-        return match (
-            canonical_number_string(intent),
-            canonical_number_string(observed),
-        ) {
-            (Some(a), Some(b)) => (a == b, true),
-            _ => (false, false),
-        };
+        return (
+            canonical_number_string(intent) == canonical_number_string(observed),
+            true,
+        );
     }
     if json_kind(intent) != json_kind(observed) {
         return (false, false);
@@ -211,14 +206,12 @@ fn compare_exact(intent: &Value, observed: &Value) -> (bool, bool) {
 /// Canonical decimal form of a numeric `Value`, reusing section A's own
 /// number canonicalization (`canonical.rs`) rather than a second
 /// implementation — the same digits `to_canonical_json` would write for
-/// this value, without re-serializing the whole tree. `None` only for a
-/// `BigInt` whose text is not a signed digit run, which the reader never
-/// builds but a caller of the public `Value` can.
-fn canonical_number_string(v: &Value) -> Option<String> {
+/// this value, without re-serializing the whole tree.
+fn canonical_number_string(v: &Value) -> String {
     match v {
-        Value::Int(i) => Some(i.to_string()),
-        Value::BigInt(s) => canonical_integer(s),
-        Value::Float(f) => Some(canonical_float(*f)),
+        Value::Int(i) => i.to_string(),
+        Value::BigInt(n) => n.canonical(),
+        Value::Float(f) => canonical_float(*f),
         _ => unreachable!("canonical_number_string is only called where is_numeric_value(v)"),
     }
 }
@@ -243,7 +236,9 @@ fn canonical_equal(a: &Value, b: &Value) -> bool {
 fn as_rational(v: &Value) -> Option<BigRational> {
     match v {
         Value::Int(i) => Some(BigRational::from_integer(BigInt::from(*i))),
-        Value::BigInt(s) => BigInt::from_str(s).ok().map(BigRational::from_integer),
+        Value::BigInt(n) => BigInt::from_str(n.as_str())
+            .ok()
+            .map(BigRational::from_integer),
         Value::Float(f) => BigRational::from_f64(*f),
         Value::Str(s) => rat_from_string(s),
         Value::Null | Value::Bool(_) | Value::Seq(_) | Value::Map(_) => None,

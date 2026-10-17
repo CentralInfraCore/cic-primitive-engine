@@ -250,7 +250,7 @@ mod tests {
         };
         let mut fields = BTreeMap::new();
         let mut keys = BTreeSet::new();
-        for (k, val) in m.0 {
+        for (k, val) in m {
             keys.insert(k.clone());
             let evidence = evidence_of(&k, val);
             fields.insert(

@@ -506,7 +506,7 @@ mod tests {
         };
         let mut fields = BTreeMap::new();
         let mut keys = BTreeSet::new();
-        for (k, val) in m.0 {
+        for (k, val) in m {
             keys.insert(k.clone());
             let evidence = evidence_of(&k, val);
             fields.insert(
@@ -704,11 +704,7 @@ mod tests {
         let Value::Map(m) = &mut observed else {
             unreachable!()
         };
-        let nics_idx =
-            m.0.iter()
-                .position(|(k, _)| k == "network_interfaces")
-                .unwrap();
-        let Value::Seq(nics) = &mut m.0[nics_idx].1 else {
+        let Some(Value::Seq(nics)) = m.get_mut("network_interfaces") else {
             unreachable!()
         };
         nics[1] = nic("nic-1", "prod-subnet-WRONG", &[]);
@@ -736,8 +732,7 @@ mod tests {
         let Value::Map(m) = &mut observed else {
             unreachable!()
         };
-        let idx = m.0.iter().position(|(k, _)| k == "memory_gb").unwrap();
-        m.0[idx].1 = Value::Str("large".into());
+        m.insert("memory_gb", Value::Str("large".into()));
 
         let obs = oci_observation();
         let verdict = evaluate(
