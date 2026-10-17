@@ -6,6 +6,7 @@
 //! session, not assumed from documentation. Number canonicalization (A3)
 //! already has a proven Rust peer in the `cic-canonical` crate (both its
 //! `canonical_float` and `canonical_integer`); the logic is ported here
+//! (`canonical_integer` as [`crate::reader::BigIntValue::canonical`])
 //! rather than taken as a dependency, so this crate's canonicalization
 //! stays self-contained and this engine does not acquire a cross-repository
 //! build dependency on `CIC-Relay`.
@@ -42,12 +43,9 @@ use sha2::{Digest as _, Sha256};
 /// is reachable from authored YAML's own `.nan`/`.inf` tags, not only from
 /// constructing a [`Value`] directly.
 ///
-/// Returns `E_MALFORMED_VALUE` for the two shapes only a hand-built
-/// [`Value`] can have (the reader never produces them): a `Value::BigInt`
-/// whose text is not an optional sign followed by ASCII digits
-/// (`R-CANON-BIGINT-DIGITS`), and a `Map` holding the same key more than
-/// once (`R-CANON-UNIQUE-KEYS`). Neither panics and neither is written out
-/// as if it were valid.
+/// A `Value` cannot hold a non-digit `BigInt` or a repeated map key (see
+/// [`crate::reader::BigIntValue`] and [`crate::reader::Map`]), so the only
+/// failure is the non-finite float above.
 pub fn to_canonical_json(v: &Value) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     write_value(&mut out, v, "$")?;
@@ -78,27 +76,12 @@ fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
         Value::Int(i) => out.extend_from_slice(i.to_string().as_bytes()),
         // A3's big.Int-equivalent case (review-caught on PR #19: `reader.rs`
         // used to silently lose this precision to saphyr's own i64/f64
-        // fallback -- see `Value::BigInt`'s own doc comment). `reader.rs`
-        // only guarantees the text is a validated digit run; normalization
-        // -- sign fold, leading-zero strip, `-0` -> `0` -- happens here,
-        // ported from `cic-canonical`'s own already-proven
-        // `canonical_integer`, the same function Go's `number.go` and this
-        // crate's number canonicalization both already trust. `Value` is
-        // public, so a caller can hand in a `BigInt` the reader would never
-        // build: that is an error, not a panic (Go's `CanonicalInteger`
-        // checks the same way).
-        Value::BigInt(s) => match canonical_integer(s) {
-            Some(n) => out.extend_from_slice(n.as_bytes()),
-            None => {
-                return Err(Error::new(
-                    code::MALFORMED_VALUE,
-                    "R-CANON-BIGINT-DIGITS",
-                    Stage::Canonicalize,
-                    path,
-                    format!("{path} is a BigInt whose text is not a signed digit run: {s:?}"),
-                ));
-            }
-        },
+        // fallback -- see `Value::BigInt`'s own doc comment). The text is a
+        // digit run by construction (`BigIntValue::try_new`); normalization
+        // -- sign fold, leading-zero strip, `-0` -> `0` -- is
+        // `BigIntValue::canonical`, the same rule Go's `number.go` applies via
+        // `big.Int.SetString(s, 10).String()`.
+        Value::BigInt(n) => out.extend_from_slice(n.canonical().as_bytes()),
         Value::Float(f) => {
             if !f.is_finite() {
                 return Err(Error::new(
@@ -119,32 +102,6 @@ fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
         Value::Map(m) => write_map(out, m, path)?,
     }
     Ok(())
-}
-
-/// A3, ported from `cic-canonical`'s own `canonical_integer` (not imported
-/// as a dependency — see module docs): sign folded, leading zeros stripped,
-/// `-0`/`+0` -> `0` — the same normalization Go's `number.go` applies via
-/// `big.Int.SetString(s, 10).String()`, verified empirically against it in
-/// this session (`"000000123"` -> `"123"`, `"-00000123"` -> `"-123"`,
-/// `"-0"`/`"+0"` -> `"0"`). Returns `None` only if `s` is not actually a
-/// validated digit run — [`crate::reader::Value::BigInt`]'s own invariant
-/// guarantees this never happens for a value this crate constructed itself.
-pub(crate) fn canonical_integer(s: &str) -> Option<String> {
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, s.strip_prefix('+').unwrap_or(s)),
-    };
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let magnitude = digits.trim_start_matches('0');
-    Some(if magnitude.is_empty() {
-        "0".to_string() // all zeros, including "-0"/"+0"
-    } else if neg {
-        format!("-{magnitude}")
-    } else {
-        magnitude.to_string()
-    })
 }
 
 /// A3, ported from `cic-canonical`'s own `canonical_float` (not imported as a
@@ -177,23 +134,11 @@ fn write_array(out: &mut Vec<u8>, items: &[Value], path: &str) -> Result<()> {
 fn write_map(out: &mut Vec<u8>, m: &Map, path: &str) -> Result<()> {
     // Raw UTF-8 byte order -- `str`'s `Ord` is already byte-wise comparison,
     // matching Go's `sort.Strings` (A2) with no custom comparator needed.
-    // Sorting the entries (not just the keys) puts any duplicate next to its
-    // twin, so it is caught here instead of being written twice with the
-    // first value both times, which is what a key-list + `get` walk did.
-    let mut entries: Vec<&(String, Value)> = m.0.iter().collect();
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-    if let Some(pair) = entries.windows(2).find(|w| w[0].0 == w[1].0) {
-        let k = &pair[0].0;
-        return Err(Error::new(
-            code::MALFORMED_VALUE,
-            "R-CANON-UNIQUE-KEYS",
-            Stage::Canonicalize,
-            format!("{path}.{k}"),
-            format!("{path} holds the key {k:?} more than once; canonical JSON objects have unique keys"),
-        ));
-    }
+    // Keys are unique by `Map`'s construction, so the order is total.
+    let mut entries: Vec<(&str, &Value)> = m.iter().collect();
+    entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
     out.push(b'{');
-    for (i, (k, v)) in entries.into_iter().map(|e| (&e.0, &e.1)).enumerate() {
+    for (i, (k, v)) in entries.into_iter().enumerate() {
         if i > 0 {
             out.push(b',');
         }
@@ -249,7 +194,7 @@ fn write_json_string(out: &mut Vec<u8>, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reader::Map;
+    use crate::reader::{BigIntValue, Map};
 
     fn json(v: &Value) -> String {
         String::from_utf8(to_canonical_json(v).expect("value is finite"))
@@ -474,7 +419,7 @@ mod tests {
         ];
         for (literal, want) in cases {
             assert_eq!(
-                json(&Value::BigInt((*literal).to_string())),
+                json(&Value::BigInt(BigIntValue::try_new(*literal).unwrap())),
                 *want,
                 "literal {literal:?}"
             );

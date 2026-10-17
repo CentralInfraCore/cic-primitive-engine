@@ -88,35 +88,159 @@ pub enum Value {
     /// Rust, parsing the raw scalar text directly (via `saphyr`'s own
     /// `early_parse(false)` loader mode) rather than trusting `saphyr`'s
     /// default eager resolution to i64/f64.
-    BigInt(String),
+    BigInt(BigIntValue),
     Float(f64),
     Str(String),
     Seq(Vec<Value>),
     Map(Map),
 }
 
+/// An integer literal that does not fit in `i64`, as its validated text: an
+/// optional `+`/`-` followed by one or more ASCII digits, nothing else.
+///
+/// The field is private and [`BigIntValue::try_new`] is the only way in
+/// (besides the reader, which goes through it), so every `BigIntValue` that
+/// exists satisfies the invariant the canonicalizer relies on -- it is not a
+/// convention a caller can break. Sign folding, leading-zero stripping and
+/// `-0` -> `0` still happen at canonicalization ([`BigIntValue::canonical`]).
+///
+/// The value cannot be built around the check:
+///
+/// ```compile_fail
+/// use cic_primitive_engine::reader::{BigIntValue, Value};
+/// let _ = Value::BigInt(BigIntValue("not-a-number".to_string()));
+/// ```
+///
+/// ```
+/// use cic_primitive_engine::reader::{BigIntValue, Value};
+/// assert!(BigIntValue::try_new("not-a-number").is_err());
+/// let big = BigIntValue::try_new("9223372036854775808").unwrap();
+/// let _ = Value::BigInt(big);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BigIntValue(String);
+
+impl BigIntValue {
+    /// # Errors
+    /// `E_MALFORMED_VALUE` (`R-VALUE-BIGINT-DIGITS`) unless `s` is an
+    /// optional sign followed by one or more ASCII digits.
+    pub fn try_new(s: impl Into<String>) -> Result<Self> {
+        let s = s.into();
+        let digits = s.strip_prefix(['+', '-']).unwrap_or(&s);
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(Error::new(
+                code::MALFORMED_VALUE,
+                "R-VALUE-BIGINT-DIGITS",
+                Stage::Read,
+                "$",
+                format!("{s:?} is not an optional sign followed by ASCII digits"),
+            ));
+        }
+        Ok(Self(s))
+    }
+
+    /// The validated text, exactly as given (not yet normalized).
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// A3's normal form, ported from `cic-canonical`'s own `canonical_integer`
+    /// (not imported as a dependency): sign folded, leading zeros stripped,
+    /// `-0`/`+0` -> `0` -- the same normalization Go's `number.go` applies
+    /// via `big.Int.SetString(s, 10).String()`, verified empirically against
+    /// it (`"000000123"` -> `"123"`, `"-00000123"` -> `"-123"`, `"-0"`/`"+0"`
+    /// -> `"0"`). Infallible because the text is a digit run by construction.
+    #[must_use]
+    pub fn canonical(&self) -> String {
+        let (neg, digits) = match self.0.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, self.0.strip_prefix('+').unwrap_or(&self.0)),
+        };
+        let magnitude = digits.trim_start_matches('0');
+        if magnitude.is_empty() {
+            "0".to_string() // all zeros, including "-0"/"+0"
+        } else if neg {
+            format!("-{magnitude}")
+        } else {
+            magnitude.to_string()
+        }
+    }
+}
+
+/// An insertion-ordered string-keyed mapping whose keys are unique.
+///
+/// The storage is private: a `Map` is built by the reader, by
+/// [`Map::from_pairs`] (which refuses a repeated key) or by [`Map::insert`]
+/// (which replaces), so no `Map` outside this crate can hold the same key
+/// twice -- the canonicalizer and the comparators rely on that.
+///
+/// ```compile_fail
+/// use cic_primitive_engine::reader::{Map, Value};
+/// let _ = Map(vec![("x".to_string(), Value::Int(1)), ("x".to_string(), Value::Int(2))]);
+/// ```
+///
+/// ```
+/// use cic_primitive_engine::reader::{Map, Value};
+/// let pairs = vec![("x".to_string(), Value::Int(1)), ("x".to_string(), Value::Int(2))];
+/// assert!(Map::from_pairs(pairs).is_err());
+/// ```
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Map(pub Vec<(String, Value)>);
+pub struct Map(Vec<(String, Value)>);
 
 impl Map {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Build a map from pairs, keeping their order.
+    ///
+    /// # Errors
+    /// `E_MALFORMED_VALUE` (`R-VALUE-UNIQUE-KEYS`) if a key occurs twice.
+    pub fn from_pairs(pairs: impl IntoIterator<Item = (String, Value)>) -> Result<Self> {
+        let pairs: Vec<(String, Value)> = pairs.into_iter().collect();
+        let mut seen = HashSet::with_capacity(pairs.len());
+        for (k, _) in &pairs {
+            if !seen.insert(k.as_str()) {
+                return Err(Error::new(
+                    code::MALFORMED_VALUE,
+                    "R-VALUE-UNIQUE-KEYS",
+                    Stage::Read,
+                    format!("$.{k}"),
+                    format!("the key {k:?} occurs more than once"),
+                ));
+            }
+        }
+        Ok(Self(pairs))
+    }
+
     #[must_use]
     pub fn get(&self, k: &str) -> Option<&Value> {
         self.0.iter().find(|(key, _)| key == k).map(|(_, v)| v)
     }
     #[must_use]
+    pub fn get_mut(&mut self, k: &str) -> Option<&mut Value> {
+        self.0.iter_mut().find(|(key, _)| key == k).map(|(_, v)| v)
+    }
+    #[must_use]
     pub fn contains(&self, k: &str) -> bool {
         self.get(k).is_some()
     }
-    /// Append without looking for an existing key.
+    /// Append a key the caller knows is new, without the replace-or-append
+    /// search `insert` does.
     ///
-    /// `insert` searches the whole vector on every call, so building an n-key
-    /// mapping with it costs `n(n-1)/2` comparisons — the second quadratic in
-    /// this file, and the one that remained after the duplicate-key scan
-    /// stopped being the first. The parser can append safely because
-    /// `scan_input` has already refused duplicates, so there is nothing to
-    /// overwrite.
-    pub fn push(&mut self, k: impl Into<String>, v: Value) {
-        self.0.push((k.into(), v));
+    /// Crate-private: "known to be new" is the caller's claim, and it is
+    /// checked here in every build profile (`assert!`, not `debug_assert!`),
+    /// so a wrong claim stops at the call instead of leaving a `Map` with a
+    /// repeated key. The check is linear per call, which is why the reader --
+    /// the one caller that can see arbitrarily many untrusted keys -- builds
+    /// through [`Map::from_pairs`] instead. Remaining callers add a handful of
+    /// literal keys.
+    pub(crate) fn push(&mut self, k: impl Into<String>, v: Value) {
+        let k = k.into();
+        assert!(!self.contains(&k), "Map::push with an existing key {k:?}");
+        self.0.push((k, v));
     }
 
     pub fn insert(&mut self, k: impl Into<String>, v: Value) {
@@ -126,6 +250,10 @@ impl Map {
         } else {
             self.0.push((k, v));
         }
+    }
+    /// The entries in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.0.iter().map(|(k, v)| (k.as_str(), v))
     }
     #[must_use]
     pub fn keys(&self) -> Vec<&str> {
@@ -138,6 +266,14 @@ impl Map {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl IntoIterator for Map {
+    type Item = (String, Value);
+    type IntoIter = std::vec::IntoIter<(String, Value)>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -170,7 +306,7 @@ impl Value {
             Value::Null => "null".into(),
             Value::Bool(b) => b.to_string(),
             Value::Int(i) => i.to_string(),
-            Value::BigInt(s) => s.clone(),
+            Value::BigInt(n) => n.as_str().to_string(),
             Value::Float(f) => f.to_string(),
             Value::Str(s) => s.clone(),
             Value::Seq(_) => "<sequence>".into(),
@@ -387,7 +523,7 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                 .collect::<Result<Vec<_>>>()?,
         )),
         Yaml::Mapping(m) => {
-            let mut out = Map::default();
+            let mut pairs: Vec<(String, Value)> = Vec::with_capacity(m.len());
             for (k, v) in m {
                 // Non-string keys are refused rather than stringified. YAML
                 // allows `1:` and `true:`, and coercing them would let two
@@ -416,9 +552,25 @@ fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
                         format!("{what} has a non-string mapping key; node names are strings"),
                     ));
                 };
-                out.push(key, convert(v, stage, path, what)?);
+                pairs.push((key, convert(v, stage, path, what)?));
             }
-            Ok(Value::Map(out))
+            // `scan_input` has already refused every spelling of a repeated
+            // key (plain/quoted/escaped/flow/explicit/tagged), and saphyr's own
+            // mapping type cannot hold one, so this check does not fire today.
+            // It is here so the uniqueness of a `Map` the reader hands out
+            // rests on the type's own constructor in every build profile, not
+            // on that scan plus a debug-only assertion. Linear, unlike a
+            // per-key `contains`.
+            let map = Map::from_pairs(pairs).map_err(|e| {
+                Error::new(
+                    code::MALFORMED_DOCUMENT,
+                    "R-READ-DUPLICATE-KEY",
+                    stage,
+                    path,
+                    format!("{what}: {}", e.detail),
+                )
+            })?;
+            Ok(Value::Map(map))
         }
         // Aliases are already refused at the event-scan stage. A tagged
         // mapping/sequence (a custom, non-core-schema tag — `Yaml::Tagged`)
@@ -501,7 +653,7 @@ fn resolve_scalar(
         if let Some(digits) = base10_integer_literal(text) {
             return Ok(match digits.parse::<i64>() {
                 Ok(i) => Value::Int(i),
-                Err(_) => Value::BigInt(digits.to_string()),
+                Err(_) => Value::BigInt(BigIntValue::try_new(digits)?),
             });
         }
     }
@@ -558,11 +710,11 @@ mod tests {
             ("9223372036854775807", Value::Int(9_223_372_036_854_775_807)),
             (
                 "9223372036854775808",
-                Value::BigInt("9223372036854775808".to_string()),
+                Value::BigInt(BigIntValue::try_new("9223372036854775808").unwrap()),
             ),
             (
                 "9223372036854775809",
-                Value::BigInt("9223372036854775809".to_string()),
+                Value::BigInt(BigIntValue::try_new("9223372036854775809").unwrap()),
             ),
             (
                 "-9223372036854775808",
@@ -570,7 +722,7 @@ mod tests {
             ),
             (
                 "-9223372036854775809",
-                Value::BigInt("-9223372036854775809".to_string()),
+                Value::BigInt(BigIntValue::try_new("-9223372036854775809").unwrap()),
             ),
             ("9007199254740992", Value::Int(9_007_199_254_740_992)),
             ("9007199254740993", Value::Int(9_007_199_254_740_993)),
@@ -580,7 +732,9 @@ mod tests {
             ("-0", Value::Int(0)),
             (
                 "1234567890123456789012345678901234567890",
-                Value::BigInt("1234567890123456789012345678901234567890".to_string()),
+                Value::BigInt(
+                    BigIntValue::try_new("1234567890123456789012345678901234567890").unwrap(),
+                ),
             ),
         ];
         for (literal, want) in cases {
@@ -623,7 +777,10 @@ mod tests {
     fn explicitly_tagged_int_also_keeps_exact_precision() {
         let doc = parse_doc("v: !!int 9223372036854775808");
         let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
-        assert_eq!(got, &Value::BigInt("9223372036854775808".to_string()));
+        assert_eq!(
+            got,
+            &Value::BigInt(BigIntValue::try_new("9223372036854775808").unwrap())
+        );
 
         let doc = parse_doc("v: !!int 123");
         let got = doc.as_map().and_then(|m| m.get("v")).expect("key `v`");
@@ -645,6 +802,14 @@ mod tests {
 
     // The existing conformance/reader/ vectors only check accept/reject,
     // not the resulting tree -- re-verified here that ordinary documents
+    #[test]
+    #[should_panic(expected = "Map::push with an existing key")]
+    fn push_refuses_a_repeated_key_in_every_profile() {
+        let mut m = Map::default();
+        m.push("a", Value::Int(1));
+        m.push("a", Value::Int(2));
+    }
+
     // still parse to the exact same Value shape as before this rewrite.
     #[test]
     fn ordinary_documents_unaffected() {

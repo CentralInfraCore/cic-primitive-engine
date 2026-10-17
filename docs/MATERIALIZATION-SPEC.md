@@ -295,8 +295,8 @@ for both languages from this point forward.
   had not yet caught in code: `saphyr` (this engine's YAML parser)
   silently demoted an integer literal beyond `i64` range to a lossy
   `f64` before canonicalization ever saw it — fixed in `reader.rs`,
-  not papered over here, via a new `Value::BigInt(String)` carrying
-  the literal's exact digits. Not yet wired into a pipeline stage —
+  not papered over here, via a new `Value::BigInt` carrying the
+  literal's exact digits (a validated `BigIntValue` newtype since #53). Not yet wired into a pipeline stage —
   `Parse`/`Normalize`/`Resolve`/`Validate`, which would produce a
   materialized tree to canonicalize, still don't exist — so this is a
   standalone primitive, correct and tested in isolation, not yet

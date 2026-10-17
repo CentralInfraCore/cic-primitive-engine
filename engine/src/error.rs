@@ -124,13 +124,14 @@ pub mod code {
     /// Raised at `Stage::Materialize`.
     pub const INCOMPLETE_OBJECT: &str = "E_INCOMPLETE_OBJECT";
 
-    /// A [`crate::reader::Value`] built by hand (not by the reader) breaks an
-    /// invariant the reader guarantees: a `BigInt` that is not a signed digit
-    /// run, or a `Map` holding the same key twice. Raised by `canonical`
-    /// (`R-CANON-BIGINT-DIGITS`, `R-CANON-UNIQUE-KEYS`) instead of panicking
-    /// or writing invalid canonical JSON. Not expressible as a YAML vector --
-    /// the reader cannot produce either shape -- so the raisers are covered
-    /// by unit tests in `canonical.rs`.
+    /// A [`crate::reader::Value`] part built by hand that breaks an invariant
+    /// the reader guarantees: a `BigInt` that is not a signed digit run
+    /// (`R-VALUE-BIGINT-DIGITS`, raised by `BigIntValue::try_new`) or a `Map`
+    /// holding the same key twice (`R-VALUE-UNIQUE-KEYS`, raised by
+    /// `Map::from_pairs`). These are constructor errors: the types have no
+    /// other way in, so the canonicalizer and comparators never see either
+    /// shape. Covered by unit tests in `engine/tests/hand_built_values.rs`
+    /// (not a YAML vector -- the reader cannot produce them).
     pub const MALFORMED_VALUE: &str = "E_MALFORMED_VALUE";
 }
 
