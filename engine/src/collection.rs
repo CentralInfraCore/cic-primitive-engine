@@ -200,23 +200,12 @@ fn go_float_display(f: f64) -> Option<String> {
             "0".to_string()
         });
     }
-    // Rust's `{:e}` is exactly the normalized form this needs: one
-    // nonzero digit before the point, the shortest round-trip digit
-    // string after it, and the decimal exponent of that leading digit --
-    // the same quantity Go's algorithm thresholds on.
-    let sci = format!("{f:e}");
-    let (mantissa_part, exp_part) = sci
-        .split_once('e')
-        .expect("Rust's `{:e}` formatting always contains 'e'");
-    let exp: i32 = exp_part
-        .parse()
-        .expect("the exponent after 'e' is always a valid integer");
-    let neg = mantissa_part.starts_with('-');
-    let digits: String = mantissa_part
-        .trim_start_matches('-')
-        .chars()
-        .filter(|c| *c != '.')
-        .collect();
+    // One nonzero digit before the point, the shortest round-trip digit
+    // string after it, and the decimal exponent of that leading digit -- the
+    // same quantity Go's algorithm thresholds on. `shortest_digits` follows
+    // Go's tie rule where Rust's `{:e}` does not (#57).
+    let neg = f.is_sign_negative();
+    let (digits, exp) = crate::canonical::shortest_digits(f.abs());
 
     let mut out = String::new();
     if neg {
