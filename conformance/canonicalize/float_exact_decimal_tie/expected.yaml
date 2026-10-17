@@ -1,0 +1,3 @@
+outcome: accepted
+canonical: '{"a":912968984149762.2,"b":-912968984149762.2,"c":730721488272018.2,"d":126065375359190.62,"e":0.5}'
+why: A3: when the double's exact value lies exactly halfway between two equally short decimals, Go's strconv rounds half to even on the shortest digit string (912968984149762.25 -> ...762.2). Rust's Display chose the odd neighbour (...762.3) until #57; the two languages produced different digests for the same number. Found by the generated cross-language corpus (#54); values checked against real Go output.

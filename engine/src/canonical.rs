@@ -31,6 +31,9 @@
 
 use crate::error::{code, Error, Result, Stage};
 use crate::reader::{Map, Value};
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::{FromPrimitive as _, Pow as _};
 use sha2::{Digest as _, Sha256};
 
 /// Canonical JSON bytes for `v` (A1–A6): compact, no inter-token whitespace,
@@ -106,16 +109,111 @@ fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
 
 /// A3, ported from `cic-canonical`'s own `canonical_float` (not imported as a
 /// dependency — see module docs): shortest round-trip plain-decimal form,
-/// `-0.0` folded to `0`. Rust's `f64` `Display` is shortest round-trip and
-/// never uses an exponent, matching Go's `FormatFloat(f, 'f', -1, 64)` —
-/// verified empirically in this session (`4.0` -> `"4"`, `1000.0` ->
-/// `"1000"`, not `"1e3"`).
+/// `-0.0` folded to `0`, never an exponent, matching Go's
+/// `FormatFloat(f, 'f', -1, 64)` — verified empirically in this session
+/// (`4.0` -> `"4"`, `1000.0` -> `"1000"`, not `"1e3"`). The digits come from
+/// [`shortest_digits`], which follows Go's tie rule where Rust's own
+/// `Display` does not (#57).
 pub(crate) fn canonical_float(f: f64) -> String {
-    let s = format!("{f}");
-    if s == "-0" {
-        "0".to_string()
+    if f == 0.0 {
+        return "0".to_string(); // both zeros, `-0.0` included
+    }
+    let (digits, exp) = shortest_digits(f.abs());
+    let mut out = String::new();
+    if f < 0.0 {
+        out.push('-');
+    }
+    if exp >= 0 {
+        let int_len = (exp + 1) as usize;
+        if digits.len() <= int_len {
+            out.push_str(&digits);
+            out.push_str(&"0".repeat(int_len - digits.len()));
+        } else {
+            out.push_str(&digits[..int_len]);
+            out.push('.');
+            out.push_str(&digits[int_len..]);
+        }
     } else {
-        s
+        out.push_str("0.");
+        out.push_str(&"0".repeat((-exp - 1) as usize));
+        out.push_str(&digits);
+    }
+    out
+}
+
+/// The shortest decimal digits that round-trip `a` (finite, positive), as
+/// Go's `strconv` produces them: `(digits, exp)` with no trailing zeros and
+/// `exp` the decimal exponent of the leading digit (so `a ~ d.ddd * 10^exp`,
+/// the shape Rust's `{:e}` prints).
+///
+/// Rust's `{:e}` and Go agree on the digit COUNT and on which candidate is
+/// closest to the exact value. They differ when the exact binary value lies
+/// exactly halfway between two equally short candidates (e.g.
+/// `912968984149762.25` between `...762.2` and `...762.3`): Go rounds half to
+/// even on the shortest digit string (`strconv/ftoaryu.go`, `ryuDigits32`),
+/// Rust may pick the odd neighbour. A tie needs the exact expansion to be one
+/// digit longer than the shortest form and end in 5, so a single exact-mode
+/// format is the cheap pre-check; only then is the tie confirmed with exact
+/// rational arithmetic.
+pub(crate) fn shortest_digits(a: f64) -> (String, i32) {
+    debug_assert!(a.is_finite() && a > 0.0);
+    let (digits, exp) = split_sci(&format!("{a:e}"));
+    let n = digits.len();
+    let (exact, exact_exp) = split_sci(&format!("{a:.n$e}"));
+    // A carry in the exact rendering (9.99..5 -> 10.0) means it is not a tie
+    // of `n`-digit neighbours at this exponent.
+    if exact_exp != exp || exact.len() != n + 1 || !exact.ends_with('5') {
+        return (digits, exp);
+    }
+    let (Ok(x), Ok(shown)) = (exact[..n].parse::<u128>(), digits.parse::<u128>()) else {
+        return (digits, exp);
+    };
+    // exact == (10x + 5) * 10^(exp - n) exactly?
+    let Some(exact_value) = BigRational::from_f64(a) else {
+        return (digits, exp);
+    };
+    let tie = BigRational::new(BigInt::from(10 * x + 5), BigInt::from(1)) * pow10(exp - n as i32);
+    if exact_value != tie {
+        return (digits, exp);
+    }
+    // A genuine tie between `x` and `x + 1`; Go takes the even one, if it
+    // is inside the rounding interval (i.e. parses back to `a`).
+    let other = if shown == x { x + 1 } else { x };
+    let go_picks_other = shown % 2 == 1
+        && other % 2 == 0
+        && format!("{other}e{}", exp - (n as i32 - 1))
+            .parse::<f64>()
+            .is_ok_and(|back| back == a);
+    if !go_picks_other {
+        return (digits, exp);
+    }
+    // `other` can be 10^n (carry from x = 99..9): one digit, exponent + 1.
+    let text = other.to_string();
+    let carry = text.len() > n;
+    (
+        text.trim_end_matches('0').to_string(),
+        if carry { exp + 1 } else { exp },
+    )
+}
+
+/// `"d.ddde-5"` -> `("ddd", -5)`.
+fn split_sci(sci: &str) -> (String, i32) {
+    let (mantissa, exp) = sci
+        .split_once('e')
+        .expect("Rust's `{:e}` formatting always contains 'e'");
+    (
+        mantissa.chars().filter(char::is_ascii_digit).collect(),
+        exp.parse()
+            .expect("the exponent after 'e' is always a valid integer"),
+    )
+}
+
+fn pow10(e: i32) -> BigRational {
+    let p = BigInt::from(10).pow(e.unsigned_abs());
+    if e >= 0 {
+        BigRational::from_integer(p)
+    } else {
+        BigRational::new(BigInt::from(1), p)
     }
 }
 
@@ -305,6 +403,62 @@ mod tests {
     // reachable path, verified empirically against saphyr, not a
     // hypothetical API misuse) must not silently become an invalid JSON
     // token (`NaN`, `inf`) in what claims to be canonical JSON output.
+    // #57. Every expected string below is real Go output
+    // (`strconv.FormatFloat(f, 'f', -1, 64)`), taken from a 1.5M-float
+    // comparison; the doubles are exact decimal ties, where Go rounds half
+    // to even on the shortest digit string and Rust's `Display` did not.
+    #[test]
+    fn exact_decimal_ties_round_half_even_like_go() {
+        for (bits, want) in [
+            (0x4309_f2b9_3fed_f812_u64, "912968984149762.2"), // ...762.25, odd neighbour .3 rejected
+            (0x4304_c4b2_d5e7_d492, "730721488272018.2"),
+            (0x42dc_a9f8_7aac_35a8, "126065375359190.62"),
+            (0x430a_60df_f0e3_7f42, "928108041236456.2"),
+        ] {
+            let f = f64::from_bits(bits);
+            assert_eq!(canonical_float(f), want, "{bits:#x}");
+            assert_eq!(canonical_float(-f), format!("-{want}"), "-{bits:#x}");
+        }
+    }
+
+    #[test]
+    fn ties_that_already_end_even_and_non_ties_are_unchanged() {
+        // 912968984149762.75 (a tie whose even neighbour is .8; Go: .8).
+        assert_eq!(
+            canonical_float(f64::from_bits(0x4309_f2b9_3fed_f816)),
+            "912968984149762.8"
+        );
+        // Not ties: the shortest digits are unambiguous.
+        for (f, want) in [
+            (0.1, "0.1"),
+            (0.5, "0.5"),
+            (1.5, "1.5"),
+            (2.5, "2.5"),
+            (1e21, "1000000000000000000000"),
+            (123456.789, "123456.789"),
+            (5e-324, &*format!("0.{}5", "0".repeat(323))),
+        ] {
+            assert_eq!(canonical_float(f), want, "{f:e}");
+        }
+    }
+
+    #[test]
+    fn shortest_digits_only_changes_on_a_true_tie() {
+        // The same value as the first tie above, spelled via its neighbours:
+        // every spelling of the double canonicalizes identically.
+        let tie = f64::from_bits(0x4309_f2b9_3fed_f812);
+        for text in [
+            "912968984149762.2",
+            "912968984149762.25",
+            "912968984149762.3",
+        ] {
+            let f: f64 = text.parse().unwrap();
+            assert_eq!(f.to_bits(), tie.to_bits(), "{text}");
+            assert_eq!(canonical_float(f), "912968984149762.2", "{text}");
+        }
+        assert_eq!(shortest_digits(tie), ("9129689841497622".to_string(), 14));
+    }
+
     #[test]
     fn non_finite_floats_are_rejected_not_written() {
         for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {

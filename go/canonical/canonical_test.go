@@ -319,3 +319,35 @@ func TestMalformedNumberIsAnErrorNotAPanic(t *testing.T) {
 		t.Error("nested malformed json.Number was accepted")
 	}
 }
+
+// #57: where a double lies exactly halfway between two equally short decimals,
+// Go's strconv rounds half to even on the shortest digit string, and the Rust
+// engine must agree byte for byte (see canonical.rs, shortest_digits). These
+// pin the reference side so a change in the Go toolchain's behaviour is noticed
+// instead of silently turning the Rust port into the odd one out.
+func TestFloatExactDecimalTiesRoundHalfEven(t *testing.T) {
+	for _, c := range []struct {
+		bits uint64
+		want string
+	}{
+		{0x4309f2b93fedf812, "912968984149762.2"},
+		{0x4304c4b2d5e7d492, "730721488272018.2"},
+		{0x42dca9f87aac35a8, "126065375359190.62"},
+		{0x430a60dff0e37f42, "928108041236456.2"},
+	} {
+		f := math.Float64frombits(c.bits)
+		if got := CanonicalFloat(f); got != c.want {
+			t.Errorf("%#x: CanonicalFloat = %s, want %s", c.bits, got, c.want)
+		}
+		if got := CanonicalFloat(-f); got != "-"+c.want {
+			t.Errorf("-%#x: CanonicalFloat = %s, want -%s", c.bits, got, c.want)
+		}
+	}
+	// The literal that exposed it: three spellings, one double.
+	for _, lit := range []string{"912968984149762.2", "912968984149762.25", "912968984149762.3"} {
+		got, err := ToCanonicalJSON(json.Number(lit))
+		if err != nil || string(got) != "912968984149762.2" {
+			t.Errorf("%s -> %s, %v", lit, got, err)
+		}
+	}
+}
