@@ -1,0 +1,16 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850",
+    "fields": {
+      "/memory_gb": "UNOBSERVED",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:367cbe5c5c79950f2bed53eafebd9ac1a07dba45df052f71f5d3af4c5ef95fdd",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850\",\"fields\":{\"/memory_gb\":\"UNOBSERVED\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"CONFORMANT\",\"/shape\":\"CONFORMANT\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:367cbe5c5c79950f2bed53eafebd9ac1a07dba45df052f71f5d3af4c5ef95fdd\",\"verdict_schema_version\":1}",
+  "why": "unknown coverage classifies like unobserved; its observation digest differs from the unobserved vector with the same fields"
+}

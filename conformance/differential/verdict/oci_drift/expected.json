@@ -1,0 +1,16 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850",
+    "fields": {
+      "/memory_gb": "CONFORMANT",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "DRIFT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "DRIFT",
+    "observation_digest": "sha256:69ec2c422d32b89c8bd0d060296982e8172e8fd6084984aee65c8325dd47a39f",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850\",\"fields\":{\"/memory_gb\":\"CONFORMANT\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"DRIFT\",\"/shape\":\"CONFORMANT\"},\"object\":\"DRIFT\",\"observation_digest\":\"sha256:69ec2c422d32b89c8bd0d060296982e8172e8fd6084984aee65c8325dd47a39f\",\"verdict_schema_version\":1}",
+  "why": "a single element subnet mismatch drifts only that field; the artifact aggregates to DRIFT and still lists every evaluated path"
+}

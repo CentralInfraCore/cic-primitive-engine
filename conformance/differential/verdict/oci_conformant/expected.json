@@ -1,0 +1,16 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850",
+    "fields": {
+      "/memory_gb": "CONFORMANT",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "CONFORMANT",
+    "observation_digest": "sha256:5e24b8bb061a32c1ee09f8ede05374d7b13cfd89798985eb1a426781c93c2fe5",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850\",\"fields\":{\"/memory_gb\":\"CONFORMANT\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"CONFORMANT\",\"/shape\":\"CONFORMANT\"},\"object\":\"CONFORMANT\",\"observation_digest\":\"sha256:5e24b8bb061a32c1ee09f8ede05374d7b13cfd89798985eb1a426781c93c2fe5\",\"verdict_schema_version\":1}",
+  "why": "every planned field matches: the artifact carries the CONFORMANT object verdict, the four evaluated paths, and the two digests"
+}

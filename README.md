@@ -101,7 +101,17 @@ correction to the pipeline framing this file used to carry.
 > correction below, had zero internal callers, and keeping it around
 > would have let the tree imply a scope the contract now denies; see
 > "What does not belong here" for why removal, not just naming the gap,
-> was the right close. Nothing here is a stable API.
+> was the right close.
+>
+> **The conformance/drift verdict artifact exists in both languages:**
+> `engine/src/verdict.rs` and `go/verdict` assemble the five required fields
+> of `docs/VERDICT-SCHEMA.md` (`verdict_schema_version: 1`) from `evaluate`'s
+> result and the existing digest projections, refuse an inconsistent result
+> (`E_INCONSISTENT_VERDICT`), and are cross-checked byte-for-byte through
+> `conformance/differential/verdict/`, including a test that the corpus
+> detects deliberate divergence.
+>
+> Nothing here is a stable API.
 
 ---
 

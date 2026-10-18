@@ -1,0 +1,13 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:deb83850cc0f689d6f0c643694567125bae9b2268bdaa6cf5ac20dddf1094683",
+    "fields": {
+      "/nics/{name=nic-0,zone=eu}/subnet": "DRIFT"
+    },
+    "object": "DRIFT",
+    "observation_digest": "sha256:66fe8f76ccc06b0722d74a23fcd893e4167dcd3e6942218e1e6e08a60f333a72",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:deb83850cc0f689d6f0c643694567125bae9b2268bdaa6cf5ac20dddf1094683\",\"fields\":{\"/nics/{name=nic-0,zone=eu}/subnet\":\"DRIFT\"},\"object\":\"DRIFT\",\"observation_digest\":\"sha256:66fe8f76ccc06b0722d74a23fcd893e4167dcd3e6942218e1e6e08a60f333a72\",\"verdict_schema_version\":1}",
+  "why": "a multi-key element identity is part of the evaluated path in fields"
+}

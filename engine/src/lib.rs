@@ -226,6 +226,7 @@ pub mod error;
 pub mod materialized;
 pub mod plan;
 pub mod reader;
+pub mod verdict;
 
 pub use canonical::{digest, to_canonical_json};
 pub use collection::{Collection, CollectionTopology};
@@ -243,4 +244,8 @@ pub use materialized::{
 pub use plan::{
     evaluate, CollectionPlan, ConformancePlan, ConsumedField, FieldPlan, ObjectConformance,
     ObjectVerdict,
+};
+pub use verdict::{
+    build_verdict, verdict_canonical_bytes, verdict_value, ConformanceVerdict,
+    VERDICT_SCHEMA_VERSION,
 };
