@@ -120,7 +120,7 @@ func objectFromValue(
 	return obj
 }
 
-func evaluateVector(t *testing.T, in vectorInput) (plan.ConformancePlan, plan.ObjectVerdict) {
+func vectorObjects(t *testing.T, in vectorInput) (plan.ConformancePlan, materialized.MaterializedObject, materialized.MaterializedObject, *conformance.Observation) {
 	t.Helper()
 	obs := conformance.NewObservation()
 	for _, o := range in.Observation {
@@ -159,6 +159,12 @@ func evaluateVector(t *testing.T, in vectorInput) (plan.ConformancePlan, plan.Ob
 		}
 		return materialized.NewObservationFieldEvidence(obs.Coverage("/"+k), val)
 	})
+	return cp, intent, observed, obs
+}
+
+func evaluateVector(t *testing.T, in vectorInput) (plan.ConformancePlan, plan.ObjectVerdict) {
+	t.Helper()
+	cp, intent, observed, obs := vectorObjects(t, in)
 	result := plan.Evaluate(intent, observed, obs, cp)
 	applyTamper(t, &result, in.Tamper)
 	return cp, result
@@ -367,5 +373,36 @@ func TestDifferentialVerdictVectorsDetectDeliberateDivergence(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no success vector was mutated")
+	}
+}
+
+// The primary entry point must give the pinned bytes too: every artifact
+// vector (the corpus is unchanged), evaluated and assembled in one
+// operation, matches the same pin the low-level builder is held to.
+func TestDifferentialVerdictVectorsThroughTheEntryPoint(t *testing.T) {
+	checked := 0
+	for _, name := range vectorNames(t, "verdict") {
+		dir := filepath.Join(corpusRoot("verdict"), name)
+		var exp vectorExpected
+		readJSON(t, filepath.Join(dir, "expected.json"), &exp)
+		if exp.Error != nil {
+			continue
+		}
+		var in vectorInput
+		readJSON(t, filepath.Join(dir, "input.json"), &in)
+		in.Tamper = nil
+		cp, intent, observed, obs := vectorObjects(t, in)
+		got, err := EvaluateAndBuild(intent, observed, obs, cp)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		for _, m := range mismatches(t, got, exp) {
+			t.Errorf("%s: %s", name, m)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("no artifact vector was checked")
 	}
 }

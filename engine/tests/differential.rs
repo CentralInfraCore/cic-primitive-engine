@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cic_primitive_engine::{
-    build_verdict, classify_field_value, conformance_plan_digest, evaluate,
+    build_verdict, classify_field_value, conformance_plan_digest, evaluate, evaluate_verdict,
     materialized_object_digest, observation_digest, reader, to_canonical_json,
     verdict_canonical_bytes, Capability, Collection, CollectionPlan, CollectionTopology,
     CompareType, ConformancePlan, ConformanceVerdict, ConsumedField, Coverage, FieldEvidence,
@@ -860,4 +860,32 @@ fn verdict_vectors_detect_deliberate_divergence() {
         }
     }
     assert!(checked > 0, "no success vector was mutated");
+}
+
+/// The primary entry point must give the pinned bytes too: every artifact
+/// vector (the corpus is unchanged), evaluated and assembled in one
+/// operation, matches the same pin the low-level builder is held to.
+#[test]
+fn verdict_vectors_through_the_entry_point() {
+    let mut checked = 0;
+    for v in load_vectors("verdict") {
+        if map_get(&v.expected, "canonical").is_none() {
+            continue;
+        }
+        let intent = map_get(&v.input, "intent").unwrap_or(&Value::Null);
+        let observed = map_get(&v.input, "observed").unwrap_or(&Value::Null);
+        let obs = build_observation(&v.input);
+        let plan = build_plan(&v.input);
+        let got = evaluate_verdict(
+            &intent_object(intent),
+            &observed_object(observed, &obs),
+            &obs,
+            &plan,
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", v.name));
+        let mismatches = verdict_mismatches(&got, &v.expected);
+        assert!(mismatches.is_empty(), "{}: {mismatches:?}", v.name);
+        checked += 1;
+    }
+    assert!(checked > 0, "no artifact vector was checked");
 }

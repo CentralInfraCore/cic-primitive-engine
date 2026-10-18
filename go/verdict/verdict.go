@@ -17,20 +17,39 @@
 //     recomputed or re-derived here;
 //   - SchemaVersion is the bare integer 1 (VERDICT-SCHEMA.md).
 //
-// # What is checked before an artifact exists
+// # Two entry points, and what each one guarantees
 //
-// The schema says Fields holds exactly one entry per path Evaluate
-// classified, and that every field is required. Build therefore refuses an
-// ObjectVerdict that cannot be such a result, rather than digesting it into
-// an artifact that would look authoritative:
+// EvaluateAndBuild is the primary entry point. It runs plan.Evaluate and
+// builds the artifact in one operation, so the plan whose digest is written
+// into the artifact is, by construction, the plan that produced the verdicts,
+// and the result cannot be edited in between. Use it unless you only hold a
+// finished result.
 //
-//   - the Fields and Consumed path sets must be identical;
-//   - every plan scalar path must be in Fields;
-//   - Object must be what plan.Aggregate gives for Fields.
+// Build is the low-level assembler for a caller that already holds a plan and
+// a plan.ObjectVerdict. It checks structure only, and it is exactly as
+// trustworthy as the caller who pairs the two:
+//
+//   - it rejects a result that is not shaped like an Evaluate result for this
+//     plan: Fields and Consumed must name the same paths, every Fields path
+//     must be one the plan can produce (a planned scalar, or a planned
+//     collection element path), every planned scalar must be present, and
+//     Object must be what plan.Aggregate gives for Fields;
+//   - it does NOT know which plan produced the result. A result evaluated
+//     under one plan, paired with another plan that has the same paths and a
+//     different comparator, is accepted, and the second plan's digest is
+//     written next to the first plan's verdicts;
+//   - it does NOT re-evaluate, so a self-consistent but altered result (a
+//     changed field verdict with a matching Object, a changed consumed value)
+//     is accepted;
+//   - it cannot tell a collection element path that Evaluate produced from one
+//     that only has the right shape.
+//
+// So Build must never be described as rejecting every tampered result. Where
+// the binding matters, use EvaluateAndBuild.
 //
 // A Consumed entry that is not a valid ConsumedField (Go's zero value, which
-// no constructor produced) is refused the same way; Rust cannot construct
-// that state at all, so this check has no Rust counterpart.
+// no constructor produced) is refused as well; Rust cannot construct that
+// state at all, so this check has no Rust counterpart.
 //
 // The checks run in the same order as the Rust peer and walk paths sorted
 // byte-wise, so both languages name the same offending path.
@@ -39,10 +58,12 @@ package verdict
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/CentralInfraCore/cic-primitive-engine/go/canonical"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/conformance"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/digestprojection"
+	"github.com/CentralInfraCore/cic-primitive-engine/go/materialized"
 	"github.com/CentralInfraCore/cic-primitive-engine/go/plan"
 )
 
@@ -89,6 +110,27 @@ func sortedPaths[V any](m map[string]V) []string {
 	return keys
 }
 
+// planCanProduce reports whether Evaluate could have classified path under cp:
+// a planned scalar path, or a collection element path, which Evaluate builds
+// as "{collection}/{identity}/{element}" with a non-empty identity.
+func planCanProduce(cp plan.ConformancePlan, path string) bool {
+	for _, fp := range cp.Scalars {
+		if fp.Path == path {
+			return true
+		}
+	}
+	for _, coll := range cp.Collections {
+		head := coll.Path + "/{"
+		for _, ef := range coll.Elements {
+			tail := "}/" + ef.Path
+			if len(path) > len(head)+len(tail) && strings.HasPrefix(path, head) && strings.HasSuffix(path, tail) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func checkConsistent(cp plan.ConformancePlan, result plan.ObjectVerdict) error {
 	for _, path := range sortedPaths(result.Fields) {
 		if _, ok := result.Consumed[path]; !ok {
@@ -103,6 +145,11 @@ func checkConsistent(cp plan.ConformancePlan, result plan.ObjectVerdict) error {
 			return inconsistent(path, "consumed observation evidence is not a valid ConsumedField")
 		}
 	}
+	for _, path := range sortedPaths(result.Fields) {
+		if !planCanProduce(cp, path) {
+			return inconsistent(path, "path is not one the plan can produce (no planned scalar or collection element matches)")
+		}
+	}
 	for _, fp := range cp.Scalars {
 		if _, ok := result.Fields[fp.Path]; !ok {
 			return inconsistent(fp.Path, "planned scalar path is missing from fields")
@@ -115,8 +162,27 @@ func checkConsistent(cp plan.ConformancePlan, result plan.ObjectVerdict) error {
 	return nil
 }
 
-// Build assembles the verdict artifact for result, the output of
-// plan.Evaluate run against cp.
+// EvaluateAndBuild runs plan.Evaluate and builds the verdict artifact in one
+// operation: the primary entry point. The plan digest in the artifact is the
+// digest of the plan that was actually executed, and the result cannot be
+// swapped or edited between evaluation and assembly.
+//
+// Like plan.Evaluate it panics if cp is malformed. The error is as Build's; a
+// result produced here is always consistent, so in practice only a
+// canonicalization error from the digest functions.
+func EvaluateAndBuild(
+	intent, observed materialized.MaterializedObject,
+	obs *conformance.Observation,
+	cp plan.ConformancePlan,
+) (Verdict, error) {
+	return Build(cp, plan.Evaluate(intent, observed, obs, cp))
+}
+
+// Build assembles the verdict artifact for result, claimed to be the output
+// of plan.Evaluate run against cp. Low-level: it checks structure only and
+// cannot verify that cp is the plan that produced result -- see the package
+// doc for exactly what it does and does not reject, and prefer
+// EvaluateAndBuild.
 //
 // Returns an *Error with code E_INCONSISTENT_VERDICT if result cannot be an
 // Evaluate result for cp (see the package doc), or the canonicalization error

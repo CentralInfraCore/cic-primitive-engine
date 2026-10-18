@@ -246,6 +246,6 @@ pub use plan::{
     ObjectVerdict,
 };
 pub use verdict::{
-    build_verdict, verdict_canonical_bytes, verdict_value, ConformanceVerdict,
+    build_verdict, evaluate_verdict, verdict_canonical_bytes, verdict_value, ConformanceVerdict,
     VERDICT_SCHEMA_VERSION,
 };

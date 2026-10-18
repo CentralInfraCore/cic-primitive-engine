@@ -110,6 +110,9 @@ correction to the pipeline framing this file used to carry.
 > (`E_INCONSISTENT_VERDICT`), and are cross-checked byte-for-byte through
 > `conformance/differential/verdict/`, including a test that the corpus
 > detects deliberate divergence.
+> `evaluate_verdict`/`verdict.EvaluateAndBuild` is the primary entry point (plan and
+> result are bound by construction); `build_verdict`/`verdict.Build` is the
+> low-level assembler and checks structure only -- see `docs/VERDICT-SCHEMA.md`.
 >
 > Nothing here is a stable API.
 

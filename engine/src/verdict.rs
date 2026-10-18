@@ -15,30 +15,48 @@
 //!   called, never recomputed or re-derived here;
 //! * `verdict_schema_version` is the bare integer `1` (`VERDICT-SCHEMA.md`).
 //!
-//! # What is checked before an artifact exists
+//! # Two entry points, and what each one guarantees
 //!
-//! The schema says `fields` holds exactly one entry per path `evaluate`
-//! classified, and that every field is required. [`build_verdict`] therefore
-//! refuses an [`ObjectVerdict`] that cannot be such a result, rather than
-//! digesting it into an artifact that would look authoritative:
+//! **[`evaluate_verdict`] is the primary entry point.** It runs
+//! [`evaluate`] and builds the artifact in one operation, so the plan whose
+//! digest is written into the artifact is, by construction, the plan that
+//! produced the verdicts, and the result cannot be edited in between. Use it
+//! unless you only hold a finished result.
 //!
-//! * the `fields` and `consumed` path sets must be identical (every classified
-//!   path has its observation evidence, and no evidence is left over);
-//! * every `plan.scalars` path must be in `fields`;
-//! * `object` must be what [`aggregate`] gives for `fields`.
+//! [`build_verdict`] is the low-level assembler for a caller that already holds
+//! a `plan` and an [`ObjectVerdict`]. It checks structure only, and it is
+//! exactly as trustworthy as the caller who pairs the two:
 //!
-//! A real `evaluate` result always passes; a result that was edited or
-//! assembled by hand does not. Scope stays with the contract: signing the
-//! artifact and an intent digest are explicitly "not decided" in the schema and
-//! are not added here.
+//! * it rejects a result that is not shaped like an `evaluate` result for this
+//!   plan: `fields` and `consumed` must name the same paths, every `fields`
+//!   path must be one the plan can produce (a planned scalar, or a planned
+//!   collection element path), every planned scalar must be present, and
+//!   `object` must be what [`aggregate`] gives for `fields`;
+//! * it does **not** know which plan produced the result. A result evaluated
+//!   under one plan, paired with another plan that has the same paths and a
+//!   different comparator, is accepted, and the second plan's digest is written
+//!   next to the first plan's verdicts;
+//! * it does **not** re-evaluate, so a self-consistent but altered result (a
+//!   changed field verdict with a matching `object`, a changed consumed value)
+//!   is accepted;
+//! * it cannot tell a collection element path that `evaluate` produced from
+//!   one that only has the right shape.
+//!
+//! So `build_verdict` must never be described as rejecting every tampered
+//! result. Where the binding matters, use [`evaluate_verdict`].
+//!
+//! Scope stays with the contract: signing the artifact and an intent digest are
+//! explicitly "not decided" in the schema and are not added here.
 
 use std::collections::BTreeMap;
 
 use crate::canonical::to_canonical_json;
 use crate::conformance::FieldVerdict;
+use crate::conformance::Observation;
 use crate::digest_projection::{conformance_plan_digest, observation_digest};
 use crate::error::{code, Error, Result, Stage};
-use crate::plan::{aggregate, ConformancePlan, ObjectConformance, ObjectVerdict};
+use crate::materialized::MaterializedObject;
+use crate::plan::{aggregate, evaluate, ConformancePlan, ObjectConformance, ObjectVerdict};
 use crate::reader::{Map, Value};
 
 /// The only `verdict_schema_version` this module produces. Incremented on any
@@ -56,8 +74,29 @@ pub struct ConformanceVerdict {
     pub observation_digest: String,
 }
 
-/// Assembles the verdict artifact for `result`, the output of
-/// [`crate::evaluate`] run against `plan`.
+/// Runs [`evaluate`] and builds the verdict artifact in one operation: the
+/// primary entry point. The plan digest in the artifact is the digest of the
+/// plan that was actually executed, and the result cannot be swapped or edited
+/// between evaluation and assembly.
+///
+/// # Errors
+/// As [`build_verdict`]; a result produced here is always consistent, so in
+/// practice only a canonicalization error from the digest functions.
+pub fn evaluate_verdict(
+    intent: &MaterializedObject,
+    observed: &MaterializedObject,
+    obs: &Observation,
+    plan: &ConformancePlan,
+) -> Result<ConformanceVerdict> {
+    let result = evaluate(intent, observed, obs, plan);
+    build_verdict(plan, &result)
+}
+
+/// Assembles the verdict artifact for `result`, claimed to be the output of
+/// [`evaluate`] run against `plan`. Low-level: it checks structure only and
+/// cannot verify that `plan` is the plan that produced `result` -- see the
+/// module doc for exactly what it does and does not reject, and prefer
+/// [`evaluate_verdict`].
 ///
 /// # Errors
 /// `E_INCONSISTENT_VERDICT` (`R-VERDICT-CONSISTENT`) if `result` cannot be an
@@ -84,6 +123,22 @@ fn inconsistent(path: &str, detail: String) -> Error {
     )
 }
 
+/// Whether `evaluate` could have classified `path` under `plan`: a planned
+/// scalar path, or a collection element path, which `evaluate` builds as
+/// `{collection}/{identity}/{element}` with a non-empty identity.
+fn plan_can_produce(plan: &ConformancePlan, path: &str) -> bool {
+    if plan.scalars.iter().any(|fp| fp.path == path) {
+        return true;
+    }
+    plan.collections.iter().any(|cp| {
+        let head = format!("{}/{{", cp.path);
+        cp.elements.iter().any(|ef| {
+            let tail = format!("}}/{}", ef.path);
+            path.len() > head.len() + tail.len() && path.starts_with(&head) && path.ends_with(&tail)
+        })
+    })
+}
+
 fn check_consistent(plan: &ConformancePlan, result: &ObjectVerdict) -> Result<()> {
     for path in result.fields.keys() {
         if !result.consumed.contains_key(path) {
@@ -98,6 +153,15 @@ fn check_consistent(plan: &ConformancePlan, result: &ObjectVerdict) -> Result<()
             return Err(inconsistent(
                 path,
                 "consumed observation evidence for a path that was not classified".to_string(),
+            ));
+        }
+    }
+    for path in result.fields.keys() {
+        if !plan_can_produce(plan, path) {
+            return Err(inconsistent(
+                path,
+                "path is not one the plan can produce (no planned scalar or collection element matches)"
+                    .to_string(),
             ));
         }
     }
@@ -327,6 +391,134 @@ mod tests {
         let e = build_verdict(&plan, &result).unwrap_err();
         assert_eq!(e.code, code::INCONSISTENT_VERDICT);
         assert_eq!(e.path, "$");
+    }
+
+    /// Counterexample 1 (review of PR #60): `/ghost` is in both `fields` and
+    /// `consumed`, so the two path sets agree and `object` follows, but the plan
+    /// never asked for it.
+    #[test]
+    fn counterexample_a_path_outside_the_plan_is_refused() {
+        let (plan, mut result) = sample();
+        result
+            .fields
+            .insert("/ghost".to_string(), FieldVerdict::Conformant);
+        result
+            .consumed
+            .insert("/ghost".to_string(), ConsumedField::Absent);
+        let e = build_verdict(&plan, &result).expect_err("a path the plan never asked for");
+        assert_eq!(e.code, code::INCONSISTENT_VERDICT);
+        assert_eq!(e.path, "/ghost");
+    }
+
+    fn tie_inputs() -> (MaterializedObject, MaterializedObject, Observation) {
+        let intent = object(&[("memory_gb", authored(Value::Int(16)))]);
+        let observed_obj = object(&[("memory_gb", observed(Value::Str("16".into())))]);
+        let mut obs = Observation::new();
+        obs.set("/memory_gb", Coverage::Observed);
+        (intent, observed_obj, obs)
+    }
+
+    fn memory_plan(compare: CompareType) -> ConformancePlan {
+        ConformancePlan {
+            scalars: vec![FieldPlan {
+                path: "/memory_gb".to_string(),
+                compare,
+            }],
+            collections: vec![],
+        }
+    }
+
+    /// Counterexample 2 (review of PR #60): the result was produced under
+    /// `plan_a` but `build_verdict` is handed `plan_b` with the same paths and a
+    /// different comparator. The low-level builder cannot tell: it accepts and
+    /// writes `plan_b`'s digest next to `plan_a`'s verdicts. This is the
+    /// documented limit of `build_verdict`, pinned here so it cannot be
+    /// mistaken for a guarantee.
+    #[test]
+    fn counterexample_the_low_level_builder_does_not_bind_the_plan() {
+        let (intent, observed_obj, obs) = tie_inputs();
+        let plan_a = memory_plan(CompareType::Numeric);
+        let plan_b = memory_plan(CompareType::Exact);
+        let result_a = evaluate(&intent, &observed_obj, &obs, &plan_a);
+
+        let mixed = build_verdict(&plan_b, &result_a).expect("structure alone looks fine");
+        assert_eq!(
+            mixed.conformance_plan_digest,
+            conformance_plan_digest(&plan_b).unwrap()
+        );
+        assert_ne!(
+            mixed.conformance_plan_digest,
+            conformance_plan_digest(&plan_a).unwrap(),
+            "the artifact names a plan that did not produce its verdicts"
+        );
+    }
+
+    /// The answer to counterexample 2: through the primary entry point the
+    /// plan and the result cannot be paired independently, so each plan's
+    /// digest sits next to the verdicts that plan actually produced.
+    #[test]
+    fn counterexample_the_entry_point_binds_the_plan_to_its_result() {
+        let (intent, observed_obj, obs) = tie_inputs();
+        let plan_a = memory_plan(CompareType::Numeric);
+        let plan_b = memory_plan(CompareType::Exact);
+        let a = evaluate_verdict(&intent, &observed_obj, &obs, &plan_a).unwrap();
+        let b = evaluate_verdict(&intent, &observed_obj, &obs, &plan_b).unwrap();
+
+        assert_eq!(
+            a.conformance_plan_digest,
+            conformance_plan_digest(&plan_a).unwrap()
+        );
+        assert_eq!(
+            b.conformance_plan_digest,
+            conformance_plan_digest(&plan_b).unwrap()
+        );
+        assert_ne!(a.conformance_plan_digest, b.conformance_plan_digest);
+        // The comparator really changes the verdict, so the digest is not decoration.
+        assert_ne!(a.fields, b.fields);
+        // Each artifact is exactly what the low-level builder gives for the
+        // result of the SAME plan.
+        let direct = build_verdict(&plan_b, &evaluate(&intent, &observed_obj, &obs, &plan_b));
+        assert_eq!(b, direct.unwrap());
+    }
+
+    #[test]
+    fn collection_element_paths_are_matched_by_shape_and_foreign_ones_refused() {
+        let plan = ConformancePlan {
+            scalars: vec![],
+            collections: vec![crate::plan::CollectionPlan {
+                path: "/nics".to_string(),
+                collection: Collection {
+                    topology: CollectionTopology::Map,
+                    keys: vec!["name".to_string()],
+                },
+                elements: vec![FieldPlan {
+                    path: "subnet".to_string(),
+                    compare: CompareType::Exact,
+                }],
+            }],
+        };
+        let with = |path: &str| {
+            let mut fields = BTreeMap::new();
+            fields.insert(path.to_string(), FieldVerdict::Conformant);
+            let mut consumed = BTreeMap::new();
+            consumed.insert(path.to_string(), ConsumedField::Absent);
+            ObjectVerdict {
+                object: ObjectConformance::Conformant,
+                fields,
+                consumed,
+            }
+        };
+        assert!(build_verdict(&plan, &with("/nics/{name=a}/subnet")).is_ok());
+        for foreign in [
+            "/nics/{name=a}/other",
+            "/other/{name=a}/subnet",
+            "/nics/{}/subnet",
+            "/nics/subnet",
+        ] {
+            let e = build_verdict(&plan, &with(foreign)).unwrap_err();
+            assert_eq!(e.code, code::INCONSISTENT_VERDICT, "{foreign}");
+            assert_eq!(e.path, foreign);
+        }
     }
 
     #[test]
