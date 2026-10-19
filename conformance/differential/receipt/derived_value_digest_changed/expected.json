@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "value_digest is not the digest of the bound field's value",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-VALUE",
+    "path": "$.materialization.derived_values[0].value_digest"
+  }
+}

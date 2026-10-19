@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "two receipt paths bound to the same object field",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "$.materialization.applied_defaults[1].path"
+  }
+}

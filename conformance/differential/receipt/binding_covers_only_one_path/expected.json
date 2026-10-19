@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "the derived entry's path is missing from the binding: no partial success",
+  "error": {
+    "code": "E_RECEIPT_UNBOUND",
+    "rule": "R-RECEIPT-PATH-BINDING",
+    "path": "$.materialization.derived_values[0].path"
+  }
+}

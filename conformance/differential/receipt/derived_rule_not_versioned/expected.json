@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "DerivedEvidence.rule is name-vN",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-EVIDENCE-FORM",
+    "path": "$.materialization.derived_values[0].rule"
+  }
+}

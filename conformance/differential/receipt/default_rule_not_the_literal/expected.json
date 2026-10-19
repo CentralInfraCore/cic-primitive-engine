@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "DefaultEvidence.rule is the literal schema-default",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-EVIDENCE-FORM",
+    "path": "$.materialization.applied_defaults[0].rule"
+  }
+}

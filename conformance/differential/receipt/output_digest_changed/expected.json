@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "output_digest belongs to another materialized object",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-BINDS-OUTPUT",
+    "path": "$.materialization.output_digest"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "an input path with an empty segment",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-EVIDENCE-FORM",
+    "path": "$.materialization.derived_values[0].inputs[0]"
+  }
+}

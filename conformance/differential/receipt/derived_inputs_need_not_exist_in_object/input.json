@@ -1,0 +1,72 @@
+{
+  "receipt": {
+    "materialization": {
+      "receipt_schema_version": 1,
+      "grammar_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "grammar_schema_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "primitive_release": "primitives/@v0.2.0",
+      "primitive_source_commit": "960ee0f048d969a85ad20819bc0f2366ad91fa40",
+      "primitive_build_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "schema_name": "cic:storage:StorageResource",
+      "schema_version": "v1.2.0",
+      "schema_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "engine_identity": "environment-reference-fixture",
+      "engine_version": "0.0.0",
+      "input_digest": "sha256:fa436f473bd3ca77dfd99e29b023038ddc8bfcc04cac2b16057c7b8aef65c4a7",
+      "output_digest": "sha256:1fe567ac0333d3a4d60162cce7e7c3f8a272ed8b63e02d9774c61dce94dea0c0",
+      "applied_defaults": [
+        {
+          "path": "$.config.replicas",
+          "rule": "schema-default",
+          "value_digest": "sha256:4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+        }
+      ],
+      "derived_values": [
+        {
+          "path": "$.state.effective_state",
+          "rule": "effective-state-v1",
+          "inputs": [
+            "$.state.admin_state",
+            "$.state.never_materialized"
+          ],
+          "value_digest": "sha256:294bdbf9fed030b63703f2925091c2da3e4bf211b2b6b1b6ad3a3cfd9478353a"
+        }
+      ]
+    }
+  },
+  "authored_input": {
+    "admin_state": "up"
+  },
+  "object": {
+    "fields": [
+      {
+        "key": "admin_state",
+        "capability": "implemented",
+        "provenance": "authored",
+        "value": "up"
+      },
+      {
+        "key": "effective_state",
+        "capability": "implemented",
+        "provenance": "derived",
+        "value": "RUNNING"
+      },
+      {
+        "key": "oper_state",
+        "capability": "implemented",
+        "coverage": "observed",
+        "value": "up"
+      },
+      {
+        "key": "replicas",
+        "capability": "implemented",
+        "provenance": "schema_default",
+        "value": 3
+      }
+    ]
+  },
+  "path_binding": {
+    "$.config.replicas": "replicas",
+    "$.state.effective_state": "effective_state"
+  }
+}

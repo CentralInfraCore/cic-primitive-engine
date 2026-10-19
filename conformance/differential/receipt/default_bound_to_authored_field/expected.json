@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "an applied_defaults entry bound to a field whose provenance is authored",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "$.materialization.applied_defaults[0].path"
+  }
+}

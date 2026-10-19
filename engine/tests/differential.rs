@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 use cic_primitive_engine::{
     build_verdict, classify_field_value, conformance_plan_digest, evaluate, evaluate_verdict,
     materialized_object_digest, observation_digest, reader, to_canonical_json,
-    verdict_canonical_bytes, Capability, Collection, CollectionPlan, CollectionTopology,
-    CompareType, ConformancePlan, ConformanceVerdict, ConsumedField, Coverage, FieldEvidence,
-    FieldPlan, FieldVerdict, IntentEvidence, MaterializedField, MaterializedObject,
-    ObjectConformance, ObjectVerdict, Observation, Stage,
+    verdict_canonical_bytes, verify_receipt, Capability, Collection, CollectionPlan,
+    CollectionTopology, CompareType, ConformancePlan, ConformanceVerdict, ConsumedField, Coverage,
+    FieldEvidence, FieldPlan, FieldVerdict, IntentEvidence, MaterializedField, MaterializedObject,
+    ObjectConformance, ObjectVerdict, Observation, PathBinding, Receipt, Stage,
 };
 use reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -888,4 +888,144 @@ fn verdict_vectors_through_the_entry_point() {
         checked += 1;
     }
     assert!(checked > 0, "no artifact vector was checked");
+}
+
+// ---------------------------------------------------------------------------
+// conformance/differential/receipt/ -- the receipt verifier
+// (`docs/RECEIPT-VERIFIER.md`). Each vector holds a receipt document, the
+// authored input, a materialized object and, optionally, an explicit path
+// binding. Both languages must accept or reject identically and, on
+// rejection, name the same code, rule and location.
+// ---------------------------------------------------------------------------
+
+/// `Ok(())` for an accepted vector, else the rejection's `(code, rule, path)`.
+fn run_receipt_vector(input: &Value) -> std::result::Result<(), (String, String, String)> {
+    let object = build_materialized_object_from_fixture(map_get(input, "object").unwrap());
+    let authored = map_get(input, "authored_input").unwrap();
+    let mut binding = PathBinding::new();
+    if let Some(Value::Map(m)) = map_get(input, "path_binding") {
+        for (k, v) in m.iter() {
+            let Value::Str(key) = v else {
+                panic!("path_binding values are strings")
+            };
+            binding.insert(k.to_string(), key.clone());
+        }
+    }
+    let triple = |e: cic_primitive_engine::Error| (e.code.to_string(), e.rule.to_string(), e.path);
+    let receipt = Receipt::from_value(map_get(input, "receipt").unwrap()).map_err(triple)?;
+    verify_receipt(&receipt, &object, authored, &binding).map_err(triple)
+}
+
+#[test]
+fn receipt_vectors() {
+    let vectors = load_vectors("receipt");
+    assert!(
+        !vectors.is_empty(),
+        "differential/receipt has no vectors -- an empty corpus trivially passes"
+    );
+    let mut failures = Vec::new();
+    let (mut accepted, mut rejected) = (0, 0);
+    for v in &vectors {
+        let got = run_receipt_vector(&v.input);
+        if bool_field(&v.expected, "accepted") {
+            accepted += 1;
+            if let Err(e) = got {
+                failures.push(format!("{}: want accepted, got {e:?}", v.name));
+            }
+        } else {
+            rejected += 1;
+            let want = map_get(&v.expected, "error").expect("a rejection vector names its error");
+            let want = (
+                str_field(want, "code").to_string(),
+                str_field(want, "rule").to_string(),
+                str_field(want, "path").to_string(),
+            );
+            match got {
+                Ok(()) => {
+                    failures.push(format!("{}: want rejection {want:?}, got accepted", v.name))
+                }
+                Err(e) if e != want => {
+                    failures.push(format!("{}: want {want:?}, got {e:?}", v.name));
+                }
+                Err(_) => {}
+            }
+        }
+    }
+    assert!(
+        accepted >= 3 && rejected >= 20,
+        "corpus too thin: {accepted} accepted, {rejected} rejected"
+    );
+    assert!(
+        failures.is_empty(),
+        "{} of {} receipt vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// The harness must be able to fail: every accepted vector, with one field
+/// of its receipt altered, must turn into the rejection that alteration
+/// deserves.
+#[test]
+fn receipt_vectors_detect_deliberate_divergence() {
+    fn flip_hex(d: &str) -> String {
+        let mut chars: Vec<char> = d.chars().collect();
+        let last = chars.len() - 1;
+        chars[last] = if chars[last] == '0' { '1' } else { '0' };
+        chars.into_iter().collect()
+    }
+    type Mutation = (
+        &'static str,
+        &'static str,
+        fn(&mut cic_primitive_engine::reader::Map),
+    );
+    let mutations: [Mutation; 4] = [
+        ("input digest altered", "E_RECEIPT_MISMATCH", |m| {
+            let Some(Value::Str(d)) = m.get("input_digest") else {
+                panic!()
+            };
+            let d = flip_hex(d);
+            m.insert("input_digest", Value::Str(d));
+        }),
+        ("output digest altered", "E_RECEIPT_MISMATCH", |m| {
+            let Some(Value::Str(d)) = m.get("output_digest") else {
+                panic!()
+            };
+            let d = flip_hex(d);
+            m.insert("output_digest", Value::Str(d));
+        }),
+        ("version altered", "E_INVALID_RECEIPT", |m| {
+            m.insert("receipt_schema_version", Value::Int(2));
+        }),
+        ("field retyped", "E_INVALID_RECEIPT", |m| {
+            m.insert("engine_version", Value::Int(1));
+        }),
+    ];
+
+    let mut checked = 0;
+    for v in load_vectors("receipt") {
+        if !bool_field(&v.expected, "accepted") {
+            continue;
+        }
+        assert!(run_receipt_vector(&v.input).is_ok(), "{}: baseline", v.name);
+        for (what, want_code, mutate) in &mutations {
+            let mut input = v.input.clone();
+            let Value::Map(top) = &mut input else {
+                panic!()
+            };
+            let Some(Value::Map(doc)) = top.get_mut("receipt") else {
+                panic!()
+            };
+            let Some(Value::Map(body)) = doc.get_mut("materialization") else {
+                panic!()
+            };
+            mutate(body);
+            match run_receipt_vector(&input) {
+                Err((code, _, _)) if code == *want_code => checked += 1,
+                other => panic!("{}: {what}: expected {want_code}, got {other:?}", v.name),
+            }
+        }
+    }
+    assert!(checked >= 12, "too few mutations were exercised: {checked}");
 }

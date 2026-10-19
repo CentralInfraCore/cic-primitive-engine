@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "1.0 is a float, not the integer 1",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-SHAPE",
+    "path": "$.materialization.receipt_schema_version"
+  }
+}

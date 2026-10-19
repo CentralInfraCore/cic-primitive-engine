@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "a base64 digest is not accepted as is; only a verified re-spelling of the same SHA-256 bytes may be converted by the producer",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-DIGEST-FORMAT",
+    "path": "$.materialization.primitive_build_hash"
+  }
+}

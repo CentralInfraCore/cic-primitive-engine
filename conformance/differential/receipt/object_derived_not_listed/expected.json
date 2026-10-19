@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "the object's derived field has no derived_values entry",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "object/effective_state"
+  }
+}

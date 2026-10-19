@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "only receipt_schema_version 1 is supported",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-VERSION",
+    "path": "$.materialization.receipt_schema_version"
+  }
+}

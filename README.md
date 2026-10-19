@@ -114,6 +114,13 @@ correction to the pipeline framing this file used to carry.
 > result are bound by construction); `build_verdict`/`verdict.Build` is the
 > low-level assembler and checks structure only -- see `docs/VERDICT-SCHEMA.md`.
 >
+> **A receipt verifier exists in both languages:** `engine/src/receipt.rs` and
+> `go/receipt` check a materialization receipt (`docs/RECEIPT-SCHEMA.md`) for
+> structural and content consistency against the materialized object, the
+> authored input and an explicit path binding -- see `docs/RECEIPT-VERIFIER.md`
+> for exactly what a success does and does not establish. No receipt producer
+> exists in this crate; materialization is the environment's job.
+>
 > Nothing here is a stable API.
 
 ---

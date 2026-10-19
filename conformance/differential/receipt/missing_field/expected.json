@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "engine_version is absent",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-SHAPE",
+    "path": "$.materialization.engine_version"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "derived_values must be ascending by .path",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-ORDER",
+    "path": "$.materialization.derived_values[1].path"
+  }
+}
