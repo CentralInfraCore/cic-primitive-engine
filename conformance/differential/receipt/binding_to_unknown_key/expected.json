@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "the path is bound to a key the object does not have",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "$.materialization.applied_defaults[0].path"
+  }
+}

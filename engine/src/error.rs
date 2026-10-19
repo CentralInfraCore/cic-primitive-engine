@@ -140,6 +140,26 @@ pub mod code {
     /// `object` does not follow from `fields` (`R-VERDICT-CONSISTENT`,
     /// `docs/VERDICT-SCHEMA.md`). Raised by `verdict::build_verdict`.
     pub const INCONSISTENT_VERDICT: &str = "E_INCONSISTENT_VERDICT";
+
+    /// A receipt is not well formed: a required field is missing or has the
+    /// wrong type, a member is outside the layout, `receipt_schema_version` is
+    /// unsupported, a digest is not `sha256:` + 64 lowercase hex, or an
+    /// evidence list is malformed or out of order (`R-RECEIPT-SHAPE`,
+    /// `-VERSION`, `-DIGEST-FORMAT`, `-EVIDENCE-FORM`, `-ORDER`;
+    /// `docs/RECEIPT-SCHEMA.md`). Raised by `receipt::verify_receipt`.
+    pub const INVALID_RECEIPT: &str = "E_INVALID_RECEIPT";
+
+    /// A well-formed receipt disagrees with the artifacts it claims to
+    /// describe: `input_digest` or `output_digest` does not match, or an
+    /// evidence entry does not match the bound object field
+    /// (`R-RECEIPT-BINDS-INPUT`, `-BINDS-OUTPUT`, `-EVIDENCE-MEMBERSHIP`,
+    /// `-EVIDENCE-VALUE`). Raised by `receipt::verify_receipt`.
+    pub const RECEIPT_MISMATCH: &str = "E_RECEIPT_MISMATCH";
+
+    /// An evidence entry's path has no explicit binding to a materialized
+    /// object key (`R-RECEIPT-PATH-BINDING`). Refused, never partially
+    /// accepted. Raised by `receipt::verify_receipt`.
+    pub const RECEIPT_UNBOUND: &str = "E_RECEIPT_UNBOUND";
 }
 
 /// The single error type this crate raises.

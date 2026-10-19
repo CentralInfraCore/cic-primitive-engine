@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "a path is $.-rooted with non-empty segments",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-EVIDENCE-FORM",
+    "path": "$.materialization.applied_defaults[0].path"
+  }
+}

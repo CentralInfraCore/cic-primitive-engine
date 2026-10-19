@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "the object's schema_default field has no applied_defaults entry",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "object/replicas"
+  }
+}

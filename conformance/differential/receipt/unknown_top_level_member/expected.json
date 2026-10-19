@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "the layout is closed; the schema has no signature field",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-SHAPE",
+    "path": "$.materialization.signature"
+  }
+}

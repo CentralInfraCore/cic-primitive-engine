@@ -1,0 +1,46 @@
+{
+  "receipt": {
+    "materialization": {
+      "receipt_schema_version": 1,
+      "grammar_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "grammar_schema_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "primitive_release": "primitives/@v0.2.0",
+      "primitive_source_commit": "960ee0f048d969a85ad20819bc0f2366ad91fa40",
+      "primitive_build_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "schema_name": "cic:storage:StorageResource",
+      "schema_version": "v1.2.0",
+      "schema_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "engine_identity": "environment-reference-fixture",
+      "input_digest": "sha256:7e6dbda8c11818a96d216350f13efb0edb5399b801e3ec054f1f2fab8d63324c",
+      "output_digest": "sha256:28a5a9b53b4239b38731bb401b23cacc18e38d3656275a8b62a6fecce95cb110",
+      "applied_defaults": [],
+      "derived_values": []
+    }
+  },
+  "authored_input": {
+    "shape": "E4.Flex",
+    "memory_gb": 16
+  },
+  "object": {
+    "fields": [
+      {
+        "key": "memory_gb",
+        "capability": "implemented",
+        "provenance": "authored",
+        "value": 16
+      },
+      {
+        "key": "power_state",
+        "capability": "implemented",
+        "coverage": "observed",
+        "value": "running"
+      },
+      {
+        "key": "shape",
+        "capability": "implemented",
+        "provenance": "authored",
+        "value": "E4.Flex"
+      }
+    ]
+  }
+}

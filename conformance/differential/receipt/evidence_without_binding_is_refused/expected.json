@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "non-empty evidence with no path binding fails closed; flat object keys are never turned into $.config.* paths by guessing",
+  "error": {
+    "code": "E_RECEIPT_UNBOUND",
+    "rule": "R-RECEIPT-PATH-BINDING",
+    "path": "$.materialization.applied_defaults[0].path"
+  }
+}

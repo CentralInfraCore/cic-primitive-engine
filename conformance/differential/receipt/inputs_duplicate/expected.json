@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "inputs is deduplicated",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-ORDER",
+    "path": "$.materialization.derived_values[0].inputs[1]"
+  }
+}

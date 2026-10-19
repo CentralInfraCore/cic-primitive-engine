@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "a bare-hex digest lacks the sha256: prefix",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-DIGEST-FORMAT",
+    "path": "$.materialization.schema_digest"
+  }
+}

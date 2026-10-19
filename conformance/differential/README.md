@@ -43,6 +43,7 @@ differential/
   digest/        -- F9: digestprojection.*
   materialized/  -- MaterializedObject::try_new / NewMaterializedObject
   verdict/       -- the assembled five-field verdict artifact (build_verdict / verdict.Build)
+  receipt/       -- the receipt verifier (verify_receipt / receipt.Verify)
 ```
 
 One group per primitive, landed incrementally — matching how F6
@@ -221,3 +222,26 @@ vector's `object`/`fields` must equal the same-named `plan/` vector's pin. A
 second test per language applies eight deliberate divergences to a correct
 artifact and requires the comparison to catch each.
 
+### `receipt/`
+
+```text
+input.json:     receipt         the receipt document ({"materialization": {...}})
+                authored_input  the processed authored input (any value)
+                object          a materialized object, in the `digest/` group's
+                                {"fields": [...]} fixture shape
+                path_binding    optional: receipt path -> object key
+expected.json:  {accepted: true}
+                {accepted: false, error: {code, rule, path}}
+```
+
+Both languages must accept or reject identically, and a rejection must name
+the same code, rule and location. Every digest in these vectors was computed
+by an independent script over the documented canonical form (sorted keys, no
+whitespace) and cross-checked against the already-pinned
+`materialized_object_digest` vector before use; neither engine produced them.
+A second test per language alters one field of each accepted receipt (an input
+digest, an output digest, the version, a field's type) and requires the
+verifier to reject it.
+
+Documents are decoded so an integer stays an integer and `1.0` stays a float
+(Go: `Decoder.UseNumber`), because the receipt's version is a bare integer.

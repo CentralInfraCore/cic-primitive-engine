@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "one entry per defaulted field: a repeated path is not strictly ascending",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-ORDER",
+    "path": "$.materialization.applied_defaults[1].path"
+  }
+}

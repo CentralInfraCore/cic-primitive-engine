@@ -1,0 +1,4 @@
+{
+  "accepted": true,
+  "why": "inputs is checked for form and order only: the finished object cannot show what a derivation read, so an input path absent from the object is not an error"
+}

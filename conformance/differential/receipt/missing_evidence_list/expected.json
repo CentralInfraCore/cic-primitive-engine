@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "an omitted applied_defaults is ambiguous; [] is required",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-SHAPE",
+    "path": "$.materialization.applied_defaults"
+  }
+}

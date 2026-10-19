@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "a derived_values entry bound to a schema_default field",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-EVIDENCE-MEMBERSHIP",
+    "path": "$.materialization.derived_values[0].path"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "uppercase hex is not the normative spelling",
+  "error": {
+    "code": "E_INVALID_RECEIPT",
+    "rule": "R-RECEIPT-DIGEST-FORMAT",
+    "path": "$.materialization.grammar_sha256"
+  }
+}

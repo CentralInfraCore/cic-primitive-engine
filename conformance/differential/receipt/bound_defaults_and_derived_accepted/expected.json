@@ -1,0 +1,4 @@
+{
+  "accepted": true,
+  "why": "one defaulted and one derived field, each bound through an explicit path binding; membership and both value digests are checked"
+}

@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "why": "input_digest is the digest of a different authored input",
+  "error": {
+    "code": "E_RECEIPT_MISMATCH",
+    "rule": "R-RECEIPT-BINDS-INPUT",
+    "path": "$.materialization.input_digest"
+  }
+}
