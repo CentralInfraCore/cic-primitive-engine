@@ -26,6 +26,10 @@ Structural and content consistency, and nothing more.
   (`applied_defaults[].rule` is the literal `schema-default`; a derived rule is
   `name-vN`; paths are `$.`-rooted with non-empty segments), and each
   `derived_values[].inputs` is a strictly ascending, deduplicated path set.
+- The evidence lists and every `inputs` list are required arrays: `[]` when
+  empty, never null. In Go a `nil` slice is the null spelling, so the typed API
+  refuses it (`R-RECEIPT-SHAPE`) and `Parse` turns a JSON `[]` into a non-nil
+  empty slice. Rust's `Vec` cannot be null, so the invariant already holds.
 - `output_digest` equals `materialized_object_digest` of the object it was
   handed.
 - `input_digest` equals the A7 digest of the canonical form of the authored

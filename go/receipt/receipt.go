@@ -182,6 +182,8 @@ func shape(path, want string) *Error {
 
 const absent = "this required field (it is absent)"
 
+const emptyNotNull = "a sequence, `[]` when empty, never null"
+
 func takeStr(m map[string]interface{}, key, path string) (string, *Error) {
 	v, ok := m[key]
 	if !ok {
@@ -261,6 +263,9 @@ func Parse(doc interface{}) (Receipt, error) {
 		return r, err
 	}
 
+	// Required arrays are never null: [] must come out as a non-nil empty slice.
+	r.AppliedDefaults = []DefaultEvidence{}
+	r.DerivedValues = []DerivedEvidence{}
 	strs := map[string]string{}
 	for _, name := range fields {
 		path := fieldPath(name)
@@ -423,6 +428,11 @@ func (r Receipt) CheckStructure() error {
 		}
 	}
 
+	// The evidence lists are required arrays: `[]` when empty, never null. A
+	// nil slice is Go's spelling of null/absent, so the typed API refuses it.
+	if r.AppliedDefaults == nil {
+		return shape(fieldPath("applied_defaults"), emptyNotNull)
+	}
 	for i, e := range r.AppliedDefaults {
 		at := fmt.Sprintf("%s[%d]", fieldPath("applied_defaults"), i)
 		if err := checkPathForm(e.Path, at+".path"); err != nil {
@@ -441,6 +451,9 @@ func (r Receipt) CheckStructure() error {
 			}
 		}
 	}
+	if r.DerivedValues == nil {
+		return shape(fieldPath("derived_values"), emptyNotNull)
+	}
 	for i, e := range r.DerivedValues {
 		at := fmt.Sprintf("%s[%d]", fieldPath("derived_values"), i)
 		if err := checkPathForm(e.Path, at+".path"); err != nil {
@@ -448,6 +461,9 @@ func (r Receipt) CheckStructure() error {
 		}
 		if err := checkDerivedRule(e.Rule, at+".rule"); err != nil {
 			return err
+		}
+		if e.Inputs == nil {
+			return shape(at+".inputs", emptyNotNull)
 		}
 		for j, input := range e.Inputs {
 			iat := fmt.Sprintf("%s.inputs[%d]", at, j)
