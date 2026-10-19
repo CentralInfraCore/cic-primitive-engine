@@ -1,0 +1,16 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850",
+    "fields": {
+      "/memory_gb": "UNOBSERVED",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:7afeba3ff68ab2ce4f789c4dae85727371a75120e9f458a4c3b8c9c39ee692e3",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850\",\"fields\":{\"/memory_gb\":\"UNOBSERVED\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"CONFORMANT\",\"/shape\":\"CONFORMANT\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:7afeba3ff68ab2ce4f789c4dae85727371a75120e9f458a4c3b8c9c39ee692e3\",\"verdict_schema_version\":1}",
+  "why": "a planned field that was not observed makes the object INCOMPLETE; the observation digest changes with the coverage"
+}

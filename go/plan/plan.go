@@ -446,6 +446,13 @@ func aggregate(fields map[string]conformance.FieldVerdict) ObjectConformance {
 	}
 }
 
+// Aggregate is aggregate, exported so the verdict artifact (go/verdict)
+// can check that an ObjectVerdict's Object follows from its Fields --
+// the Go peer of plan.rs's own `pub fn aggregate`.
+func Aggregate(fields map[string]conformance.FieldVerdict) ObjectConformance {
+	return aggregate(fields)
+}
+
 // elementKeys returns the sorted union of element identities of a
 // collection across the intent and observed lists, keyed by the
 // collection's topology -- the Go peer of plan.rs's own element_keys,

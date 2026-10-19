@@ -1,0 +1,38 @@
+{
+  "intent": {
+    "shape": "VM.Standard.E4.Flex",
+    "memory_gb": 16,
+    "network_interfaces": [
+      {"name": "nic-0", "subnet": {"ref": "prod-subnet-a", "kind": "Subnet"}},
+      {"name": "nic-1", "subnet": {"ref": "prod-subnet-b", "kind": "Subnet"}}
+    ]
+  },
+  "observed": {
+    "shape": "VM.Standard.E4.Flex",
+    "memory_gb": 16.0,
+    "network_interfaces": [
+      {"name": "nic-0", "subnet": {"ref": "prod-subnet-a", "kind": "Subnet"}},
+      {"name": "nic-1", "subnet": {"ref": "prod-subnet-WRONG", "kind": "Subnet"}}
+    ]
+  },
+  "observation": [
+    {"path": "/shape", "coverage": "observed"},
+    {"path": "/memory_gb", "coverage": "observed"},
+    {"path": "/network_interfaces/{name=nic-0}/subnet", "coverage": "observed"},
+    {"path": "/network_interfaces/{name=nic-1}/subnet", "coverage": "observed"}
+  ],
+  "plan": {
+    "scalars": [
+      {"path": "/shape", "compare": "exact"},
+      {"path": "/memory_gb", "compare": "numeric"}
+    ],
+    "collections": [
+      {
+        "path": "/network_interfaces",
+        "topology": "map",
+        "keys": ["name"],
+        "elements": [{"path": "subnet", "compare": "exact"}]
+      }
+    ]
+  }
+}

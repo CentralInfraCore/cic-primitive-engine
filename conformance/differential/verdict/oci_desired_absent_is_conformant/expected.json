@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:928988250ac70e1fc043022a372c2d72b5aa3a3018f98ac84ad3faa36e086fc4",
+    "fields": {
+      "/boot_volume": "OBSERVED_ABSENT",
+      "/memory_gb": "CONFORMANT",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "CONFORMANT",
+    "observation_digest": "sha256:449a85439d54f9c4497e80ec85070a927a8519f9e619728f8d83760d241885ab",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:928988250ac70e1fc043022a372c2d72b5aa3a3018f98ac84ad3faa36e086fc4\",\"fields\":{\"/boot_volume\":\"OBSERVED_ABSENT\",\"/memory_gb\":\"CONFORMANT\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"CONFORMANT\",\"/shape\":\"CONFORMANT\"},\"object\":\"CONFORMANT\",\"observation_digest\":\"sha256:449a85439d54f9c4497e80ec85070a927a8519f9e619728f8d83760d241885ab\",\"verdict_schema_version\":1}",
+  "why": "a field the intent does not declare and the observation finds absent is OBSERVED_ABSENT and does not drift the object"
+}

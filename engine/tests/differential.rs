@@ -9,10 +9,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cic_primitive_engine::{
-    classify_field_value, conformance_plan_digest, evaluate, materialized_object_digest,
-    observation_digest, reader, Capability, Collection, CollectionPlan, CollectionTopology,
-    CompareType, ConformancePlan, ConsumedField, Coverage, FieldEvidence, FieldPlan,
-    IntentEvidence, MaterializedField, MaterializedObject, Observation, Stage,
+    build_verdict, classify_field_value, conformance_plan_digest, evaluate, evaluate_verdict,
+    materialized_object_digest, observation_digest, reader, to_canonical_json,
+    verdict_canonical_bytes, Capability, Collection, CollectionPlan, CollectionTopology,
+    CompareType, ConformancePlan, ConformanceVerdict, ConsumedField, Coverage, FieldEvidence,
+    FieldPlan, FieldVerdict, IntentEvidence, MaterializedField, MaterializedObject,
+    ObjectConformance, ObjectVerdict, Observation, Stage,
 };
 use reader::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -609,4 +611,281 @@ fn materialized_vectors() {
         vectors.len(),
         failures.join("\n  ")
     );
+}
+
+// ---------------------------------------------------------------------------
+// conformance/differential/verdict/ -- the assembled verdict artifact
+// (`docs/VERDICT-SCHEMA.md`). Every vector runs `evaluate` on the same input
+// the `plan` group uses, builds the five-field artifact, and compares its
+// canonical bytes with the pinned ones. The Go peer (`go/verdict`) reads the
+// identical files and must produce the identical bytes.
+// ---------------------------------------------------------------------------
+
+fn parse_object(s: &str) -> ObjectConformance {
+    match s {
+        "CONFORMANT" => ObjectConformance::Conformant,
+        "DRIFT" => ObjectConformance::Drift,
+        "INCOMPLETE" => ObjectConformance::Incomplete,
+        other => panic!("unknown object verdict {other:?}"),
+    }
+}
+
+/// A vector's optional `tamper` list edits the `evaluate` result before the
+/// artifact is built, to reach states a real `evaluate` never produces.
+fn apply_tamper(result: &mut ObjectVerdict, input: &Value) {
+    let Some(Value::Seq(ops)) = map_get(input, "tamper") else {
+        return;
+    };
+    for op in ops {
+        match str_field(op, "op") {
+            "drop_consumed" => {
+                result.consumed.remove(str_field(op, "path"));
+            }
+            "add_consumed" => {
+                result
+                    .consumed
+                    .insert(str_field(op, "path").to_string(), ConsumedField::Absent);
+            }
+            "drop_field" => {
+                result.fields.remove(str_field(op, "path"));
+            }
+            "set_object" => result.object = parse_object(str_field(op, "value")),
+            other => panic!("unknown tamper op {other:?}"),
+        }
+    }
+}
+
+fn evaluate_vector(v: &Vector) -> (ConformancePlan, ObjectVerdict) {
+    let intent = map_get(&v.input, "intent").unwrap_or(&Value::Null);
+    let observed = map_get(&v.input, "observed").unwrap_or(&Value::Null);
+    let obs = build_observation(&v.input);
+    let plan = build_plan(&v.input);
+    let mut result = evaluate(
+        &intent_object(intent),
+        &observed_object(observed, &obs),
+        &obs,
+        &plan,
+    );
+    apply_tamper(&mut result, &v.input);
+    (plan, result)
+}
+
+/// Empty means the artifact matches the pinned expectation exactly: the
+/// canonical bytes equal the pinned string, and the pinned `verdict` tree
+/// canonicalizes to those same bytes.
+fn verdict_mismatches(got: &ConformanceVerdict, expected: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes = verdict_canonical_bytes(got).expect("a verdict canonicalizes");
+    let want = str_field(expected, "canonical");
+    if bytes != want.as_bytes() {
+        out.push(format!(
+            "canonical bytes differ\n    got:  {}\n    want: {want}",
+            String::from_utf8_lossy(&bytes)
+        ));
+    }
+    let tree = map_get(expected, "verdict").expect("expected holds a verdict tree");
+    let tree_bytes = to_canonical_json(tree).expect("pinned tree canonicalizes");
+    if tree_bytes != bytes {
+        out.push(
+            "pinned verdict tree and pinned canonical string disagree with the artifact"
+                .to_string(),
+        );
+    }
+    out
+}
+
+#[test]
+fn verdict_vectors() {
+    let vectors = load_vectors("verdict");
+    assert!(
+        !vectors.is_empty(),
+        "differential/verdict has no vectors -- an empty corpus trivially passes"
+    );
+    let plan_vectors = load_vectors("plan");
+
+    let mut failures = Vec::new();
+    let mut successes = 0;
+    let mut refusals = 0;
+    for v in &vectors {
+        let (plan, result) = evaluate_vector(v);
+        let built = build_verdict(&plan, &result);
+
+        if let Some(Value::Map(_)) = map_get(&v.expected, "error") {
+            refusals += 1;
+            let want = map_get(&v.expected, "error").expect("checked");
+            match built {
+                Ok(_) => failures.push(format!("{}: expected a refusal, got an artifact", v.name)),
+                Err(e) => {
+                    if e.code != str_field(want, "code") || e.path != str_field(want, "path") {
+                        failures.push(format!(
+                            "{}: refusal got {} at {}, want {} at {}",
+                            v.name,
+                            e.code,
+                            e.path,
+                            str_field(want, "code"),
+                            str_field(want, "path")
+                        ));
+                    }
+                }
+            }
+            continue;
+        }
+
+        successes += 1;
+        let got = match built {
+            Ok(g) => g,
+            Err(e) => {
+                failures.push(format!("{}: unexpected refusal: {e}", v.name));
+                continue;
+            }
+        };
+        for m in verdict_mismatches(&got, &v.expected) {
+            failures.push(format!("{}: {m}", v.name));
+        }
+        // The artifact's `object`/`fields` are the plan group's own pinned
+        // expectation for the same input, not a second opinion.
+        if let Some(pv) = plan_vectors.iter().find(|p| p.name == v.name) {
+            let got_fields: BTreeMap<String, String> = got
+                .fields
+                .iter()
+                .map(|(k, fv)| (k.clone(), fv.as_str().to_string()))
+                .collect();
+            if got.object.as_str() != str_field(&pv.expected, "object")
+                || got_fields != fields_from_value(&pv.expected)
+            {
+                failures.push(format!(
+                    "{}: object/fields differ from the plan group's pin",
+                    v.name
+                ));
+            }
+        }
+    }
+
+    assert!(
+        successes > 0 && refusals > 0,
+        "the corpus needs both artifacts and refusals"
+    );
+    assert!(
+        failures.is_empty(),
+        "{} of {} verdict vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// The corpus must be able to fail: each deliberate divergence of an
+/// otherwise correct artifact has to be caught by the very comparison the
+/// vectors use. The Go peer runs the identical list of divergences.
+#[test]
+fn verdict_vectors_detect_deliberate_divergence() {
+    type Mutation = (&'static str, fn(&mut ConformanceVerdict));
+    fn flip_hex(d: &str) -> String {
+        let mut chars: Vec<char> = d.chars().collect();
+        let last = chars.len() - 1;
+        chars[last] = if chars[last] == '0' { '1' } else { '0' };
+        chars.into_iter().collect()
+    }
+    let mutations: [Mutation; 8] = [
+        ("schema version bumped", |v| v.verdict_schema_version += 1),
+        ("object changed", |v| {
+            v.object = if v.object == ObjectConformance::Conformant {
+                ObjectConformance::Drift
+            } else {
+                ObjectConformance::Conformant
+            }
+        }),
+        ("one field verdict changed", |v| {
+            let key = v
+                .fields
+                .keys()
+                .next()
+                .expect("a vector has a field")
+                .clone();
+            let cur = v.fields[&key];
+            v.fields.insert(
+                key,
+                if cur == FieldVerdict::Drift {
+                    FieldVerdict::Conformant
+                } else {
+                    FieldVerdict::Drift
+                },
+            );
+        }),
+        ("one field dropped", |v| {
+            let key = v
+                .fields
+                .keys()
+                .next()
+                .expect("a vector has a field")
+                .clone();
+            v.fields.remove(&key);
+        }),
+        ("one field added", |v| {
+            v.fields
+                .insert("/extra".to_string(), FieldVerdict::Conformant);
+        }),
+        ("plan digest altered", |v| {
+            v.conformance_plan_digest = flip_hex(&v.conformance_plan_digest)
+        }),
+        ("observation digest altered", |v| {
+            v.observation_digest = flip_hex(&v.observation_digest)
+        }),
+        ("plan and observation digests swapped", |v| {
+            std::mem::swap(&mut v.conformance_plan_digest, &mut v.observation_digest)
+        }),
+    ];
+
+    let mut checked = 0;
+    for v in load_vectors("verdict") {
+        if map_get(&v.expected, "canonical").is_none() {
+            continue;
+        }
+        let (plan, result) = evaluate_vector(&v);
+        let good = build_verdict(&plan, &result).expect("a success vector builds");
+        assert!(
+            verdict_mismatches(&good, &v.expected).is_empty(),
+            "{}: the unmodified artifact must match first",
+            v.name
+        );
+        for (what, mutate) in &mutations {
+            let mut bad = good.clone();
+            mutate(&mut bad);
+            assert!(
+                !verdict_mismatches(&bad, &v.expected).is_empty(),
+                "{}: divergence not detected: {what}",
+                v.name
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no success vector was mutated");
+}
+
+/// The primary entry point must give the pinned bytes too: every artifact
+/// vector (the corpus is unchanged), evaluated and assembled in one
+/// operation, matches the same pin the low-level builder is held to.
+#[test]
+fn verdict_vectors_through_the_entry_point() {
+    let mut checked = 0;
+    for v in load_vectors("verdict") {
+        if map_get(&v.expected, "canonical").is_none() {
+            continue;
+        }
+        let intent = map_get(&v.input, "intent").unwrap_or(&Value::Null);
+        let observed = map_get(&v.input, "observed").unwrap_or(&Value::Null);
+        let obs = build_observation(&v.input);
+        let plan = build_plan(&v.input);
+        let got = evaluate_verdict(
+            &intent_object(intent),
+            &observed_object(observed, &obs),
+            &obs,
+            &plan,
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", v.name));
+        let mismatches = verdict_mismatches(&got, &v.expected);
+        assert!(mismatches.is_empty(), "{}: {mismatches:?}", v.name);
+        checked += 1;
+    }
+    assert!(checked > 0, "no artifact vector was checked");
 }

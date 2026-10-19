@@ -133,6 +133,13 @@ pub mod code {
     /// shape. Covered by unit tests in `engine/tests/hand_built_values.rs`
     /// (not a YAML vector -- the reader cannot produce them).
     pub const MALFORMED_VALUE: &str = "E_MALFORMED_VALUE";
+
+    /// A conformance/drift verdict was asked of an `ObjectVerdict` that cannot
+    /// be an `evaluate` result for the plan: its classified paths and its
+    /// consumed observation evidence disagree, a planned scalar is missing, or
+    /// `object` does not follow from `fields` (`R-VERDICT-CONSISTENT`,
+    /// `docs/VERDICT-SCHEMA.md`). Raised by `verdict::build_verdict`.
+    pub const INCONSISTENT_VERDICT: &str = "E_INCONSISTENT_VERDICT";
 }
 
 /// The single error type this crate raises.

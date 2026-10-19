@@ -1,0 +1,16 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850",
+    "fields": {
+      "/memory_gb": "NOT_COMPARABLE",
+      "/network_interfaces/{name=nic-0}/subnet": "CONFORMANT",
+      "/network_interfaces/{name=nic-1}/subnet": "CONFORMANT",
+      "/shape": "CONFORMANT"
+    },
+    "object": "DRIFT",
+    "observation_digest": "sha256:10e27324b2fd39a6ed030ed9861e54e06e00634a159e16cceb346b510daf8e2b",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:d973c7d2e9cf02f49ad1f59889a0dd2aaabd98b41d30c07377c63fdafd387850\",\"fields\":{\"/memory_gb\":\"NOT_COMPARABLE\",\"/network_interfaces/{name=nic-0}/subnet\":\"CONFORMANT\",\"/network_interfaces/{name=nic-1}/subnet\":\"CONFORMANT\",\"/shape\":\"CONFORMANT\"},\"object\":\"DRIFT\",\"observation_digest\":\"sha256:10e27324b2fd39a6ed030ed9861e54e06e00634a159e16cceb346b510daf8e2b\",\"verdict_schema_version\":1}",
+  "why": "an incomparable field makes the object DRIFT; the artifact keeps NOT_COMPARABLE as the field verdict"
+}

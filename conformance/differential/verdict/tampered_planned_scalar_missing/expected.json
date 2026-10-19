@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "E_INCONSISTENT_VERDICT",
+    "path": "/memory_gb"
+  },
+  "why": "a result that cannot be an evaluate result for the plan is refused, never digested into an artifact"
+}

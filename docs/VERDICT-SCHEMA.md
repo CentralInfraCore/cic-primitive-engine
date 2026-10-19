@@ -200,3 +200,52 @@ document's full contract into one artifact** — nothing anywhere in
 together into the single required shape above. Go/Rust computation
 parity and digest parity are real and cross-checked; a first-class
 verdict artifact builder is not built yet, in either language.
+
+## Status update, 2026-10-18: the first-class artifact builder exists in both languages
+
+The gap the previous section names is closed. `engine/src/verdict.rs`
+(`build_verdict`, `verdict_value`, `verdict_canonical_bytes`) and its Go
+peer `go/verdict` (`Build`, `Value`, `CanonicalBytes`) assemble this
+document's full contract into one artifact: all five required fields, with
+`verdict_schema_version: 1`.
+
+* `object` and `fields` are `evaluate`'s/`Evaluate`'s own result, carried over
+  verbatim; `fields` therefore holds exactly the paths that were evaluated.
+* `conformance_plan_digest` and `observation_digest` are the existing normative
+  projections (`conformance_plan_digest` / `observation_digest`, and their Go
+  peers), called, not recomputed. A test pins this in each language, and the
+  `multi_key_collection_identity` vector's plan digest is byte-for-byte the
+  one already pinned by `conformance/differential/digest/plan_digest_with_collection`.
+* Before an artifact exists the builder refuses (`E_INCONSISTENT_VERDICT`,
+  `R-VERDICT-CONSISTENT`) an evaluate result that cannot be one: classified
+  paths and consumed evidence that do not match one to one, a planned scalar
+  missing from `fields`, or an `object` that does not follow from `fields`.
+  A real `evaluate` result always passes; this guards the "every field is
+  REQUIRED and complete" guarantee against hand-assembled or edited results.
+* Canonical bytes are section A's canonicalization of the five-key tree, and
+  `conformance/differential/verdict/` pins them. Rust and Go read the same files
+  and must produce the same bytes. A second test in each language applies eight
+  deliberate divergences (version bump, changed object, changed/dropped/added
+  field, altered or swapped digests) and requires the comparison to catch each.
+
+**Two entry points, with different guarantees.** `evaluate_verdict` /
+`verdict.EvaluateAndBuild` run `evaluate` and build the artifact in one
+operation, so the `conformance_plan_digest` written into the artifact is the
+digest of the plan that actually produced the verdicts and the result cannot be
+swapped or edited in between. `build_verdict` / `verdict.Build` is the
+low-level assembler for a caller that already holds a plan and a result. It
+checks structure only: `fields` and `consumed` name the same paths, every
+`fields` path is one the plan can produce (a planned scalar, or a planned
+collection element path of the right shape), every planned scalar is present,
+and `object` follows from `fields`. It does **not** know which plan produced
+the result (a result from one plan paired with another plan of the same paths
+and a different comparator is accepted, with the second plan's digest), does
+not re-evaluate (a self-consistent altered result is accepted), and cannot tell
+a real element path from one that only has the right shape. It must not be
+described as rejecting every tampered result; where the binding matters, use the
+primary entry point.
+
+Still not decided, unchanged: signing the artifact, and an intent-digest
+field. This builder adds neither. The Relay's enforcement boundary and the
+materialization receipt are untouched.
+

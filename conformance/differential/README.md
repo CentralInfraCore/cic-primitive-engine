@@ -42,6 +42,7 @@ differential/
   plan/          -- F8: plan.Evaluate
   digest/        -- F9: digestprojection.*
   materialized/  -- MaterializedObject::try_new / NewMaterializedObject
+  verdict/       -- the assembled five-field verdict artifact (build_verdict / verdict.Build)
 ```
 
 One group per primitive, landed incrementally — matching how F6
@@ -203,3 +204,20 @@ is, only whether both sides agree on being numeric or not) — so no
 vector here depends on it — but a future vector author relying on
 exact-comparator behavior that distinguishes `16` from `16.0` by
 *spelling* would hit a real asymmetry this layer does not paper over.
+
+### `verdict/`
+
+```text
+input.json:     the `plan/` group's input (intent, observed, observation, plan), plus an
+                optional `tamper` list of edits to the evaluate result before the artifact
+                is built: {op: drop_consumed|add_consumed|drop_field|set_object, path|value}
+expected.json:  an artifact vector: {verdict: <the five-key tree>, canonical: <its canonical
+                bytes as a string>}
+                a refusal vector:   {error: {code, path}}
+```
+
+Both languages must produce the identical canonical bytes, and a success
+vector's `object`/`fields` must equal the same-named `plan/` vector's pin. A
+second test per language applies eight deliberate divergences to a correct
+artifact and requires the comparison to catch each.
+
