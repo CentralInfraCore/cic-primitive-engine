@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "CONFORMANT",
+      "/dns_label": "OBSERVED_ABSENT",
+      "/ipv6_enabled": "CONFORMANT",
+      "/tags/{key=env}/value": "CONFORMANT",
+      "/tags/{key=owner}/value": "CONFORMANT"
+    },
+    "object": "CONFORMANT",
+    "observation_digest": "sha256:62287c8b3ebc9673d50cf62398c87d68f7186e93db26e4502efb00f3cca2bd24",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"CONFORMANT\",\"/dns_label\":\"OBSERVED_ABSENT\",\"/ipv6_enabled\":\"CONFORMANT\",\"/tags/{key=env}/value\":\"CONFORMANT\",\"/tags/{key=owner}/value\":\"CONFORMANT\"},\"object\":\"CONFORMANT\",\"observation_digest\":\"sha256:62287c8b3ebc9673d50cf62398c87d68f7186e93db26e4502efb00f3cca2bd24\",\"verdict_schema_version\":1}",
+  "why": "a planned path the intent does not declare and OCI does not report is OBSERVED_ABSENT; the object conforms"
+}

@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "UNOBSERVED",
+      "/dns_label": "UNOBSERVED",
+      "/ipv6_enabled": "UNOBSERVED",
+      "/tags/{key=env}/value": "UNOBSERVED",
+      "/tags/{key=owner}/value": "UNOBSERVED"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:a7ca7c103862ba9fec9adde41ae2f75b316abcf67abd6d5e10ae4ba22521b298",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"UNOBSERVED\",\"/dns_label\":\"UNOBSERVED\",\"/ipv6_enabled\":\"UNOBSERVED\",\"/tags/{key=env}/value\":\"UNOBSERVED\",\"/tags/{key=owner}/value\":\"UNOBSERVED\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:a7ca7c103862ba9fec9adde41ae2f75b316abcf67abd6d5e10ae4ba22521b298\",\"verdict_schema_version\":1}",
+  "why": "no answer: every path unobserved, UNOBSERVED, INCOMPLETE"
+}

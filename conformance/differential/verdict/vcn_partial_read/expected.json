@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "CONFORMANT",
+      "/dns_label": "CONFORMANT",
+      "/ipv6_enabled": "UNOBSERVED",
+      "/tags/{key=env}/value": "CONFORMANT",
+      "/tags/{key=owner}/value": "CONFORMANT"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:4b419234ae459f6caa3ad08900d0f9299f92b7f855e79d05aeeabe4c5c64efcd",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"CONFORMANT\",\"/dns_label\":\"CONFORMANT\",\"/ipv6_enabled\":\"UNOBSERVED\",\"/tags/{key=env}/value\":\"CONFORMANT\",\"/tags/{key=owner}/value\":\"CONFORMANT\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:4b419234ae459f6caa3ad08900d0f9299f92b7f855e79d05aeeabe4c5c64efcd\",\"verdict_schema_version\":1}",
+  "why": "ipv6CidrBlocks missing: ipv6_enabled is UNOBSERVED (never false), the object is INCOMPLETE"
+}

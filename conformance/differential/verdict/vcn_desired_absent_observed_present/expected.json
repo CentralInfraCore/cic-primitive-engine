@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "CONFORMANT",
+      "/dns_label": "NOT_COMPARABLE",
+      "/ipv6_enabled": "CONFORMANT",
+      "/tags/{key=env}/value": "CONFORMANT",
+      "/tags/{key=owner}/value": "CONFORMANT"
+    },
+    "object": "DRIFT",
+    "observation_digest": "sha256:610943f4497316182d62c2066546873e30a026f4ac33848b43171e4d6b567dec",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"CONFORMANT\",\"/dns_label\":\"NOT_COMPARABLE\",\"/ipv6_enabled\":\"CONFORMANT\",\"/tags/{key=env}/value\":\"CONFORMANT\",\"/tags/{key=owner}/value\":\"CONFORMANT\"},\"object\":\"DRIFT\",\"observation_digest\":\"sha256:610943f4497316182d62c2066546873e30a026f4ac33848b43171e4d6b567dec\",\"verdict_schema_version\":1}",
+  "why": "OPEN QUESTION (cic-factory fixtures/vcn-v1): a planned path the intent does not declare but OCI reports is NOT_COMPARABLE, so the object is DRIFT -- the plan has to be derived from the intent, or the unmanaged field left out of the plan"
+}

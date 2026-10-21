@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "CONFORMANT",
+      "/dns_label": "DRIFT",
+      "/ipv6_enabled": "CONFORMANT",
+      "/tags/{key=env}/value": "DRIFT",
+      "/tags/{key=owner}/value": "CONFORMANT"
+    },
+    "object": "DRIFT",
+    "observation_digest": "sha256:7a84b901a28ce036f6b4ba4c9acc68f79d53e9671b64a55217b9ef2795097421",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"CONFORMANT\",\"/dns_label\":\"DRIFT\",\"/ipv6_enabled\":\"CONFORMANT\",\"/tags/{key=env}/value\":\"DRIFT\",\"/tags/{key=owner}/value\":\"CONFORMANT\"},\"object\":\"DRIFT\",\"observation_digest\":\"sha256:7a84b901a28ce036f6b4ba4c9acc68f79d53e9671b64a55217b9ef2795097421\",\"verdict_schema_version\":1}",
+  "why": "a differing dns label and tag value are DRIFT; the rest stays CONFORMANT"
+}
