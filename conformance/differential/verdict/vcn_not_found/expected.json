@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "UNOBSERVED",
+      "/dns_label": "UNOBSERVED",
+      "/ipv6_enabled": "UNOBSERVED",
+      "/tags/{key=env}/value": "UNOBSERVED",
+      "/tags/{key=owner}/value": "UNOBSERVED"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:7283447d63df630fae2347150c584468a3480e66e477e51f0ffb4b2970d61874",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"UNOBSERVED\",\"/dns_label\":\"UNOBSERVED\",\"/ipv6_enabled\":\"UNOBSERVED\",\"/tags/{key=env}/value\":\"UNOBSERVED\",\"/tags/{key=owner}/value\":\"UNOBSERVED\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:7283447d63df630fae2347150c584468a3480e66e477e51f0ffb4b2970d61874\",\"verdict_schema_version\":1}",
+  "why": "404 NotAuthorizedOrNotFound is not authoritative absence: every path unknown, UNOBSERVED, INCOMPLETE"
+}

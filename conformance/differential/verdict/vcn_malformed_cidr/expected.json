@@ -1,0 +1,17 @@
+{
+  "verdict": {
+    "conformance_plan_digest": "sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6",
+    "fields": {
+      "/cidr_block": "UNOBSERVED",
+      "/dns_label": "CONFORMANT",
+      "/ipv6_enabled": "CONFORMANT",
+      "/tags/{key=env}/value": "CONFORMANT",
+      "/tags/{key=owner}/value": "CONFORMANT"
+    },
+    "object": "INCOMPLETE",
+    "observation_digest": "sha256:462145a58a7f6cf0eda2c1389995a2930a9abe65734de3edb0bf0672fdaf1f4b",
+    "verdict_schema_version": 1
+  },
+  "canonical": "{\"conformance_plan_digest\":\"sha256:91ddfbd8c4c8469c4e95c6a76ed9b8ac4fb9830f62b7f7d52a4802b1a41d5fd6\",\"fields\":{\"/cidr_block\":\"UNOBSERVED\",\"/dns_label\":\"CONFORMANT\",\"/ipv6_enabled\":\"CONFORMANT\",\"/tags/{key=env}/value\":\"CONFORMANT\",\"/tags/{key=owner}/value\":\"CONFORMANT\"},\"object\":\"INCOMPLETE\",\"observation_digest\":\"sha256:462145a58a7f6cf0eda2c1389995a2930a9abe65734de3edb0bf0672fdaf1f4b\",\"verdict_schema_version\":1}",
+  "why": "cidrBlocks not a list: coverage unknown flows through as UNOBSERVED, INCOMPLETE"
+}

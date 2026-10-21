@@ -43,6 +43,7 @@ differential/
   digest/        -- F9: digestprojection.*
   materialized/  -- MaterializedObject::try_new / NewMaterializedObject
   verdict/       -- the assembled five-field verdict artifact (build_verdict / verdict.Build)
+                    vcn_*: the OCI VCN slice, derived from ../../fixtures/vcn-v1 (see docs/INTEGRATION-CONTRACT.md)
   receipt/       -- the receipt verifier (verify_receipt / receipt.Verify)
 ```
 
