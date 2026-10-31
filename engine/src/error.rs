@@ -160,6 +160,19 @@ pub mod code {
     /// object key (`R-RECEIPT-PATH-BINDING`). Refused, never partially
     /// accepted. Raised by `receipt::verify_receipt`.
     pub const RECEIPT_UNBOUND: &str = "E_RECEIPT_UNBOUND";
+
+    /// A schema's logical name cannot be formed: `identity.namespace` or
+    /// `identity.kind` is absent, empty, or breaks the colon rules
+    /// (`R-SCHEMA-NAME-NAMESPACE`, `R-SCHEMA-NAME-KIND`; D1.3,
+    /// `docs/RECEIPT-SCHEMA.md`). Raised by `schema_identity::schema_name`.
+    pub const INVALID_SCHEMA_IDENTITY: &str = "E_INVALID_SCHEMA_IDENTITY";
+
+    /// The digest claimed for a schema source is absent, or is not the
+    /// digest of the source bytes (`R-SCHEMA-DIGEST-MISSING`,
+    /// `R-SCHEMA-DIGEST-MISMATCH`; D1.3). Refused, never replaced by the
+    /// digest of other bytes. Raised by
+    /// `schema_identity::bind_schema_identity`.
+    pub const SCHEMA_SOURCE_BINDING: &str = "E_SCHEMA_SOURCE_BINDING";
 }
 
 /// The single error type this crate raises.

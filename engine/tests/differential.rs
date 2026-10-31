@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use cic_primitive_engine::{bind_schema_identity, schema_digest};
 use cic_primitive_engine::{
     build_verdict, classify_field_value, conformance_plan_digest, evaluate, evaluate_verdict,
     materialized_object_digest, observation_digest, reader, to_canonical_json,
@@ -1028,4 +1029,153 @@ fn receipt_vectors_detect_deliberate_divergence() {
         }
     }
     assert!(checked >= 12, "too few mutations were exercised: {checked}");
+}
+
+// ---------------------------------------------------------------------------
+// `conformance/differential/schema_identity/` -- the D1.3 schema identity
+// contract (`docs/RECEIPT-SCHEMA.md`, "Schema identity contract"). Each vector
+// holds the real bytes of a schema source file next to its input.json; the Go
+// peer (go/schemaidentity) reads the identical files.
+// ---------------------------------------------------------------------------
+
+fn opt_str(v: &Value, key: &str) -> Option<String> {
+    match map_get(v, key) {
+        Some(Value::Str(s)) => Some(s.clone()),
+        Some(Value::Null) | None => None,
+        _ => panic!("expected string or null field {key:?}"),
+    }
+}
+
+/// `Ok((schema_name, schema_digest))` for an accepted vector, else the rejection's `(code, rule, path)`.
+fn run_schema_identity_vector(
+    name: &str,
+    input: &Value,
+) -> std::result::Result<(String, String), (String, String, String)> {
+    let source = fs::read(
+        corpus_root()
+            .join("schema_identity")
+            .join(name)
+            .join(str_field(input, "source")),
+    )
+    .unwrap_or_else(|e| panic!("{name}: source: {e}"));
+    let claimed = opt_str(input, "claimed_digest");
+    let namespace = opt_str(input, "namespace");
+    let kind = opt_str(input, "kind");
+    bind_schema_identity(
+        &source,
+        claimed.as_deref(),
+        namespace.as_deref(),
+        kind.as_deref(),
+    )
+    .map(|id| (id.schema_name, id.schema_digest))
+    .map_err(|e| (e.code.to_string(), e.rule.to_string(), e.path))
+}
+
+#[test]
+fn schema_identity_vectors() {
+    let vectors = load_vectors("schema_identity");
+    assert!(
+        !vectors.is_empty(),
+        "differential/schema_identity has no vectors -- an empty corpus trivially passes"
+    );
+    let mut failures = Vec::new();
+    let (mut accepted, mut rejected) = (0, 0);
+    for v in &vectors {
+        let got = run_schema_identity_vector(&v.name, &v.input);
+        if bool_field(&v.expected, "accepted") {
+            accepted += 1;
+            let want = (
+                str_field(&v.expected, "schema_name").to_string(),
+                str_field(&v.expected, "schema_digest").to_string(),
+            );
+            if got != Ok(want.clone()) {
+                failures.push(format!("{}: want {want:?}, got {got:?}", v.name));
+            }
+        } else {
+            rejected += 1;
+            let want = map_get(&v.expected, "error").expect("a rejection vector names its error");
+            let want = (
+                str_field(want, "code").to_string(),
+                str_field(want, "rule").to_string(),
+                str_field(want, "path").to_string(),
+            );
+            if got != Err(want.clone()) {
+                failures.push(format!("{}: want rejection {want:?}, got {got:?}", v.name));
+            }
+        }
+    }
+    assert!(
+        accepted >= 5 && rejected >= 18,
+        "corpus too thin: {accepted} accepted, {rejected} rejected"
+    );
+    assert!(
+        failures.is_empty(),
+        "{} of {} schema identity vectors failed:\n  {}",
+        failures.len(),
+        vectors.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// The vectors marked `identity_from_source` state the namespace and the kind that the file itself declares under `spec.identity`; this
+/// reads the file with the engine's own reader and checks they agree, so the corpus cannot drift from the bytes it hashes. (The Go peer has
+/// no YAML reader; it checks the digests and the name composition on the same files.)
+#[test]
+fn schema_identity_vectors_state_what_their_source_declares() {
+    let mut checked = 0;
+    for v in load_vectors("schema_identity") {
+        if !matches!(
+            map_get(&v.input, "identity_from_source"),
+            Some(Value::Bool(true))
+        ) {
+            continue;
+        }
+        let bytes = fs::read(
+            corpus_root()
+                .join("schema_identity")
+                .join(&v.name)
+                .join(str_field(&v.input, "source")),
+        )
+        .unwrap();
+        let doc = reader::parse(&bytes, Stage::Read, "$", "schema.yaml").unwrap();
+        let identity = map_get(map_get(&doc, "spec").unwrap(), "identity").unwrap();
+        assert_eq!(
+            str_field(identity, "namespace"),
+            str_field(&v.input, "namespace"),
+            "{}",
+            v.name
+        );
+        assert_eq!(
+            str_field(identity, "kind"),
+            str_field(&v.input, "kind"),
+            "{}",
+            v.name
+        );
+        checked += 1;
+    }
+    assert!(checked >= 2, "too few source-declared vectors: {checked}");
+}
+
+/// The harness must be able to fail: the golden source with a different byte, or with the final LF removed, must stop matching the golden
+/// digest, and the digest function must not be insensitive to any one byte.
+#[test]
+fn schema_identity_vectors_detect_deliberate_divergence() {
+    let dir = corpus_root()
+        .join("schema_identity")
+        .join("golden_with_final_lf");
+    let source = fs::read(dir.join("schema.yaml")).unwrap();
+    assert_eq!(source.len(), 314);
+    let golden = schema_digest(&source);
+    let mut checked = 0;
+    for i in 0..source.len() {
+        let mut altered = source.clone();
+        altered[i] ^= 1;
+        assert_ne!(schema_digest(&altered), golden, "byte {i}");
+        let e = bind_schema_identity(&altered, Some(&golden), Some("cic:storage"), Some("K"))
+            .unwrap_err();
+        assert_eq!(e.rule, "R-SCHEMA-DIGEST-MISMATCH", "byte {i}");
+        checked += 1;
+    }
+    assert_eq!(checked, 314);
+    assert_ne!(schema_digest(&source[..313]), golden);
 }
