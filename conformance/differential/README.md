@@ -45,6 +45,8 @@ differential/
   verdict/       -- the assembled five-field verdict artifact (build_verdict / verdict.Build)
                     vcn_*: the OCI VCN slice, derived from ../../fixtures/vcn-v1 (see docs/INTEGRATION-CONTRACT.md)
   receipt/       -- the receipt verifier (verify_receipt / receipt.Verify)
+  schema_identity/ -- the D1.3 schema identity contract (bind_schema_identity / schemaidentity.BindSchemaIdentity);
+                    a vector also holds the real bytes of a schema source file (see below)
 ```
 
 One group per primitive, landed incrementally — matching how F6
@@ -246,3 +248,23 @@ verifier to reject it.
 
 Documents are decoded so an integer stays an integer and `1.0` stays a float
 (Go: `Decoder.UseNumber`), because the receipt's version is a bare integer.
+
+### `schema_identity/`
+
+A vector directory holds `input.json`, `expected.json` and the schema source file that `input.json` names. The source file is **not JSON**: its exact bytes are the thing under test (line endings, a final newline or none), so `schema_identity/.gitattributes` marks `*.yaml` as `-text` and git leaves them alone.
+
+```text
+input.json:
+  source                string        file name of the schema source in this directory
+  claimed_digest        string|null   the digest claimed for the source (null = no claim)
+  namespace, kind       string|null   spec.identity components (null = absent)
+  identity_from_source  bool?         the Rust test checks namespace/kind against the file's own spec.identity
+
+expected.json:
+  accepted              bool
+  schema_name, schema_digest          when accepted
+  error: {code, rule, path}           when rejected
+  why                   string        context, not compared
+```
+
+Both languages must accept or reject identically and name the same code, rule and path. Contract: `docs/RECEIPT-SCHEMA.md`, "Schema identity contract".

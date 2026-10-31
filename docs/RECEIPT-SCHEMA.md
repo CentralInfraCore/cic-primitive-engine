@@ -53,7 +53,9 @@ schema_name               string              D1.3 -- logical/canonical name,
                                                        e.g. "cic:storage:
                                                        StorageResource"
 schema_version            string              D1.3 -- e.g. "v1.2.0"
-schema_digest             string (sha256:…)   D1.3 -- canonical schema digest
+schema_digest             string (sha256:…)   D1.3 -- digest of the raw schema
+                                                       source bytes; see "Schema
+                                                       identity contract"
 
 engine_identity           string              D1.4 -- which implementation,
                                                        e.g. "cic-primitive-
@@ -258,6 +260,42 @@ faster or receipt-local coverage access that re-deriving it from the
 materialized tree doesn't already satisfy. If a real audit workflow
 later needs that, it is a new, concretely-motivated decision for then
 — not one to pre-empt now on spec alone.
+
+## Schema identity contract
+
+Two questions D1.3 left open are decided (owner decision, `cic-primitive-engine#63`): which bytes `schema_digest` is the digest of, and how `schema_name` is formed. The code that fixes them is `engine/src/schema_identity.rs` and its Go peer `go/schemaidentity`; the corpus is `conformance/differential/schema_identity/`.
+
+**`schema_digest`** is `"sha256:"` and the lowercase hex of the SHA-256 of the **complete raw bytes of the pinned schema source file**, as its source authority published it:
+
+- not a Git blob or object id, and not the digest of a parsed, normalized, re-serialized or canonicalized document: comments, whitespace, mapping order, line endings and the presence of a final newline are part of the identity (the 314-byte golden file and the same file without its final LF, 313 bytes, have different digests; so does a CRLF copy);
+- it is immutable *content* identity, not semantic equivalence between differently written documents, and it is not the section A digest of a value (the spelling `sha256:` + hex is A7's; the input is different);
+- it is the digest of the **pinned source**. A producer that preprocesses the schema must not put the digest of the preprocessed bytes in the field. A claim that is absent, or that is not exactly the digest of the source bytes (wrong value, uppercase hex, no `sha256:` prefix, empty), is refused.
+
+**`schema_name`** is `identity.namespace + ":" + identity.kind`, both read from the pinned schema's `spec.identity` and used exactly as authored:
+
+- both are non-empty strings; the namespace is colon-separated components, none empty (`cic:storage` is two; a leading, trailing or doubled colon is an empty component); the kind holds no colon, so the last separator of the name is the one the rule put there;
+- no trimming, case folding, escaping or other normalization: `" Cic:Storage"` and `"storageResource "` give `" Cic:Storage:storageResource "`;
+- a missing or invalid component refuses the receipt; the producer does not invent an identifier. Example: namespace `cic:storage` and kind `StorageResource` give `cic:storage:StorageResource`.
+
+**Check order** (both languages name the same first reason): the digest binding, then the namespace, then the kind.
+
+| Rule | Code | Raised when |
+|---|---|---|
+| `R-SCHEMA-DIGEST-MISSING` | `E_SCHEMA_SOURCE_BINDING` | no digest is claimed for the source |
+| `R-SCHEMA-DIGEST-MISMATCH` | `E_SCHEMA_SOURCE_BINDING` | the claim is not the digest of the source bytes |
+| `R-SCHEMA-NAME-NAMESPACE` | `E_INVALID_SCHEMA_IDENTITY` | the namespace is absent, empty, or has an empty component |
+| `R-SCHEMA-NAME-KIND` | `E_INVALID_SCHEMA_IDENTITY` | the kind is absent, empty, or holds a colon |
+
+**What this does and does not establish.** It defines what two fields mean and refuses a claim that disagrees with the source bytes it is given. It does not authenticate where those bytes came from, and it does not make the receipt verifier (`RECEIPT-VERIFIER.md`) check anything new: `verify_receipt` still checks `schema_name` for non-emptiness and `schema_digest` for form only, and still has no schema parser. The origin of the source and of the primitive release is a separate gate, open until a verified release record exists; nothing here authorizes a production receipt.
+
+**Golden vectors** (the two files below are real bytes in the corpus, not strings in a document; their digests were recomputed from the files with `sha256sum` and `openssl dgst`, apart from the code under test):
+
+| Source | Bytes | `schema_digest` |
+|---|---|---|
+| `golden_with_final_lf/schema.yaml` | 314 | `sha256:a36e841db3d5f108a7d5e400f80a636d095bc5c9ddc670142b938d73d0d1a338` |
+| `golden_without_final_lf/schema.yaml` | 313 | `sha256:4fff76af7c6313eae102fc1f967b9d607db0f26c51f6f5f8eb11d7c0988b07f7` |
+
+The corpus holds 5 accepted and 18 rejected vectors (a repeated claim of another variant's digest, a normalized copy's digest, one altered source byte, a one-character digest difference, uppercase hex, no prefix, an empty claim, every identity component absent or empty, the colon cases, and the two check-order cases). Each language also flips every one of the 314 bytes of the golden source and requires the mismatch rule.
 
 ## Not decided here
 

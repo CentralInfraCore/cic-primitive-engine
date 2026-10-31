@@ -227,6 +227,7 @@ pub mod materialized;
 pub mod plan;
 pub mod reader;
 pub mod receipt;
+pub mod schema_identity;
 pub mod verdict;
 
 pub use canonical::{digest, to_canonical_json};
@@ -249,6 +250,7 @@ pub use plan::{
 pub use receipt::{
     verify_receipt, DefaultEvidence, DerivedEvidence, PathBinding, Receipt, RECEIPT_SCHEMA_VERSION,
 };
+pub use schema_identity::{bind_schema_identity, schema_digest, schema_name, SchemaIdentity};
 pub use verdict::{
     build_verdict, evaluate_verdict, verdict_canonical_bytes, verdict_value, ConformanceVerdict,
     VERDICT_SCHEMA_VERSION,

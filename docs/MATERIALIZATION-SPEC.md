@@ -1585,12 +1585,37 @@ to catch.
    ```text
    schema logical identity / canonical name   (e.g. cic:storage:StorageResource)
    schema version                              (e.g. v1.2.0)
-   canonical schema digest                     (content hash, not a tag)
+   schema digest                               (content hash, not a tag)
    ```
    All three vary together **per schema**, independently of the grammar
    it's written against — a schema can bump its own version (new field,
    narrowed conformance, ...) without the grammar changing at all, and
    vice versa.
+
+   **Decided (owner decision, `cic-primitive-engine#63`): what the name
+   and the digest are.** The earlier wording "canonical schema digest"
+   named a canonical form without defining an algorithm that makes a
+   YAML schema into one; it is replaced by a digest of the **source
+   bytes**:
+   - `schema_digest = "sha256:" + lowercase_hex(SHA256(raw_schema_file_bytes))`,
+     over the complete file as pinned and published by its source
+     authority. No parsing, normalization or re-serialization comes
+     first: comments, whitespace, key order, line endings and a final
+     newline (or its absence) are part of the identity. It is the
+     immutable identity of the *content*, not a claim that two
+     differently written documents mean the same. It is not the section A
+     digest of a value (A7 spells both the same way; the input differs).
+     A digest of other bytes never stands in for the source's; a missing
+     or mismatching binding fails closed.
+   - `schema_name = identity.namespace + ":" + identity.kind`, both from
+     the pinned schema's `spec.identity`, used as authored (no trimming,
+     case folding or escaping). Both are non-empty; the namespace may hold
+     colon-separated components (`cic:storage`), none of them empty; the
+     kind holds no colon. An identity that does not fit refuses the
+     receipt; no name is invented.
+
+   The wire-level statement, the check order, the rejection codes and the
+   golden vectors are in `RECEIPT-SCHEMA.md`, "Schema identity contract".
 4. **Validator/engine identity** — which *implementation* materialized
    this data, and its own version: e.g. `cic-primitive-engine-rust
    v0.1.0` vs `cic-primitive-engine-go v0.1.0`. Required specifically
