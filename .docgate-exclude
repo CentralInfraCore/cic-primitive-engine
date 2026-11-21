@@ -1,0 +1,5 @@
+# docgate exclusions (tools/docgate/docgate.py): fnmatch globs of repository-relative paths.
+# Each entry is documented elsewhere or must not change; see the reason above it.
+
+# Vendored unchanged from cic-factory (fixtures/vcn-v1/SOURCE.md): never edited here.
+fixtures/vcn-v1/*
