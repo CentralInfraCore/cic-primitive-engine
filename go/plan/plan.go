@@ -34,10 +34,10 @@
 //
 // # What this does not do
 //
-// Produce conformance_plan_digest/observation_digest themselves (the
-// Go peer of digest_projection.rs, F9, not yet written) -- Evaluate's
-// own ObjectVerdict.Consumed records exactly what that step will need,
-// the same way plan.rs's own ObjectVerdict.consumed does.
+// Produce conformance_plan_digest/observation_digest themselves -- that
+// is go/digestprojection, the Go peer of digest_projection.rs (F9).
+// Evaluate's own ObjectVerdict.Consumed records exactly what that step
+// needs, the same way plan.rs's own ObjectVerdict.consumed does.
 //
 // # Wired to materialized.MaterializedObject at the root -- the Go-side #41
 //
@@ -167,7 +167,7 @@ const (
 	ObjectIncomplete ObjectConformance = "INCOMPLETE"
 )
 
-// ConsumedField is one path's contribution to the future F9 Go peer's
+// ConsumedField is one path's contribution to go/digestprojection's
 // ObservationDigestProjection -- Coverage paired with a value EXACTLY
 // when that pairing is legitimate (conformance.ClassifyFieldValue
 // never reads a value for any coverage state but Observed, so there
@@ -308,10 +308,10 @@ func (c ConsumedField) Valid() bool {
 
 // ObjectVerdict is the object-level conformance verdict -- the Go
 // peer of plan.rs's own ObjectVerdict, minus IntentDigest/
-// ObservationDigest themselves (the future F9 Go peer's job). Fields
+// ObservationDigest themselves (go/digestprojection's job). Fields
 // and Consumed are plain Go maps, not a sorted structure: Go has no
 // stdlib BTreeMap, and nothing in this package itself needs sorted
-// iteration -- a future caller that does (the F9 Go peer, matching
+// iteration -- a caller that does (go/digestprojection, matching
 // plan.rs's own digest_projection.rs dependency) sorts keys at the
 // point it actually needs them, the same way go/canonical's own
 // writeMap already does, rather than this type carrying a sorted
@@ -399,6 +399,10 @@ func scalarCoverage(observed materialized.MaterializedObject, path string, obs *
 	return obs.Coverage(path)
 }
 
+// classifyAt classifies one planned path: resolves it on both roots,
+// records its FieldVerdict in fields and its ConsumedField (value kept
+// only when coverage is Observed) in consumed. The Go peer of plan.rs's
+// own classify_at.
 func classifyAt(
 	fields map[string]conformance.FieldVerdict,
 	consumed map[string]ConsumedField,
@@ -574,6 +578,10 @@ func findByConstraints(list []interface{}, constraints string) (interface{}, boo
 	return nil, false
 }
 
+// matchesAllConstraints reports whether element m satisfies every
+// comma-separated "k=v" pair in constraints, comparing collection.GoDisplay
+// of m[k] against v (split on the first "=" of each pair only). A key whose
+// value cannot be displayed (non-finite float) never matches.
 func matchesAllConstraints(m map[string]interface{}, constraints string) bool {
 	for _, part := range strings.Split(constraints, ",") {
 		key, val, _ := strings.Cut(part, "=")

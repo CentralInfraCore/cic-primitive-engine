@@ -102,6 +102,8 @@ pub fn bind_schema_identity(
     })
 }
 
+/// An `E_INVALID_SCHEMA_IDENTITY` rejection (validate stage) of a malformed schema identity field
+/// at `path`.
 fn invalid_identity(rule: &'static str, path: &str, detail: &str) -> Error {
     Error::new(
         code::INVALID_SCHEMA_IDENTITY,
@@ -112,6 +114,8 @@ fn invalid_identity(rule: &'static str, path: &str, detail: &str) -> Error {
     )
 }
 
+/// An `E_SCHEMA_SOURCE_BINDING` rejection (validate stage) at `$.schema_digest`: the digest does
+/// not bind the schema source it claims.
 fn binding(rule: &'static str, detail: &str) -> Error {
     Error::new(
         code::SCHEMA_SOURCE_BINDING,

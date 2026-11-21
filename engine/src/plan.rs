@@ -97,6 +97,8 @@ pub enum ConsumedField {
 }
 
 impl ConsumedField {
+    /// The coverage state this entry stands for -- derived from the
+    /// variant, so it can never disagree with whether a value is held.
     #[must_use]
     pub fn coverage(&self) -> Coverage {
         match self {
@@ -107,6 +109,8 @@ impl ConsumedField {
         }
     }
 
+    /// The observed value the comparator consumed -- `Some` exactly for
+    /// `Observed`, `None` for every other coverage state.
     #[must_use]
     pub fn value(&self) -> Option<&Value> {
         match self {
@@ -115,6 +119,9 @@ impl ConsumedField {
         }
     }
 
+    /// Builds the entry for `coverage`, cloning `observed_value` only for
+    /// `Coverage::Observed` and discarding it otherwise (F5's value-presence
+    /// rule, enforced at the one place a runtime coverage enters this type).
     fn from_coverage(coverage: Coverage, observed_value: &Value) -> Self {
         match coverage {
             Coverage::Observed => ConsumedField::Observed(observed_value.clone()),
@@ -166,6 +173,9 @@ pub enum ObjectConformance {
 }
 
 impl ObjectConformance {
+    /// `conformance.go`'s constant, verbatim -- `CONFORMANT`/`DRIFT`/
+    /// `INCOMPLETE`, the literal `docs/VERDICT-SCHEMA.md`'s `object` field
+    /// commits to.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -292,6 +302,9 @@ fn scalar_coverage(observed: &MaterializedObject, path: &str, obs: &Observation)
     }
 }
 
+/// Classifies one planned path: resolves it on both roots (a missing
+/// intent path counts as not present, compared as `Null`), records its
+/// [`FieldVerdict`] in `fields` and its [`ConsumedField`] in `consumed`.
 fn classify_at(
     fields: &mut BTreeMap<String, FieldVerdict>,
     consumed: &mut BTreeMap<String, ConsumedField>,

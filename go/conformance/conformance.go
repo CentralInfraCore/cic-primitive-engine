@@ -48,10 +48,17 @@ import (
 type Coverage string
 
 const (
-	CoverageObserved   Coverage = "observed"
-	CoverageAbsent     Coverage = "absent"
+	// CoverageObserved -- the observe call read a value for the field.
+	CoverageObserved Coverage = "observed"
+	// CoverageAbsent -- the observe call looked and the field is
+	// authoritatively not there (B2's "missing" resolves here).
+	CoverageAbsent Coverage = "absent"
+	// CoverageUnobserved -- the observe call never asked; the default
+	// for any path with no explicit entry.
 	CoverageUnobserved Coverage = "unobserved"
-	CoverageUnknown    Coverage = "unknown"
+	// CoverageUnknown -- the field was seen but the device itself
+	// reported an indeterminate value (B2's fourth coverage value).
+	CoverageUnknown Coverage = "unknown"
 )
 
 // Valid reports whether c is one of the four coverage states this
@@ -79,7 +86,7 @@ func (c Coverage) Valid() bool {
 }
 
 // Observation is a per-path coverage lookup for the object-level walker
-// (the Go peer of plan.go, not yet written) -- not a port of Relay's
+// (go/plan's Evaluate) -- not a port of Relay's
 // Observation{Observed, AuthoritativeAbsent} two-list envelope. A path
 // with no explicit entry defaults to CoverageUnobserved, mirroring
 // Relay's own Observation.Coverage default case ("a path in neither set
@@ -152,11 +159,21 @@ func (ct CompareType) Valid() bool {
 type FieldVerdict string
 
 const (
-	VerdictConformant     FieldVerdict = "CONFORMANT"
-	VerdictDrift          FieldVerdict = "DRIFT"
+	// VerdictConformant -- observed, and the comparator matched it
+	// against the intent.
+	VerdictConformant FieldVerdict = "CONFORMANT"
+	// VerdictDrift -- observed but not matching, or authoritatively
+	// absent while the intent declares a value.
+	VerdictDrift FieldVerdict = "DRIFT"
+	// VerdictObservedAbsent -- authoritatively absent, and the intent
+	// declares no value either.
 	VerdictObservedAbsent FieldVerdict = "OBSERVED_ABSENT"
-	VerdictUnobserved     FieldVerdict = "UNOBSERVED"
-	VerdictNotComparable  FieldVerdict = "NOT_COMPARABLE"
+	// VerdictUnobserved -- coverage unobserved or unknown: no
+	// authoritative evidence either way, so no conformance claim.
+	VerdictUnobserved FieldVerdict = "UNOBSERVED"
+	// VerdictNotComparable -- observed, but the comparator could not
+	// compare the two values (e.g. a number against a string).
+	VerdictNotComparable FieldVerdict = "NOT_COMPARABLE"
 )
 
 // Compare answers whether observed conforms to intent under ct. It
@@ -180,6 +197,10 @@ func Compare(intent, observed interface{}, ct CompareType) (matched, comparable 
 	return compareExact(intent, observed)
 }
 
+// compareNumeric is Compare's CompareNumeric branch: both sides coerced to
+// exact rationals (asRational) and compared by value, so 1, 1.0 and "1/1"
+// all match. Not comparable if either side has no rational form. Mirrors
+// conformance.rs's compare_numeric.
 func compareNumeric(intent, observed interface{}) (matched, comparable bool) {
 	a, aok := asRational(intent)
 	b, bok := asRational(observed)
@@ -226,6 +247,11 @@ func jsonKind(v interface{}) string {
 	}
 }
 
+// compareExact is Compare's CompareExact branch. Two numbers compare by
+// canonical decimal form (so 1 and 1.0 match); a number against a
+// non-number, or two values of different JSON kinds, is not comparable;
+// anything else compares by canonical JSON bytes. Mirrors
+// conformance.rs's compare_exact.
 func compareExact(intent, observed interface{}) (matched, comparable bool) {
 	iNum, oNum := isNumericValue(intent), isNumericValue(observed)
 	if iNum || oNum {

@@ -5,6 +5,9 @@
 
 use std::process::ExitCode;
 
+/// `cic-primitive read <file.yaml>`: runs the read stage on the file and prints its size on success
+/// or the rejection on failure (exit 1); a usage error or an unreadable file exits 2. `read` is the
+/// only stage the CLI exposes so far.
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let Some(path) = args.next() else {

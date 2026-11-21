@@ -10,8 +10,8 @@
 //! walk — `conformance.go`'s `ConformancePlan`/`Evaluate`/`aggregate`,
 //! which drives these primitives over a whole document and produces the
 //! `ConformanceResult` verdict F5's `PlanDigestProjection`/
-//! `ObservationDigestProjection` describe — is not implemented here. F1's
-//! gap is narrower than it was, not closed.
+//! `ObservationDigestProjection` describe — is not implemented here; it
+//! lives one layer up, in `plan.rs`'s `evaluate`.
 //!
 //! # Coverage: B3's four values, not Relay's two-list envelope
 //!
@@ -20,9 +20,9 @@
 //! `Observation{Observed, AuthoritativeAbsent}` is a two-list envelope with
 //! no third/fourth state at all — `unknown` is B2's own addition, with no
 //! Relay equivalent and no landed classification precedent. [`Coverage`]
-//! uses the four-value enum directly; there is no `Observation` struct here
-//! to adapt, because the object-level walker that would hold one is not
-//! built yet.
+//! uses the four-value enum directly; there is no two-list envelope here
+//! to adapt — [`Observation`] is a per-path lookup keyed on [`Coverage`]
+//! itself.
 //!
 //! # The numeric comparator's string grammar matches `SetString` in full
 //!
@@ -65,8 +65,8 @@ impl Coverage {
     }
 }
 
-/// Per-path coverage lookup for the not-yet-built object-level walker
-/// (`plan.rs`'s `evaluate`) — **not** a port of `observation.go`'s
+/// Per-path coverage lookup for the object-level walker (`plan.rs`'s
+/// `evaluate`) — **not** a port of `observation.go`'s
 /// `Observation{Observed, AuthoritativeAbsent}` two-list envelope. There is
 /// no Go struct to adapt: B3's four-value [`Coverage`] enum is the model
 /// this engine already committed to (see this module's own doc comment),
@@ -78,6 +78,8 @@ impl Coverage {
 pub struct Observation(std::collections::HashMap<String, Coverage>);
 
 impl Observation {
+    /// An empty lookup: every path reports `Coverage::Unobserved` until
+    /// [`Observation::set`] records otherwise.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -91,6 +93,8 @@ impl Observation {
         self.0.insert(path.into(), coverage);
     }
 
+    /// `path`'s recorded coverage, or `Coverage::Unobserved` if nothing was
+    /// recorded for it (*"a path in neither set is unobserved"*).
     #[must_use]
     pub fn coverage(&self, path: &str) -> Coverage {
         self.0.get(path).copied().unwrap_or(Coverage::Unobserved)
@@ -160,6 +164,9 @@ pub fn compare(intent: &Value, observed: &Value, ct: CompareType) -> (bool, bool
     }
 }
 
+/// `compare.go`'s numeric branch: both sides coerced to exact rationals
+/// ([`as_rational`]) and compared by value, so `1`, `1.0` and `"1/1"` all
+/// match. Not comparable if either side has no rational form.
 fn compare_numeric(intent: &Value, observed: &Value) -> (bool, bool) {
     match (as_rational(intent), as_rational(observed)) {
         (Some(a), Some(b)) => (a == b, true),
@@ -167,6 +174,8 @@ fn compare_numeric(intent: &Value, observed: &Value) -> (bool, bool) {
     }
 }
 
+/// Whether `v` is one of the three numeric `Value` variants (a numeric
+/// *string* is not).
 fn is_numeric_value(v: &Value) -> bool {
     matches!(v, Value::Int(_) | Value::BigInt(_) | Value::Float(_))
 }
@@ -185,6 +194,10 @@ fn json_kind(v: &Value) -> &'static str {
     }
 }
 
+/// `compare.go`'s exact branch. Two numbers compare by canonical decimal
+/// form (so `1` and `1.0` match); a number against a non-number, or two
+/// values of different JSON kinds, is not comparable; anything else
+/// compares by canonical JSON bytes.
 fn compare_exact(intent: &Value, observed: &Value) -> (bool, bool) {
     let i_num = is_numeric_value(intent);
     let o_num = is_numeric_value(observed);
@@ -304,6 +317,7 @@ enum Radix {
 }
 
 impl Radix {
+    /// The numeric base (10, 2, 8 or 16).
     fn value(self) -> u32 {
         match self {
             Radix::Dec => 10,
@@ -313,6 +327,7 @@ impl Radix {
         }
     }
 
+    /// Whether the ASCII byte `b` is a digit in this radix.
     fn is_digit(self, b: u8) -> bool {
         match self {
             Radix::Dec => b.is_ascii_digit(),
@@ -323,6 +338,8 @@ impl Radix {
     }
 }
 
+/// Consumes an optional leading `'-'`/`'+'` at `*i`; returns `true` only
+/// for `'-'`.
 fn parse_sign(bytes: &[u8], i: &mut usize) -> bool {
     match bytes.get(*i) {
         Some(b'-') => {
@@ -426,6 +443,10 @@ fn parse_fraction(bytes: &[u8], i: &mut usize) -> Option<BigRational> {
     Some(BigRational::new(numerator, denominator))
 }
 
+/// An unsigned integer in any of `SetString`'s radixes (optional base
+/// prefix, then digits with single underscores allowed between them, or
+/// directly after the prefix), as one side of a `"a/b"` fraction. `None`
+/// if no digit follows; a sign is not accepted here.
 fn parse_unsigned_integer_any_base(bytes: &[u8], i: &mut usize) -> Option<BigInt> {
     let before = *i;
     let radix = detect_prefix(bytes, i);
@@ -489,6 +510,9 @@ fn parse_float_or_int(bytes: &[u8], i: &mut usize) -> Option<BigRational> {
     Some(value)
 }
 
+/// Parses a signed decimal exponent at `*i` (the `e`/`p` marker already
+/// consumed) and scales `value` by `exponent_base^exp` exactly. `None` if
+/// no exponent digit follows the marker or the exponent overflows `u32`.
 fn apply_exponent(
     bytes: &[u8],
     i: &mut usize,

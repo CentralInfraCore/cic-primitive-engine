@@ -61,6 +61,7 @@ pub enum Stage {
 }
 
 impl Stage {
+    /// The stage's name as it appears in rejections and in the conformance vectors.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -186,6 +187,7 @@ pub struct Error {
 }
 
 impl Error {
+    /// Builds a rejection from its code, rule, stage, document path and human-readable detail.
     pub(crate) fn new(
         code: &'static str,
         rule: &'static str,
@@ -215,4 +217,5 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+/// The result of every engine stage: a value, or the rejection that stopped it.
 pub type Result<T> = std::result::Result<T, Error>;

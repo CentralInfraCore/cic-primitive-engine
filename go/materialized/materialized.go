@@ -24,11 +24,10 @@
 // materialized.rs's own FieldEvidence::Observation/DerivedObservation
 // reuse plan.rs's ConsumedField directly -- both live in the same Rust
 // crate, so there is no cycle to avoid. Go packages cannot do the same:
-// go/plan already depends on go/conformance, and a future Go peer of
-// plan::evaluate's own MaterializedObject wiring (PR #41's Go
-// counterpart, not done here) would need go/plan to depend on this
-// package -- which this package importing go/plan for ConsumedField
-// would turn into an import cycle. So FieldEvidence reimplements the
+// go/plan already depends on go/conformance, and go/plan's Evaluate,
+// wired to MaterializedObject at the root (PR #41's Go counterpart),
+// depends on this package -- which this package importing go/plan for
+// ConsumedField would turn into an import cycle. So FieldEvidence reimplements the
 // identical (coverage, value) state machine inline instead, using
 // go/conformance's Coverage directly (the one dependency both
 // go/plan's ConsumedField and this package's FieldEvidence already
@@ -100,9 +99,15 @@ import (
 type Capability string
 
 const (
-	CapabilityImplemented    Capability = "implemented"
+	// CapabilityImplemented -- the field exists and is manageable on the
+	// device (B1's default).
+	CapabilityImplemented Capability = "implemented"
+	// CapabilityNotImplemented -- the field does not exist on the device;
+	// a write to it is a hard reject.
 	CapabilityNotImplemented Capability = "not_implemented"
-	CapabilityDeprecated     Capability = "deprecated"
+	// CapabilityDeprecated -- the field exists but should be avoided; a
+	// write warns and is accepted.
+	CapabilityDeprecated Capability = "deprecated"
 )
 
 // Valid reports whether c is one of the three values B1 defines.
@@ -122,9 +127,15 @@ func (c Capability) Valid() bool {
 type Provenance string
 
 const (
-	ProvenanceAuthored      Provenance = "authored"
+	// ProvenanceAuthored -- present in the intent document as the
+	// operator wrote it (possibly authored-absent, see IntentEvidence).
+	ProvenanceAuthored Provenance = "authored"
+	// ProvenanceSchemaDefault -- not authored; substituted from the
+	// schema's declared default.
 	ProvenanceSchemaDefault Provenance = "schema_default"
-	ProvenanceDerived       Provenance = "derived"
+	// ProvenanceDerived -- computed by the engine from other field(s),
+	// not authored.
+	ProvenanceDerived Provenance = "derived"
 )
 
 // Valid reports whether p is one of the three values B1 defines.
@@ -226,8 +237,12 @@ func (ie IntentEvidence) Valid() bool {
 type evidenceKind string
 
 const (
-	evidenceIntent             evidenceKind = "intent"
-	evidenceObservation        evidenceKind = "observation"
+	// evidenceIntent -- intent-side evidence (FieldEvidence.intent set).
+	evidenceIntent evidenceKind = "intent"
+	// evidenceObservation -- a raw, non-derived state-side observation.
+	evidenceObservation evidenceKind = "observation"
+	// evidenceDerivedObservation -- a derived state-side value; its
+	// provenance is always derived.
 	evidenceDerivedObservation evidenceKind = "derived_observation"
 )
 

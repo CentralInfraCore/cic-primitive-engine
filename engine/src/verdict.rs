@@ -113,6 +113,7 @@ pub fn build_verdict(plan: &ConformancePlan, result: &ObjectVerdict) -> Result<C
     })
 }
 
+/// An `E_INCONSISTENT_VERDICT` rejection (rule `R-VERDICT-CONSISTENT`, validate stage) at `path`.
 fn inconsistent(path: &str, detail: String) -> Error {
     Error::new(
         code::INCONSISTENT_VERDICT,
@@ -139,6 +140,10 @@ fn plan_can_produce(plan: &ConformancePlan, path: &str) -> bool {
     })
 }
 
+/// Refuses a result that does not follow from the plan: every classified path must have
+/// consumed evidence and vice versa, every classified path must be one the plan can produce,
+/// every planned scalar must be classified, and the object verdict must be the aggregate of
+/// the field verdicts. (The Go peer additionally checks that each consumed entry is valid.)
 fn check_consistent(plan: &ConformancePlan, result: &ObjectVerdict) -> Result<()> {
     for path in result.fields.keys() {
         if !result.consumed.contains_key(path) {

@@ -69,6 +69,10 @@ pub fn digest(bytes: &[u8]) -> String {
     out
 }
 
+/// Appends the canonical bytes of `v` to `out`, recursing into sequences and
+/// maps. `path` is the JSONPath-like location of `v` (`$`, `$.k`, `$[i]`),
+/// used only to name the offending node in an `E_NON_FINITE_NUMBER`
+/// rejection.
 fn write_value(out: &mut Vec<u8>, v: &Value, path: &str) -> Result<()> {
     match v {
         Value::Null => out.extend_from_slice(b"null"),
@@ -208,6 +212,8 @@ fn split_sci(sci: &str) -> (String, i32) {
     )
 }
 
+/// `10^e` as an exact rational, for any sign of `e` (used by
+/// [`shortest_digits`]'s tie check).
 fn pow10(e: i32) -> BigRational {
     let p = BigInt::from(10).pow(e.unsigned_abs());
     if e >= 0 {
@@ -217,6 +223,8 @@ fn pow10(e: i32) -> BigRational {
     }
 }
 
+/// Writes `items` as a JSON array in source order (A6: sequence order is
+/// significant, never sorted), each element's path suffixed with `[i]`.
 fn write_array(out: &mut Vec<u8>, items: &[Value], path: &str) -> Result<()> {
     out.push(b'[');
     for (i, item) in items.iter().enumerate() {
@@ -229,6 +237,8 @@ fn write_array(out: &mut Vec<u8>, items: &[Value], path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Writes `m` as a JSON object with its keys sorted by raw UTF-8 byte order
+/// (A2), each value's path suffixed with `.key`.
 fn write_map(out: &mut Vec<u8>, m: &Map, path: &str) -> Result<()> {
     // Raw UTF-8 byte order -- `str`'s `Ord` is already byte-wise comparison,
     // matching Go's `sort.Strings` (A2) with no custom comparator needed.
