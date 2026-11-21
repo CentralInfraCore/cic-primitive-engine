@@ -136,22 +136,29 @@ pub struct Receipt {
     pub derived_values: Vec<DerivedEvidence>,
 }
 
+/// An `E_INVALID_RECEIPT` rejection (malformed receipt) under `rule` at `path`.
 fn invalid(rule: &'static str, path: &str, detail: String) -> Error {
     Error::new(code::INVALID_RECEIPT, rule, Stage::Validate, path, detail)
 }
 
+/// An `E_RECEIPT_MISMATCH` rejection (well-formed receipt that disagrees
+/// with the artifacts) under `rule` at `path`.
 fn mismatch(rule: &'static str, path: &str, detail: String) -> Error {
     Error::new(code::RECEIPT_MISMATCH, rule, Stage::Validate, path, detail)
 }
 
+/// The error path of top-level field `name`: `$.materialization.<name>`.
 fn field_path(name: &str) -> String {
     format!("$.{WRAPPER}.{name}")
 }
 
+/// An `R-RECEIPT-SHAPE` rejection at `path`, saying what was expected there.
 fn shape(path: &str, want: &str) -> Error {
     invalid("R-RECEIPT-SHAPE", path, format!("expected {want}"))
 }
 
+/// The string member `key` of `m`; a shape error at `path` if it is absent
+/// or not a string.
 fn take_str(m: &crate::reader::Map, key: &str, path: &str) -> Result<String> {
     match m.get(key) {
         Some(Value::Str(s)) => Ok(s.clone()),
@@ -160,6 +167,7 @@ fn take_str(m: &crate::reader::Map, key: &str, path: &str) -> Result<String> {
     }
 }
 
+/// `v` as a mapping; a shape error at `path` otherwise.
 fn take_map<'a>(v: &'a Value, path: &str) -> Result<&'a crate::reader::Map> {
     match v {
         Value::Map(m) => Ok(m),
@@ -167,6 +175,9 @@ fn take_map<'a>(v: &'a Value, path: &str) -> Result<&'a crate::reader::Map> {
     }
 }
 
+/// Refuses any member of `m` outside `allowed`, naming the byte-wise
+/// smallest offending key (`path.key`) so the reported location is
+/// deterministic.
 fn check_keys(m: &crate::reader::Map, allowed: &[&str], path: &str) -> Result<()> {
     let mut extra: Vec<&str> = m
         .keys()
@@ -338,6 +349,9 @@ impl Receipt {
     }
 }
 
+/// Reads one `applied_defaults[]` entry at `at`: shape only (required
+/// members, types, no extra member). Form checks happen in
+/// [`Receipt::check_structure`].
 fn parse_default(v: &Value, at: &str) -> Result<DefaultEvidence> {
     let m = take_map(v, at)?;
     let out = DefaultEvidence {
@@ -349,6 +363,9 @@ fn parse_default(v: &Value, at: &str) -> Result<DefaultEvidence> {
     Ok(out)
 }
 
+/// Reads one `derived_values[]` entry at `at`: shape only (required
+/// members, types, `inputs` a sequence of strings, no extra member). Form
+/// and order checks happen in [`Receipt::check_structure`].
 fn parse_derived(v: &Value, at: &str) -> Result<DerivedEvidence> {
     let m = take_map(v, at)?;
     let path = take_str(m, "path", &format!("{at}.path"))?;
@@ -378,12 +395,15 @@ fn parse_derived(v: &Value, at: &str) -> Result<DerivedEvidence> {
     })
 }
 
+/// Whether `s` is `sha256:` followed by exactly 64 lowercase hex characters.
 fn is_digest(s: &str) -> bool {
     s.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
     })
 }
 
+/// Refuses `s` with `R-RECEIPT-DIGEST-FORMAT` at `path` unless it is a
+/// well-formed digest ([`is_digest`]).
 fn check_digest_at(s: &str, path: &str) -> Result<()> {
     if is_digest(s) {
         Ok(())
@@ -396,10 +416,12 @@ fn check_digest_at(s: &str, path: &str) -> Result<()> {
     }
 }
 
+/// [`check_digest_at`] for top-level field `name`.
 fn check_digest(s: &str, name: &str) -> Result<()> {
     check_digest_at(s, &field_path(name))
 }
 
+/// Refuses an empty string in top-level field `name` (a shape error).
 fn check_nonempty(s: &str, name: &str) -> Result<()> {
     if s.is_empty() {
         Err(shape(&field_path(name), "a non-empty string"))
@@ -458,6 +480,7 @@ fn check_ascending(prev: &str, cur: &str, at: &str) -> Result<()> {
     ))
 }
 
+/// Which evidence list, if any, a materialized field must appear in.
 #[derive(PartialEq, Eq)]
 enum Kind {
     Default,
@@ -465,6 +488,9 @@ enum Kind {
     Other,
 }
 
+/// Classifies a field by its evidence: a schema-default intent field is
+/// `Default`; a derived intent field or a derived observation is `Derived`;
+/// everything else needs no evidence entry.
 fn kind(f: &MaterializedField) -> Kind {
     match &f.evidence {
         FieldEvidence::Intent(IntentEvidence::SchemaDefault(_)) => Kind::Default,
@@ -474,6 +500,8 @@ fn kind(f: &MaterializedField) -> Kind {
     }
 }
 
+/// An `E_RECEIPT_UNBOUND` rejection at `at`: receipt `path` has no entry in
+/// the caller's [`PathBinding`].
 fn unbound(at: &str, path: &str) -> Error {
     Error::new(
         code::RECEIPT_UNBOUND,

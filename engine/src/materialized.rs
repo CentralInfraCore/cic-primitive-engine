@@ -90,6 +90,8 @@ pub enum Capability {
 }
 
 impl Capability {
+    /// The B1 wire string -- `implemented`/`not_implemented`/`deprecated`,
+    /// verbatim; the form the materialized-object digest commits to.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -111,6 +113,8 @@ pub enum Provenance {
 }
 
 impl Provenance {
+    /// The B1 wire string -- `authored`/`schema_default`/`derived`,
+    /// verbatim; the form the materialized-object digest commits to.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -150,6 +154,8 @@ impl IntentEvidence {
         }
     }
 
+    /// The intent value -- `None` only for authored-absent (`Authored(None)`);
+    /// `SchemaDefault`/`Derived` always have one.
     #[must_use]
     pub fn value(&self) -> Option<&Value> {
         match self {
@@ -241,11 +247,15 @@ impl MaterializedObject {
         Ok(Self(fields))
     }
 
+    /// The field stored under `key`, or `None` if the schema declares no
+    /// such key (every declared key is present, by construction).
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&MaterializedField> {
         self.0.get(key)
     }
 
+    /// The field keys in byte-wise order -- exactly the key set `try_new`
+    /// was given as `expected_keys`.
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.0.keys()
     }
@@ -258,11 +268,14 @@ impl MaterializedObject {
         self.0.iter()
     }
 
+    /// The number of fields (the schema's declared key count).
     #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Whether the object has no fields -- legitimate when the schema
+    /// declares no keys.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

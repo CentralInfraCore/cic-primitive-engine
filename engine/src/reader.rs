@@ -63,6 +63,11 @@ use saphyr_parser::{Event, Parser, ScalarStyle, Tag};
 use std::borrow::Cow;
 use std::collections::HashSet;
 
+/// The generic, schema-independent value tree the reader produces and the
+/// rest of the engine works on: JSON's data model (null, bool, number,
+/// string, array, object), with numbers split into `Int`/`BigInt`/`Float`
+/// so no integer literal ever loses precision on the way to
+/// canonicalization.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
@@ -189,6 +194,7 @@ impl BigIntValue {
 pub struct Map(Vec<(String, Value)>);
 
 impl Map {
+    /// An empty map.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -215,14 +221,18 @@ impl Map {
         Ok(Self(pairs))
     }
 
+    /// The value stored under `k`, if any (linear scan).
     #[must_use]
     pub fn get(&self, k: &str) -> Option<&Value> {
         self.0.iter().find(|(key, _)| key == k).map(|(_, v)| v)
     }
+    /// Mutable access to the value under `k`, if any; the key itself
+    /// cannot be changed, so uniqueness is preserved.
     #[must_use]
     pub fn get_mut(&mut self, k: &str) -> Option<&mut Value> {
         self.0.iter_mut().find(|(key, _)| key == k).map(|(_, v)| v)
     }
+    /// Whether `k` is a key of this map.
     #[must_use]
     pub fn contains(&self, k: &str) -> bool {
         self.get(k).is_some()
@@ -243,6 +253,9 @@ impl Map {
         self.0.push((k, v));
     }
 
+    /// Sets `k` to `v`: replaces the value in place (keeping the key's
+    /// position) if `k` exists, appends it otherwise. Never creates a
+    /// repeated key.
     pub fn insert(&mut self, k: impl Into<String>, v: Value) {
         let k = k.into();
         if let Some(slot) = self.0.iter_mut().find(|(key, _)| *key == k) {
@@ -255,14 +268,17 @@ impl Map {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Value)> {
         self.0.iter().map(|(k, v)| (k.as_str(), v))
     }
+    /// The keys in insertion order.
     #[must_use]
     pub fn keys(&self) -> Vec<&str> {
         self.0.iter().map(|(k, _)| k.as_str()).collect()
     }
+    /// The number of entries.
     #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
+    /// Whether the map has no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -278,6 +294,7 @@ impl IntoIterator for Map {
 }
 
 impl Value {
+    /// The mapping, if this is a `Map`.
     #[must_use]
     pub fn as_map(&self) -> Option<&Map> {
         match self {
@@ -285,6 +302,7 @@ impl Value {
             _ => None,
         }
     }
+    /// The elements, if this is a `Seq`.
     #[must_use]
     pub fn as_seq(&self) -> Option<&[Value]> {
         match self {
@@ -292,6 +310,7 @@ impl Value {
             _ => None,
         }
     }
+    /// The text, if this is a `Str` (no conversion from other scalars).
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
@@ -511,6 +530,12 @@ fn consume_value(stack: &mut [Frame]) {
     }
 }
 
+/// Converts a `saphyr` node (loaded with `early_parse(false)`, so scalars
+/// arrive as raw representations) into a [`Value`], recursively. Refuses
+/// non-string mapping keys (`R-READ-KEY-TYPE`), a repeated key
+/// (`R-READ-DUPLICATE-KEY`) and anything that is not a plain tree of core
+/// scalars, sequences and mappings (`R-READ-TREE-ONLY`), all as
+/// `E_MALFORMED_DOCUMENT` at `stage`/`path`.
 fn convert(y: &Yaml, stage: Stage, path: &str, what: &str) -> Result<Value> {
     match y {
         Yaml::Representation(text, style, tag) => {
@@ -676,6 +701,8 @@ fn base10_integer_literal(s: &str) -> Option<&str> {
     (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())).then_some(s)
 }
 
+/// Maps an already-resolved `saphyr` scalar onto the matching [`Value`]
+/// variant, one-to-one.
 fn convert_scalar(s: &Scalar) -> Value {
     match s {
         Scalar::Null => Value::Null,

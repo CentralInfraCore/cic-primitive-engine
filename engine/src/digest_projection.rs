@@ -90,6 +90,7 @@ pub fn plan_digest_projection(plan: &ConformancePlan) -> Value {
     Value::Map(m)
 }
 
+/// One `PlanDigestProjection` field entry: `{path, compare}`.
 fn field_plan_entry(fp: &FieldPlan) -> Value {
     let mut m = Map::default();
     m.push("path", Value::Str(fp.path.clone()));
@@ -97,6 +98,9 @@ fn field_plan_entry(fp: &FieldPlan) -> Value {
     Value::Map(m)
 }
 
+/// One `PlanDigestProjection` collection entry: `{path, topology, keys,
+/// elements}`, with `keys` and `elements` (by path) sorted so the digest is
+/// independent of declaration order.
 fn collection_plan_entry(cp: &CollectionPlan) -> Value {
     let mut keys = cp.collection.keys.clone();
     keys.sort();
