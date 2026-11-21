@@ -20,15 +20,19 @@ OUT = os.path.join(HERE, "..", "conformance", "differential", "verdict")
 
 
 def load(*p):
+    """Load a JSON file of the vendored vcn-v1 fixture."""
     with open(os.path.join(FX, *p), encoding="utf-8") as fh:
         return json.load(fh)
 
 
 def dump(doc):
+    """Serialize doc as indented JSON with a trailing newline (the committed form)."""
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
 
 def vector_input(case):
+    """The stage-5 input of one case - intent, observed config, observation list and plan.
+    """
     intent = load("cases", case, "intent.registry.json")
     obs = load("cases", case, "expected", "observed.registry.json")
     return {
@@ -40,6 +44,10 @@ def vector_input(case):
 
 
 def main(argv):
+    """Verify the fixture manifest, then write each case's input.json (or, with --check,
+    compare them and the pinned per-path verdicts with the fixture); return 1 on any
+    difference.
+    """
     bad = []
     with open(os.path.join(FX, "MANIFEST.sha256"), encoding="utf-8") as fh:
         for line in fh.read().splitlines():
