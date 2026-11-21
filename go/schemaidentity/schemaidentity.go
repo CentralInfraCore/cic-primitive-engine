@@ -21,8 +21,10 @@ import (
 
 // Rejection codes and rules, spelled as in the Rust peer.
 const (
+	// CodeInvalidSchemaIdentity rejects a malformed schema_name or schema_digest field.
 	CodeInvalidSchemaIdentity = "E_INVALID_SCHEMA_IDENTITY"
-	CodeSchemaSourceBinding   = "E_SCHEMA_SOURCE_BINDING"
+	// CodeSchemaSourceBinding rejects a schema_digest that does not bind the schema source given.
+	CodeSchemaSourceBinding = "E_SCHEMA_SOURCE_BINDING"
 )
 
 // Error is a rejection with the code/rule/path fields the Rust peer's Error carries.
@@ -33,6 +35,7 @@ type Error struct {
 	Detail string
 }
 
+// Error formats the rejection as "CODE (RULE) at PATH - DETAIL".
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s (%s) at %s: %s", e.Code, e.Rule, e.Path, e.Detail)
 }
@@ -64,6 +67,7 @@ func SchemaName(namespace, kind *string) (string, error) {
 	return *namespace + ":" + *kind, nil
 }
 
+// hasEmptyComponent reports whether a ":"-separated namespace has an empty component.
 func hasEmptyComponent(s string) bool {
 	for _, part := range strings.Split(s, ":") {
 		if part == "" {
@@ -91,10 +95,12 @@ func BindSchemaIdentity(source []byte, claimedDigest, namespace, kind *string) (
 	return Identity{SchemaName: name, SchemaDigest: actual}, nil
 }
 
+// invalidIdentity builds a CodeInvalidSchemaIdentity rejection at path.
 func invalidIdentity(rule, path, detail string) *Error {
 	return &Error{Code: CodeInvalidSchemaIdentity, Rule: rule, Path: path, Detail: detail}
 }
 
+// binding builds a CodeSchemaSourceBinding rejection at $.schema_digest.
 func binding(rule, detail string) *Error {
 	return &Error{Code: CodeSchemaSourceBinding, Rule: rule, Path: "$.schema_digest", Detail: detail}
 }

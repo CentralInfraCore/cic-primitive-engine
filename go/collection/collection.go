@@ -175,6 +175,8 @@ func GoDisplay(v interface{}) (string, bool) {
 	return fmt.Sprintf("%v", v), true
 }
 
+// containsNonFinite reports whether v holds a NaN or an infinity anywhere, including inside slices
+// and maps.
 func containsNonFinite(v interface{}) bool {
 	switch vv := v.(type) {
 	case float32:
@@ -197,6 +199,7 @@ func containsNonFinite(v interface{}) bool {
 	return false
 }
 
+// finite reports whether f is neither NaN nor an infinity.
 func finite(f float64) bool {
 	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }

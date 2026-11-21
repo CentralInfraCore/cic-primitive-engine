@@ -118,6 +118,10 @@ func IsValue(v interface{}) bool {
 	}
 }
 
+// writeValue appends the canonical bytes of v to out, recursing into
+// slices and maps -- the Go peer of canonical.rs's own write_value. It
+// rejects NaN/infinity and any Go type outside this package's value domain
+// (see IsValue); path names the offending node in the error.
 func writeValue(out *bytes.Buffer, v interface{}, path string) error {
 	switch vv := v.(type) {
 	case nil:
@@ -202,6 +206,8 @@ func writeFloat(out *bytes.Buffer, f float64, path string) error {
 	return nil
 }
 
+// writeArray writes items as a JSON array in source order (A6: sequence
+// order is significant, never sorted), each element's path suffixed with [i].
 func writeArray(out *bytes.Buffer, items []interface{}, path string) error {
 	out.WriteByte('[')
 	for i, item := range items {
@@ -216,6 +222,8 @@ func writeArray(out *bytes.Buffer, items []interface{}, path string) error {
 	return nil
 }
 
+// writeMap writes m as a JSON object with its keys sorted by raw UTF-8
+// byte order (A2), each value's path suffixed with .key.
 func writeMap(out *bytes.Buffer, m map[string]interface{}, path string) error {
 	out.WriteByte('{')
 	keys := make([]string, 0, len(m))

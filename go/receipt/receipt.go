@@ -89,11 +89,18 @@ const DefaultRule = "schema-default"
 // Rejection codes -- engine/src/error.rs calls these INVALID_RECEIPT,
 // RECEIPT_MISMATCH and RECEIPT_UNBOUND.
 const (
-	CodeInvalidReceipt  = "E_INVALID_RECEIPT"
+	// CodeInvalidReceipt -- the receipt is not well formed (shape,
+	// version, digest format, evidence form or order).
+	CodeInvalidReceipt = "E_INVALID_RECEIPT"
+	// CodeReceiptMismatch -- a well-formed receipt disagrees with the
+	// input, the object or an evidence entry's bound field.
 	CodeReceiptMismatch = "E_RECEIPT_MISMATCH"
-	CodeReceiptUnbound  = "E_RECEIPT_UNBOUND"
+	// CodeReceiptUnbound -- an evidence entry's path has no entry in the
+	// caller's PathBinding.
+	CodeReceiptUnbound = "E_RECEIPT_UNBOUND"
 )
 
+// wrapper is the sole top-level key of a receipt document.
 const wrapper = "materialization"
 
 // fields are the 15 required top-level fields, in declared order.
@@ -162,28 +169,41 @@ type Error struct {
 	Detail string
 }
 
+// Error renders the rejection as "CODE (RULE) at PATH: DETAIL".
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s (%s) at %s: %s", e.Code, e.Rule, e.Path, e.Detail)
 }
 
+// invalid builds a CodeInvalidReceipt rejection under rule at path.
 func invalid(rule, path, detail string) *Error {
 	return &Error{Code: CodeInvalidReceipt, Rule: rule, Path: path, Detail: detail}
 }
 
+// mismatch builds a CodeReceiptMismatch rejection under rule at path.
 func mismatch(rule, path, detail string) *Error {
 	return &Error{Code: CodeReceiptMismatch, Rule: rule, Path: path, Detail: detail}
 }
 
+// fieldPath is the error path of top-level field name:
+// "$.materialization.<name>".
 func fieldPath(name string) string { return "$." + wrapper + "." + name }
 
+// shape builds an R-RECEIPT-SHAPE rejection at path, saying what was
+// expected there.
 func shape(path, want string) *Error {
 	return invalid("R-RECEIPT-SHAPE", path, "expected "+want)
 }
 
+// absent is the shape-error wording for a missing required member.
 const absent = "this required field (it is absent)"
 
+// emptyNotNull is CheckStructure's shape-error wording for a nil evidence
+// or inputs slice: a nil slice is Go's spelling of null/absent, and the
+// receipt layout requires [] for an empty list.
 const emptyNotNull = "a sequence, `[]` when empty, never null"
 
+// takeStr returns the string member key of m; a shape error at path if it
+// is absent or not a string.
 func takeStr(m map[string]interface{}, key, path string) (string, *Error) {
 	v, ok := m[key]
 	if !ok {
@@ -196,6 +216,7 @@ func takeStr(m map[string]interface{}, key, path string) (string, *Error) {
 	return s, nil
 }
 
+// takeMap returns v as a mapping; a shape error at path otherwise.
 func takeMap(v interface{}, path string) (map[string]interface{}, *Error) {
 	m, ok := v.(map[string]interface{})
 	if !ok {
@@ -204,6 +225,9 @@ func takeMap(v interface{}, path string) (map[string]interface{}, *Error) {
 	return m, nil
 }
 
+// checkKeys refuses any member of m outside allowed, naming the byte-wise
+// smallest offending key (path.key) so the reported location is
+// deterministic despite Go's unordered map iteration.
 func checkKeys(m map[string]interface{}, allowed []string, path string) *Error {
 	var extra []string
 	for k := range m {
@@ -342,6 +366,9 @@ func Parse(doc interface{}) (Receipt, error) {
 	return r, nil
 }
 
+// parseDefault reads one applied_defaults[] entry at at: shape only
+// (required members, types, no extra member). Form checks happen in
+// CheckStructure.
 func parseDefault(v interface{}, at string) (DefaultEvidence, *Error) {
 	var e DefaultEvidence
 	m, err := takeMap(v, at)
@@ -363,6 +390,9 @@ func parseDefault(v interface{}, at string) (DefaultEvidence, *Error) {
 	return e, nil
 }
 
+// parseDerived reads one derived_values[] entry at at: shape only
+// (required members, types, inputs a sequence of strings, no extra
+// member). Form and order checks happen in CheckStructure.
 func parseDerived(v interface{}, at string) (DerivedEvidence, *Error) {
 	var e DerivedEvidence
 	m, err := takeMap(v, at)
@@ -488,6 +518,8 @@ func (r Receipt) CheckStructure() error {
 	return nil
 }
 
+// isDigest reports whether s is "sha256:" followed by exactly 64
+// lowercase hex characters.
 func isDigest(s string) bool {
 	hex, ok := strings.CutPrefix(s, "sha256:")
 	if !ok || len(hex) != 64 {
@@ -502,6 +534,8 @@ func isDigest(s string) bool {
 	return true
 }
 
+// checkDigestAt refuses s with R-RECEIPT-DIGEST-FORMAT at path unless it
+// is a well-formed digest (isDigest).
 func checkDigestAt(s, path string) *Error {
 	if isDigest(s) {
 		return nil
@@ -510,8 +544,11 @@ func checkDigestAt(s, path string) *Error {
 		"a digest is `sha256:` followed by 64 lowercase hex characters")
 }
 
+// checkDigest is checkDigestAt for top-level field name.
 func checkDigest(s, name string) *Error { return checkDigestAt(s, fieldPath(name)) }
 
+// checkNonEmpty refuses an empty string in top-level field name (a shape
+// error).
 func checkNonEmpty(s, name string) *Error {
 	if s == "" {
 		return shape(fieldPath(name), "a non-empty string")
@@ -571,14 +608,22 @@ func checkAscending(prev, cur, at string) *Error {
 		fmt.Sprintf("%q is %s after %q (strictly ascending byte order required)", cur, what, prev))
 }
 
+// kind is which evidence list, if any, a materialized field must appear
+// in -- the Go peer of receipt.rs's Kind.
 type kind int
 
 const (
+	// kindOther -- the field needs no evidence entry.
 	kindOther kind = iota
+	// kindDefault -- the field must appear in applied_defaults.
 	kindDefault
+	// kindDerived -- the field must appear in derived_values.
 	kindDerived
 )
 
+// fieldKind classifies a field by its evidence: a schema-default intent
+// field is kindDefault; a derived intent field or a derived observation is
+// kindDerived; everything else is kindOther. Mirrors receipt.rs's kind.
 func fieldKind(f materialized.MaterializedField) kind {
 	if f.Evidence.IsDerived() {
 		return kindDerived
@@ -594,6 +639,8 @@ func fieldKind(f materialized.MaterializedField) kind {
 	return kindOther
 }
 
+// unbound builds a CodeReceiptUnbound rejection at at: receipt path has no
+// entry in the caller's PathBinding.
 func unbound(at, path string) *Error {
 	return &Error{
 		Code:   CodeReceiptUnbound,

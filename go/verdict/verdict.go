@@ -84,10 +84,12 @@ type Error struct {
 	Detail string
 }
 
+// Error formats the rejection as "CODE (RULE) at PATH - DETAIL".
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s (%s) at %s: %s", e.Code, e.Rule, e.Path, e.Detail)
 }
 
+// inconsistent builds a CodeInconsistentVerdict rejection (rule R-VERDICT-CONSISTENT) at path.
 func inconsistent(path, detail string) *Error {
 	return &Error{Code: CodeInconsistentVerdict, Rule: "R-VERDICT-CONSISTENT", Path: path, Detail: detail}
 }
@@ -101,6 +103,8 @@ type Verdict struct {
 	ObservationDigest     string
 }
 
+// sortedPaths returns the keys of m in sorted order, so checks report the first problem
+// deterministically.
 func sortedPaths[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -131,6 +135,10 @@ func planCanProduce(cp plan.ConformancePlan, path string) bool {
 	return false
 }
 
+// checkConsistent refuses a result that does not follow from the plan - the Go peer of verdict.rs's
+// check_consistent: classified paths and consumed evidence must match one to one, the evidence must
+// be valid, every classified path must be producible by the plan, every planned scalar must be
+// classified, and the object verdict must be the aggregate of the field verdicts.
 func checkConsistent(cp plan.ConformancePlan, result plan.ObjectVerdict) error {
 	for _, path := range sortedPaths(result.Fields) {
 		if _, ok := result.Consumed[path]; !ok {

@@ -102,6 +102,8 @@ func PlanDigestProjection(cp plan.ConformancePlan) map[string]interface{} {
 	}
 }
 
+// fieldPlanEntry is one PlanDigestProjection field entry: {path, compare}.
+// Mirrors digest_projection.rs's field_plan_entry.
 func fieldPlanEntry(fp plan.FieldPlan) map[string]interface{} {
 	return map[string]interface{}{
 		"path":    fp.Path,
@@ -109,6 +111,11 @@ func fieldPlanEntry(fp plan.FieldPlan) map[string]interface{} {
 	}
 }
 
+// collectionPlanEntry is one PlanDigestProjection collection entry:
+// {path, topology, keys, elements}, with keys and elements (by path) sorted
+// so the digest is independent of declaration order. Copies before
+// sorting; cp is not modified. Mirrors digest_projection.rs's
+// collection_plan_entry.
 func collectionPlanEntry(cp plan.CollectionPlan) map[string]interface{} {
 	keys := append([]string(nil), cp.Collection.Keys...)
 	sort.Strings(keys)
